@@ -29,13 +29,13 @@ public sealed record DetectedFormat
     /// </summary>
     public bool ExtensionAgrees =>
         ClaimedByExtension == FormatId.Unknown ||
-        FormatIds.IsAcceptableSubstitute(ClaimedByExtension, Format);
+        FormatDetector.IsAcceptableSubstitute(ClaimedByExtension, Format);
 
     /// <summary>Returns a short description, for diagnostics.</summary>
     public override string ToString() =>
         Detail is null
-            ? FormatIds.ToDisplayName(Format)
-            : $"{FormatIds.ToDisplayName(Format)} ({Detail})";
+            ? Format.DisplayName()
+            : $"{Format.DisplayName()} ({Detail})";
 }
 
 /// <summary>
@@ -105,7 +105,7 @@ public static class FormatDetector
         int read = stream.ReadAtLeast(buffer, HeaderLength, throwOnEndOfStream: false);
         ReadOnlySpan<byte> head = buffer.AsSpan(0, read);
 
-        FormatId claimed = fileName is null ? FormatId.Unknown : FormatIds.FromExtension(fileName);
+        FormatId claimed = fileName is null ? FormatId.Unknown : FromExtension(fileName);
 
         (FormatId format, ContainerKind container, string? detail) = Identify(head, stream, origin);
 
@@ -118,7 +118,7 @@ public static class FormatDetector
         };
 
         Log.Debug(
-            $"Detected {FormatIds.ToDisplayName(result.Format)}"
+            $"Detected {result.Format.DisplayName()}"
             + (detail is null ? string.Empty : $" ({detail})")
             + $" from {read} header bytes of '{fileName ?? "(stream)"}'.");
 
@@ -128,6 +128,60 @@ public static class FormatDetector
         // line in the log with a rule ID attached.
         return result;
     }
+
+    /// <summary>
+    /// Maps a file extension to the format it claims to be.
+    /// </summary>
+    /// <param name="path">A file name or path.</param>
+    /// <returns>
+    /// The claimed format, or <see cref="FormatId.Unknown"/> for an extension
+    /// EBookMetaEditor does not handle.
+    /// </returns>
+    /// <remarks>
+    /// The extension is a claim, never the answer — <see cref="Detect(string)"/>
+    /// decides by content. This exists so a caller can say what a name promised,
+    /// and so a folder scan can skip files that promise nothing without opening
+    /// every one of them.
+    /// </remarks>
+    public static FormatId FromExtension(string path)
+    {
+        Throw.IfNull(path);
+
+        string ext = Path.GetExtension(path).ToLowerInvariant();
+
+        // .fb2.zip needs the compound extension to be distinguished from a
+        // plain zip, so check the stem too.
+        if (ext == ".zip" &&
+            Path.GetExtension(Path.GetFileNameWithoutExtension(path)).Equals(".fb2", StringComparison.OrdinalIgnoreCase))
+        {
+            return FormatId.Fb2Zip;
+        }
+
+        return ext switch
+        {
+            ".epub" => FormatId.Epub,
+            ".cbz" => FormatId.Cbz,
+            ".cbr" => FormatId.Cbr,
+            ".cb7" => FormatId.Cb7,
+            ".cbt" => FormatId.Cbt,
+            ".mobi" or ".prc" => FormatId.Mobi,
+            ".azw" or ".azw3" => FormatId.Azw3,
+            ".fb2" => FormatId.Fb2,
+            ".pdf" => FormatId.Pdf,
+            _ => FormatId.Unknown,
+        };
+    }
+
+    /// <summary>
+    /// Whether two formats are close enough that an extension naming one and
+    /// content matching the other is not worth reporting.
+    /// </summary>
+    /// <param name="claimed">The format the extension claims.</param>
+    /// <param name="actual">The format the content indicates.</param>
+    /// <returns><see langword="true"/> when the pairing is unremarkable.</returns>
+    public static bool IsAcceptableSubstitute(FormatId claimed, FormatId actual) =>
+        claimed == actual ||
+        (claimed is FormatId.Mobi or FormatId.Azw3 && actual is FormatId.Mobi or FormatId.Azw3);
 
     private static (FormatId, ContainerKind, string?) Identify(
         ReadOnlySpan<byte> head, Stream stream, long origin)

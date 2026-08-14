@@ -14,16 +14,16 @@ public sealed class CbzWriteTests
         string source, string target, Action<BookMetadata> edit, ICollection<Finding>? findings = null)
     {
         using ZipContainer container = ZipContainer.Open(source);
-        var handler = new CbzHandler();
-        BookMetadata metadata = handler.Read(container);
+        var format = new CbzFormat();
+        BookMetadata metadata = format.Read(container);
         edit(metadata);
-        handler.Write(container, metadata, target, findings);
+        format.Write(container, metadata, target, findings);
     }
 
     private static BookMetadata Read(string path)
     {
         using ZipContainer container = ZipContainer.Open(path);
-        return new CbzHandler().Read(container);
+        return new CbzFormat().Read(container);
     }
 
     private static string ComicInfoText(string path)
@@ -370,7 +370,7 @@ public sealed class CbzWriteTests
     [Fact]
     public void A_comic_cannot_write_a_cover()
     {
-        FormatCapabilities capabilities = new CbzHandler().Capabilities;
+        FormatCapabilities capabilities = new CbzFormat().Capabilities;
 
         Assert.True(capabilities.CanWrite);
         Assert.False(capabilities.CanWriteAll(MetadataField.Cover));

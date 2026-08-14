@@ -84,14 +84,21 @@ ZIP + OPF; CBZ is ZIP + `ComicInfo.xml`. Keeping these separate means a new
 format is usually a new document handler over an existing container, not a new
 codebase.
 
+Those two axes are two interfaces, and they sit at the root of `EBookMeta.Core`
+so the shape is visible at a glance:
+
 ```
-EBookMeta.Core   all logic — containers, format handlers, validation, repair.
+EBookMeta.Core   all logic — containers, formats, validation, repair.
                 No UI dependencies whatsoever.
-  BookFormats     the handler registry: which parser opens which format
+  IBookFormat     what a metadata document can do: Read, Write
+  IContainer      what a file of named entries can do: Entries, OpenRead, Rebuild
+  BookFormats     registry of IBookFormat: which one opens which format
+  BookContainers  factory for IContainer: which one a file gets
+  Book            one open file: Load and Save, and what they noticed
   Containers/     ZipContainer, with its own central-directory reader
-  Formats/        IFormatHandler + EpubHandler + CbzHandler, FormatDetector,
-                  capabilities
-  Documents/      OPF, ComicInfo
+  Formats/        EpubFormat, CbzFormat — each X.cs (read/write) plus
+                  X.Rules.cs (the validation rules); FormatDetector, capabilities
+  Documents/      OPF, ComicInfo, and the XML-fidelity plumbing beneath them
   Model/          BookMetadata and friends
   BatchSession    many files read, edited and saved together
   MetadataFields  what a field looks like in a box, shared by both editors
@@ -102,8 +109,8 @@ EBookMeta.App    WinForms UI, single instance, receives paths in argv.
                 registration, from its Settings form.
 ```
 
-Adding a format is one `IFormatHandler` and one `BookFormats.Register` call. The
-UI asks the registry which handler to use and never names one, so nothing in the
+Adding a format is one `IBookFormat` and one `BookFormats.Register` call. The UI
+asks the registry which format to use and never names one, so nothing in the
 window changes when a format is added.
 
 Each format declares its capabilities, so the UI disables fields the format

@@ -383,7 +383,7 @@ internal sealed class MainForm : Form, IPathReceiver
             _saveItem.Enabled = book.CanSave;
             Text = Strings.Format("app.title.file", Path.GetFileName(path));
             SetStatus(Strings.Format(
-                "main.status.format", FormatIds.ToDisplayName(book.Detected.Format), book.EntryCount));
+                "main.status.format", book.Detected.Format.DisplayName(), book.EntryCount));
             Log.Info($"Opened '{path}' — {book.EntryCount} entries.");
         }
         catch (UnsupportedFormatException ex)
@@ -394,7 +394,7 @@ internal sealed class MainForm : Form, IPathReceiver
             // a RAR archive" is more useful than "unsupported file". The
             // format's own name is not translated — it is what the format is
             // called everywhere.
-            string name = FormatIds.ToDisplayName(ex.Detected.Format);
+            string name = ex.Detected.Format.DisplayName();
 
             MessageBox.Show(
                 this,

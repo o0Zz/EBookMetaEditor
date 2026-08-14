@@ -4,11 +4,16 @@ namespace EBookMeta.Containers;
 /// An entry to be written by <see cref="IContainer.Rebuild"/>.
 /// </summary>
 /// <remarks>
+/// The write half of a pair: <see cref="ContainerEntry"/> describes an entry as
+/// found, this one instructs a rebuild to produce one.
+/// <para>
 /// Content is supplied as a stream factory rather than a byte array so that a
 /// rebuild copies entries through without holding the whole archive in memory.
 /// A 300-page comic is a few hundred megabytes; the startup budget and the
 /// memory footprint both depend on streaming it.
+/// </para>
 /// </remarks>
+/// <seealso cref="ContainerEntry" />
 public sealed class PendingEntry
 {
     private readonly Func<Stream> _openContent;

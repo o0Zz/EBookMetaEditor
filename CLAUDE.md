@@ -60,7 +60,7 @@ preserve the others untouched.
 
 Note on that last point: `System.IO.Compression` cannot write a ZIP archive
 comment, so a CBZ carrying a ComicBookLover blob cannot be rebuilt with it
-intact. **Resolved by refusing:** `CbzHandler.Write` throws rather than saving
+intact. **Resolved by refusing:** `CbzFormat.Write` throws rather than saving
 such a file, and `CBZ-W012` reports the blob on open. Losing a user's
 ComicBookLover metadata to a title edit is not a trade this tool makes on their
 behalf, and a warning they can dismiss is not consent.
@@ -88,20 +88,27 @@ behalf, and a warning they can dismiss is not consent.
 EBookMeta.sln
 src/
   EBookMeta.Core/       net48          — all logic. ZERO UI dependencies.
+    IBookFormat.cs      ── seam 1: the metadata-document axis. Read / Write
+    IContainer.cs       ── seam 2: the physical axis. Entries / OpenRead / Rebuild
+    BookFormats.cs         registry of seam 1: Register / For / Resolve
+    BookContainers.cs      factory for seam 2: Open / IsSupported
     Book.cs                one open file: Load and Save, and what they noticed
-    BookFormats.cs         the handler registry: Register / For / Resolve
     BookExceptions.cs      BookFormatException, BookIoException, UnsupportedFormatException
     AtomicFileWriter.cs    the only sanctioned way a user's file is replaced
     BatchSession.cs        many files read, edited and saved together
     MetadataFields.cs      the text projection of a field, shared by both editors
     Finding.cs             Finding + Severity
     NamespaceRepair.cs     recovery of missing xmlns declarations
+    NaturalNameComparer.cs so 2.jpg sorts before 10.jpg
     Log.cs                 the session log: Info / Warning / Error / Finding
     Compat.cs              everything net48 lacks, in one file
-    Containers/        IContainer + ZipContainer
-    Formats/           IFormatHandler, EpubHandler, CbzHandler, FormatDetector,
-                       FormatCapabilities, FormatId, ReadOptions
-    Documents/         OpfDocument, ComicInfoDocument, XmlSourceFormat
+    Containers/        implementations of IContainer: ZipContainer,
+                       ZipCentralDirectory, ContainerEntry, PendingEntry
+    Formats/           implementations of IBookFormat: EpubFormat, CbzFormat,
+                       each split X.cs (Read/Write) + X.Rules.cs (the rules);
+                       FormatDetector, FormatCapabilities, FormatId, ReadOptions
+    Documents/         OpfDocument (+ .Write), ComicInfoDocument, ContainerXml,
+                       and the internal Xml* set that XDocument makes necessary
     Model/             BookMetadata, Creator, Identifier, SeriesInfo, CoverImage
   EBookMeta.App/        net48          — WinForms, single instance, argv = paths
                        MainForm, BatchForm, SettingsForm, LogForm, AboutForm,
@@ -114,17 +121,26 @@ tests/
     Builders/          synthetic file generators (see Test corpus)
 ```
 
+**Two interfaces define the architecture, and they live at the Core root** beside
+`Book.cs` so the shape is legible from a directory listing: `IBookFormat` for the
+metadata-document axis, `IContainer` for the physical one. Each has a registry
+next to it — `BookFormats` and `BookContainers` — and nothing outside those two
+files names a concrete implementation. `Book.Load` opens an `IContainer`, never a
+`ZipContainer`. Keep it that way; an abstraction the spine bypasses is decoration.
+
 **Four folders, and a file gets one only when several files share a subject.**
 A directory holding one file is pure navigation cost, so anything that stands
 alone lives at the Core root. Resist adding a folder for a single class, and
 resist splitting one feature across six files — a feature is a file until it
-genuinely is not.
+genuinely is not. The one sanctioned split is `X.cs` / `X.Rules.cs`: validation
+rules are roughly half of each format and none of its interface, so they sit in
+a partial beside it rather than burying `Read` and `Write`.
 
-**Adding a format is one handler plus one line.** Implement `IFormatHandler`,
+**Adding a format is one implementation plus one line.** Implement `IBookFormat`,
 call `BookFormats.Register`, done: nothing in the UI or the open path changes,
-because the UI asks the registry which handler to use and never names one.
-Detection stays outside the handlers on purpose — the app must be able to say
-"this .cbz is really a RAR archive", which is an answer no registered handler
+because the UI asks the registry which format to use and never names one.
+Detection stays outside the formats on purpose — the app must be able to say
+"this .cbz is really a RAR archive", which is an answer no registered format
 could give.
 
 `EBookMeta.Core` referencing `System.Windows.Forms`, `System.Drawing` or any UI
@@ -171,13 +187,20 @@ method and `CompressedLength == Length` is not a sound substitute, so
 `ZipContainer` parses the ZIP central directory itself and pairs it with
 `ZipArchive` **by index** — ZIP does not guarantee unique entry names.
 
-Only ZIP is implemented. `IsWritable` stays on the interface because a
-read-only container is a real concept the callers should keep handling.
+`ContainerEntry` and `PendingEntry` are a read/write pair — one describes an
+entry as found, the other instructs a rebuild to produce one, and
+`PendingEntry.CopyOf` turns the first into the second. `PendingEntry` supplies
+content as a `Func<Stream>` so a rebuild streams entries through rather than
+holding a 300-page comic in memory.
 
-### Format handlers
+Only ZIP is implemented, and `BookContainers.Open` is where that is decided.
+`IsWritable` stays on the interface because a read-only container is a real
+concept the callers should keep handling.
+
+### Formats
 
 ```csharp
-interface IFormatHandler {
+interface IBookFormat {
     FormatId Id { get; }
     FormatCapabilities Capabilities { get; }
     BookMetadata Read(IContainer c, ReadOptions? o = null, ICollection<Finding>? findings = null);
@@ -187,13 +210,15 @@ interface IFormatHandler {
 
 Two methods, not three. Reading reports what it noticed and writing reports what it
 corrected, so there is nowhere for a `Validate` to live — see **Validation rules**.
-Handlers are stateless singletons: the registry hands the same instance to every
-caller, including four parallel batch threads.
+Implementations are stateless singletons: the registry hands the same instance to
+every caller, including four parallel batch threads. Note what is *not* in the
+signature — no path. No format touches the user's file; writing produces a
+complete new file at a path `AtomicFileWriter` supplies.
 
 `FormatCapabilities` declares which model fields the format can store, and
 whether writing is supported. **The UI reads this to disable fields**, so that
 a user never types into a box whose content will be discarded. Adding a model
-field means updating every handler's capabilities — that is intentional
+field means updating every format's capabilities — that is intentional
 friction.
 
 ### Detection
@@ -290,7 +315,7 @@ Not style preferences. Violating these corrupts users' libraries.
 1. **Never modify in place.** Read the source fully, build into a sibling
    `.tmp`, then `File.Replace` with a `.bak`. A crash mid-write must never
    leave a truncated file. `AtomicFileWriter` is the only sanctioned path;
-   no handler opens the target for writing directly.
+   no format opens the target for writing directly.
 2. **Never open an archive with `ZipArchiveMode.Update`.**
 3. Entries other than the metadata document are copied **byte for byte**.
    Never round-trip XHTML, CSS or images through a parser.
@@ -407,7 +432,7 @@ rather than reading the file back.
 
 Checking is the core value of this project, and **it is not a feature the user
 invokes.** There is no Validate button, no Validate menu item, no findings panel
-and no `Validate` method on `IFormatHandler` — those existed once and were removed
+and no `Validate` method on `IBookFormat` — those existed once and were removed
 deliberately. Do not reintroduce them.
 
 The reason is that a separate validate step gets the model backwards. A user does
@@ -430,8 +455,9 @@ not want to be told their file is broken; they want to edit it. So:
   memory. There is no repair-specific write path, which is what makes "the file on
   disk is what the user last saved" true by construction.
 
-Rules are still plain code inside the handlers, grouped by the question they answer
-(`CheckRequiredMetadata`, `CheckReferences`, `CheckArchive`, `CheckLayout`,
+Rules are still plain code inside the formats — in `EpubFormat.Rules.cs` and
+`CbzFormat.Rules.cs`, partials of the format itself — grouped by the question they
+answer (`CheckRequiredMetadata`, `CheckReferences`, `CheckArchive`, `CheckLayout`,
 `CheckPages`, `CheckFields`). The rule IDs are the stable part. Follow the existing
 shape when adding one; a rule engine would be its own change and is not needed to
 add a rule.

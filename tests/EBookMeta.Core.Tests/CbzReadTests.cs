@@ -12,7 +12,7 @@ public sealed class CbzReadTests
     private static BookMetadata Read(string path)
     {
         using ZipContainer container = ZipContainer.Open(path);
-        return new CbzHandler().Read(container);
+        return new CbzFormat().Read(container);
     }
 
     private static BookMetadata ReadComicInfo(TempDir temp, string comicInfo) =>
@@ -172,22 +172,22 @@ public sealed class CbzReadTests
 
     /// <summary>
     /// A comic archive is detected as one whether it is tagged or not, and the
-    /// handler comes from the registry rather than from the extension.
+    /// the implementation comes from the registry rather than from the extension.
     /// </summary>
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void A_comic_archive_resolves_to_the_comic_handler(bool tagged)
+    public void A_comic_archive_resolves_to_the_comic_format(bool tagged)
     {
         using var temp = new TempDir();
         CbzBuilder builder = tagged ? new CbzBuilder() : new CbzBuilder().WithoutComicInfo();
         string path = builder.WriteTo(temp.File("comic.cbz"));
 
-        IFormatHandler? handler = BookFormats.Resolve(path, out DetectedFormat detected);
+        IBookFormat? format = BookFormats.Resolve(path, out DetectedFormat detected);
 
         Assert.Equal(FormatId.Cbz, detected.Format);
-        Assert.IsType<CbzHandler>(handler);
-        Assert.IsType<CbzHandler>(BookFormats.For(FormatId.Cbz));
+        Assert.IsType<CbzFormat>(format);
+        Assert.IsType<CbzFormat>(BookFormats.For(FormatId.Cbz));
     }
 
     [Fact]

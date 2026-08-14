@@ -332,7 +332,7 @@ public sealed partial class OpfDocument
             NativeRole = nativeRole,
             // A role carried under marc:relators is already a relator code, so
             // it maps to itself. Anything else is a native string whose mapping
-            // is the handler's business, not the document's.
+            // is the format's business, not the document's.
             Role = scheme is null or "marc:relators" ? nativeRole : null,
             Kind = kind,
             SourceId = id,

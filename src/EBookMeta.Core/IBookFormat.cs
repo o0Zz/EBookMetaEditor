@@ -1,17 +1,36 @@
-using EBookMeta.Containers;
+using EBookMeta.Formats;
 using EBookMeta.Model;
 
-namespace EBookMeta.Formats;
+namespace EBookMeta;
 
 /// <summary>
-/// Reads and writes the metadata of one format.
+/// Reads and writes the metadata of one format — the metadata-document axis of
+/// the design, and one of Core's two seams.
 /// </summary>
-public interface IFormatHandler
+/// <remarks>
+/// Two methods, not three. Reading reports what it noticed and writing reports
+/// what it corrected, so there is nowhere for a <c>Validate</c> to live.
+/// <para>
+/// Implementations are stateless singletons, held by <see cref="BookFormats"/>,
+/// which hands the same instance to every caller including parallel batch
+/// threads. Adding a format is one implementation plus one
+/// <see cref="BookFormats.Register"/> call; nothing in the UI or the open path
+/// changes, because both ask the registry rather than naming a format.
+/// </para>
+/// <para>
+/// No implementation touches the user's file. Both methods work against an open
+/// <see cref="IContainer"/>, and writing produces a complete new file at a path
+/// <c>AtomicFileWriter</c> supplies — which is what keeps a single sanctioned
+/// path for replacing a user's file.
+/// </para>
+/// </remarks>
+/// <seealso cref="IContainer" />
+public interface IBookFormat
 {
-    /// <summary>The format this handler is responsible for.</summary>
+    /// <summary>The format this implementation is responsible for.</summary>
     FormatId Id { get; }
 
-    /// <summary>What this handler can read and write.</summary>
+    /// <summary>What this format can read and write.</summary>
     FormatCapabilities Capabilities { get; }
 
     /// <summary>Reads metadata from an open container.</summary>

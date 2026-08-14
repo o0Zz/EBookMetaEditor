@@ -266,7 +266,7 @@ public sealed class BatchSession
                 recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly);
 
             return [.. files
-                .Where(path => BookFormats.IsSupported(FormatIds.FromExtension(path)))
+                .Where(path => BookFormats.IsSupported(FormatDetector.FromExtension(path)))
                 .OrderBy(path => path, NaturalNameComparer.Instance)];
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
@@ -320,7 +320,7 @@ public sealed class BatchSession
         {
             entry.Detected = ex.Detected;
             entry.Status = BatchEntryStatus.Unsupported;
-            entry.Error = $"{FormatIds.ToDisplayName(ex.Detected.Format)}"
+            entry.Error = $"{ex.Detected.Format.DisplayName()}"
                 + (ex.Detected.Detail is null ? "" : $" ({ex.Detected.Detail})")
                 + " — this build cannot edit that format.";
         }

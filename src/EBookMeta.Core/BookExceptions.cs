@@ -63,7 +63,7 @@ public class UnsupportedFormatException : BookFormatException
     /// <param name="path">The file that could not be opened.</param>
     public UnsupportedFormatException(DetectedFormat detected, string? path)
         : base(
-            $"'{path}' is {FormatIds.ToDisplayName(detected.Format)}, "
+            $"'{path}' is {detected.Format.DisplayName()}, "
             + "which this build cannot edit.",
             path)
     {

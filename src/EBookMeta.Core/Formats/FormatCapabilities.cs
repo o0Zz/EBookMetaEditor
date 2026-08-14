@@ -63,7 +63,7 @@ public enum MetadataField
 }
 
 /// <summary>
-/// What a format handler can do with a file: which fields it can read, which it
+/// What a format can do with a file: which fields it can read, which it
 /// can write, and whether it can write at all.
 /// </summary>
 public sealed record FormatCapabilities

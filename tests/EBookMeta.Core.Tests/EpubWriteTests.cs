@@ -12,16 +12,16 @@ public sealed class EpubWriteTests
     private static BookMetadata Read(string path)
     {
         using ZipContainer container = ZipContainer.Open(path);
-        return new EpubHandler().Read(container);
+        return new EpubFormat().Read(container);
     }
 
     private static void Write(string source, string target, Action<BookMetadata> edit)
     {
         using ZipContainer container = ZipContainer.Open(source);
-        var handler = new EpubHandler();
-        BookMetadata metadata = handler.Read(container);
+        var format = new EpubFormat();
+        BookMetadata metadata = format.Read(container);
         edit(metadata);
-        handler.Write(container, metadata, target);
+        format.Write(container, metadata, target);
     }
 
     private static string Epub2(TempDir temp) =>

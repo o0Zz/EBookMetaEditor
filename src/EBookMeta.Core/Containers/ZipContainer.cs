@@ -48,7 +48,7 @@ public sealed class ZipContainer : IContainer
     /// Comic archives sometimes store a ComicBookLover JSON blob here.
     /// <c>System.IO.Compression</c> cannot write archive comments, so
     /// <see cref="Rebuild"/> does not reproduce this — which is why
-    /// <c>CbzHandler</c> refuses to write a file that has one rather than
+    /// <c>CbzFormat</c> refuses to write a file that has one rather than
     /// dropping it.
     /// </remarks>
     public string? ArchiveComment { get; }

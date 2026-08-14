@@ -63,7 +63,7 @@ public sealed class CbzValidateTests
         // Fatal means the open fails, not that it returns a book with a complaint
         // attached. Nothing is recoverable here, and invariant 15 forbids guessing.
         using var container = ZipContainer.Open(path);
-        Assert.Throws<BookFormatException>(() => new CbzHandler().Read(container));
+        Assert.Throws<BookFormatException>(() => new CbzFormat().Read(container));
     }
 
     [Fact]

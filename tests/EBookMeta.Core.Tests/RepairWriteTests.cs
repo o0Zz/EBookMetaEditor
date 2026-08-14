@@ -43,17 +43,17 @@ public sealed class RepairWriteTests
     private static string OpfTextOf(string path)
     {
         using ZipContainer container = ZipContainer.Open(path);
-        RawPackageDocument raw = EpubHandler.ReadRawPackageDocument(container);
+        RawPackageDocument raw = EpubFormat.ReadRawPackageDocument(container);
         return new UTF8Encoding(false).GetString(raw.Bytes);
     }
 
     private static void SaveTo(string source, string target, Action<BookMetadata>? edit = null)
     {
         using ZipContainer container = ZipContainer.Open(source);
-        var handler = new EpubHandler();
-        BookMetadata metadata = handler.Read(container);
+        var format = new EpubFormat();
+        BookMetadata metadata = format.Read(container);
         edit?.Invoke(metadata);
-        handler.Write(container, metadata, target);
+        format.Write(container, metadata, target);
     }
 
     // --- opening ---------------------------------------------------------
@@ -66,7 +66,7 @@ public sealed class RepairWriteTests
 
         using ZipContainer container = ZipContainer.Open(path);
         var findings = new List<Finding>();
-        BookMetadata metadata = new EpubHandler().Read(container, findings: findings);
+        BookMetadata metadata = new EpubFormat().Read(container, findings: findings);
 
         // The undeclared opf: prefix is corrected on the way in, so the metadata it
         // carried is available rather than the file being refused.
@@ -89,7 +89,7 @@ public sealed class RepairWriteTests
 
         using (ZipContainer container = ZipContainer.Open(path))
         {
-            new EpubHandler().Read(container);
+            new EpubFormat().Read(container);
         }
 
         // The correction is in memory only. Nothing is written, and no backup is
@@ -112,7 +112,7 @@ public sealed class RepairWriteTests
         // 'acme' has no known namespace, so nothing is guessed and the original
         // error is what the user gets.
         BookFormatException ex = Assert.Throws<BookFormatException>(
-            () => new EpubHandler().Read(container));
+            () => new EpubFormat().Read(container));
 
         Assert.Contains("acme", ex.Message, StringComparison.Ordinal);
     }
@@ -133,7 +133,7 @@ public sealed class RepairWriteTests
         // The saved file is a book that opens on its own terms, with no repair
         // needed the second time.
         using ZipContainer saved = ZipContainer.Open(target);
-        Assert.Equal("Neverwhere: Author's Preferred Text", new EpubHandler().Read(saved).Title);
+        Assert.Equal("Neverwhere: Author's Preferred Text", new EpubFormat().Read(saved).Title);
     }
 
     /// <summary>Hard invariants 3 and 4: only the package document changes.</summary>

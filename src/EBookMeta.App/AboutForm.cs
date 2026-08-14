@@ -66,7 +66,7 @@ internal sealed class AboutForm : Form
         {
             Text = BookFormats.All.Count == 0
                 ? Strings.Get("about.formats.none")
-                : string.Join(", ", BookFormats.All.Select(h => FormatIds.ToDisplayName(h.Id)).OrderBy(n => n)),
+                : string.Join(", ", BookFormats.All.Select(h => h.Id.DisplayName()).OrderBy(n => n)),
             AutoSize = true,
             Margin = new Padding(2, 0, 0, 12),
         };

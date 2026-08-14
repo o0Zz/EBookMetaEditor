@@ -4,6 +4,13 @@ namespace EBookMeta.Containers;
 /// One entry inside a container, described well enough that
 /// <see cref="IContainer.Rebuild"/> can reproduce it.
 /// </summary>
+/// <remarks>
+/// The read half of a pair: this describes an entry <em>as found</em>, while
+/// <see cref="PendingEntry"/> is an instruction to write one. They carry nearly
+/// the same fields and flow in opposite directions —
+/// <see cref="PendingEntry.CopyOf"/> is what turns one into the other.
+/// </remarks>
+/// <seealso cref="PendingEntry" />
 public sealed record ContainerEntry
 {
     /// <summary>

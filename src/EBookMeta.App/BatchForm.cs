@@ -345,7 +345,7 @@ internal sealed class BatchForm : Form, IPathReceiver
     {
         row.Cells[StatusColumn].Value = StatusTextOf(entry);
         row.Cells[FormatColumn].Value = entry.Detected is { } detected
-            ? FormatIds.ToDisplayName(detected.Format)
+            ? detected.Format.DisplayName()
             : string.Empty;
 
         foreach (DataGridViewCell cell in FieldCells(row))

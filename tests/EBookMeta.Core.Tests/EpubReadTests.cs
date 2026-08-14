@@ -21,7 +21,7 @@ public sealed class EpubReadTests
     private static BookMetadata Read(string path)
     {
         using ZipContainer container = ZipContainer.Open(path);
-        return new EpubHandler().Read(container);
+        return new EpubFormat().Read(container);
     }
 
     private static BookMetadata Epub3(TempDir temp) =>
@@ -166,5 +166,5 @@ public sealed class EpubReadTests
     [InlineData("content.opf", "cover.png", "cover.png")]
     public void Hrefs_resolve_against_the_package_document_directory(
         string opfPath, string href, string expected) =>
-        Assert.Equal(expected, EpubHandler.ResolveHref(opfPath, href));
+        Assert.Equal(expected, EpubFormat.ResolveHref(opfPath, href));
 }

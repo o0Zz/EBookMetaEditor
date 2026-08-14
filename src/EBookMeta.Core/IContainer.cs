@@ -1,9 +1,22 @@
-namespace EBookMeta.Containers;
+using EBookMeta.Containers;
+
+namespace EBookMeta;
 
 /// <summary>
 /// A file that holds named entries — a ZIP, a TAR, a 7z, a PalmDB, or a single
-/// raw file presented as one entry.
+/// raw file presented as one entry. The physical axis of the design, and one of
+/// Core's two seams.
 /// </summary>
+/// <remarks>
+/// It knows nothing about books: entries in the container's own order, byte
+/// access to one of them, and an atomic rebuild. Everything that understands
+/// what those entries mean lives behind <see cref="IBookFormat"/>.
+/// <para>
+/// Implementations are opened through <see cref="BookContainers.Open"/> rather
+/// than being named by callers, so the choice of container lives in one place.
+/// </para>
+/// </remarks>
+/// <seealso cref="IBookFormat" />
 public interface IContainer : IDisposable
 {
     /// <summary>

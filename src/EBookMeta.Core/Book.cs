@@ -10,21 +10,21 @@ namespace EBookMeta;
 /// </summary>
 public sealed class Book
 {
-    private readonly IFormatHandler _handler;
+    private readonly IBookFormat _format;
     private readonly List<Finding> _loadFindings;
     private readonly List<Finding> _saveFindings = [];
 
     private Book(
         string path,
         DetectedFormat detected,
-        IFormatHandler handler,
+        IBookFormat format,
         BookMetadata metadata,
         List<Finding> loadFindings,
         int entryCount)
     {
         Path = path;
         Detected = detected;
-        _handler = handler;
+        _format = format;
         Metadata = metadata;
         _loadFindings = loadFindings;
         EntryCount = entryCount;
@@ -37,7 +37,7 @@ public sealed class Book
     public DetectedFormat Detected { get; }
 
     /// <summary>Which fields this file's format can store, and whether it can be written.</summary>
-    public FormatCapabilities Capabilities => _handler.Capabilities;
+    public FormatCapabilities Capabilities => _format.Capabilities;
 
     /// <summary>
     /// The metadata, mutable in place. Edits reach the file only through
@@ -73,8 +73,8 @@ public sealed class Book
     /// </param>
     /// <returns>The open book.</returns>
     /// <exception cref="UnsupportedFormatException">
-    /// The file was recognised but no handler can edit it — most often a RAR
-    /// archive with a <c>.cbz</c> extension.
+    /// The file was recognised but no registered <see cref="IBookFormat"/> can
+    /// edit it — most often a RAR archive with a <c>.cbz</c> extension.
     /// </exception>
     /// <exception cref="BookFormatException">
     /// The file is damaged beyond what can be recovered on the way in.
@@ -86,14 +86,14 @@ public sealed class Book
         Throw.IfNullOrEmpty(path);
 
         var collected = new List<Finding>();
-        IFormatHandler? handler = BookFormats.Resolve(path, out DetectedFormat detected);
+        IBookFormat? format = BookFormats.Resolve(path, out DetectedFormat detected);
 
         if (!detected.ExtensionAgrees)
         {
             collected.Add(ExtensionDisagrees(path, detected));
         }
 
-        if (handler is null)
+        if (format is null)
         {
             // Reported before throwing: the extension disagreement is usually the
             // most useful thing anyone will learn about this file, and it is the
@@ -102,17 +102,17 @@ public sealed class Book
             throw new UnsupportedFormatException(detected, path);
         }
 
-        using ZipContainer container = ZipContainer.Open(path);
+        using IContainer container = BookContainers.Open(path, detected.Container);
 
         try
         {
             CheckEntryNames(container, collected);
 
-            BookMetadata metadata = handler.Read(container, options, collected);
+            BookMetadata metadata = format.Read(container, options, collected);
 
             Publish(collected, findings);
 
-            return new Book(path, detected, handler, metadata, collected, container.Entries.Count);
+            return new Book(path, detected, format, metadata, collected, container.Entries.Count);
         }
         catch (BookFormatException)
         {
@@ -146,7 +146,7 @@ public sealed class Book
         if (!CanSave)
         {
             throw new NotSupportedException(
-                $"{FormatIds.ToDisplayName(Detected.Format)} cannot be written by this build.");
+                $"{Detected.Format.DisplayName()} cannot be written by this build.");
         }
 
         _saveFindings.Clear();
@@ -159,8 +159,8 @@ public sealed class Book
                 {
                     // Reopened inside the callback so the source handle is closed
                     // before File.Replace swaps the file underneath it.
-                    using ZipContainer container = ZipContainer.Open(Path);
-                    _handler.Write(container, Metadata, temp, _saveFindings);
+                    using IContainer container = BookContainers.Open(Path, Detected.Container);
+                    _format.Write(container, Metadata, temp, _saveFindings);
                 },
                 keepBackup);
         }
@@ -175,7 +175,7 @@ public sealed class Book
     /// <summary>Returns the file name and what it turned out to be, for diagnostics.</summary>
     /// <returns>A short description.</returns>
     public override string ToString() =>
-        $"{System.IO.Path.GetFileName(Path)} ({FormatIds.ToDisplayName(Detected.Format)})";
+        $"{System.IO.Path.GetFileName(Path)} ({Detected.Format.DisplayName()})";
 
     /// <summary>
     /// Forwards findings to the session log, which is the only place they surface.
@@ -210,8 +210,8 @@ public sealed class Book
             RuleId = "GEN-W002",
             Severity = Severity.Warning,
             Message =
-                $"The extension says {FormatIds.ToDisplayName(detected.ClaimedByExtension)} "
-                + $"but the content is {FormatIds.ToDisplayName(detected.Format)}.",
+                $"The extension says {detected.ClaimedByExtension.DisplayName()} "
+                + $"but the content is {detected.Format.DisplayName()}.",
             Location = System.IO.Path.GetFileName(path),
             Detail = detected.Detail,
         };

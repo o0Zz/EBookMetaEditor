@@ -181,7 +181,7 @@ public sealed class LogTests : IDisposable
         Log.Clear();
 
         using ZipContainer container = ZipContainer.Open(path);
-        new EpubHandler().Read(container);
+        new EpubFormat().Read(container);
 
         Assert.Contains(Log.Entries, e => e.Level == LogLevel.Info && e.Message.Contains("Read EPUB"));
     }
@@ -219,7 +219,7 @@ public sealed class LogTests : IDisposable
         Log.Clear();
 
         using ZipContainer container = ZipContainer.Open(path);
-        Assert.Throws<BookFormatException>(() => new EpubHandler().Read(container));
+        Assert.Throws<BookFormatException>(() => new EpubFormat().Read(container));
 
         Assert.Contains(Log.Entries, e => e.Level == LogLevel.Error && e.Message.Contains("acme"));
     }
