@@ -1,7 +1,7 @@
 using System.Text;
 using System.Xml.Linq;
 
-namespace EBookMeta.Documents;
+namespace EBookMeta.Xml;
 
 /// <summary>
 /// Serialises an <see cref="XElement"/> tree back to text as close to the

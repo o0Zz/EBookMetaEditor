@@ -61,8 +61,9 @@ compressor, and no 7z writer ships here. Either one would open into an editor th
 cannot save, which is not this product. Their fixtures could not be generated
 either, so the corpus rule would break with them.
 
-**Detection is not support, and the difference matters.** `FormatDetector` still
-recognises RAR, 7z, PalmDB and PDF by content, and must keep doing so. A
+**Detection is not support, and the difference matters.** `BookContainers.Sniff`
+recognises RAR and 7z, and `BookFormats` names them and PDF, and both must keep
+doing so — they are the answers no registered format is there to give. A
 `.cbz` that is really a RAR archive is extremely common, and telling the user
 that (`GEN-W002`) is one of this tool's headline features. Recognising a format
 well enough to name it costs a few magic-number comparisons; supporting it costs
@@ -104,11 +105,16 @@ behalf, and a warning they can dismiss is not consent.
 EBookMeta.sln
 src/
   EBookMeta.Core/       net48          — all logic. ZERO UI dependencies.
-    IBookFormat.cs      ── seam 1: the metadata-document axis. Read / Write
-    IContainer.cs       ── seam 2: the physical axis. Entries / OpenRead / Rebuild
-                           + ReadAllBytes, the one extension every format needs
-    BookFormats.cs         registry of seam 1: Register / For / Resolve
-    BookContainers.cs      factory for seam 2: Open / IsSupported
+    IBookFormat.cs      ── seam 1: the metadata-document axis.
+                           TryOpen / Read / Write / Extensions, plus the
+                           vocabulary they are spoken in: BookSource,
+                           FormatClaim, MatchConfidence
+    IContainer.cs       ── seam 2: the physical axis. Entries / OpenRead / Rebuild,
+                           plus the vocabulary it is spoken in: ContainerEntry,
+                           PendingEntry, SectionStream, ReadAllBytes
+    BookFormats.cs         registry of seam 1, and the open path: Register / For /
+                           TryOpen / Identify / FromExtension + DetectedFormat
+    BookContainers.cs      factory for seam 2: Open / IsSupported / Sniff
     Book.cs                one open file: Load and Save, and what they noticed
     BookExceptions.cs      BookFormatException, BookIoException, UnsupportedFormatException
     AtomicFileWriter.cs    the only sanctioned way a user's file is replaced
@@ -118,20 +124,22 @@ src/
     NaturalNameComparer.cs so 2.jpg sorts before 10.jpg
     Log.cs                 the session log: Info / Warning / Error / Finding
     Compat.cs              everything net48 lacks, in one file
-    Containers/        implementations of IContainer: ZipContainer +
-                       ZipCentralDirectory, TarContainer + TarHeader,
-                       PalmDbContainer, RawContainer, SectionStream,
-                       ContainerEntry, PendingEntry
-    Formats/           implementations of IBookFormat: EpubFormat, CbzFormat
-                       (CBZ + CBT), Fb2Format (FB2 + FB2.ZIP), MobiFormat
-                       (MOBI/PRC + AZW/AZW3); each split X.cs (Read/Write) +
-                       X.Rules.cs (the rules), plus EpubFormat.Repair.cs
-                       (recovery of missing xmlns declarations);
-                       FormatDetector, FormatCapabilities, FormatId, ReadOptions
-    Documents/         OpfDocument (+ .Write), ComicInfoDocument, Fb2Document,
-                       MobiDocument, ContainerXml,
-                       and the internal Xml* set that XDocument makes necessary
-    Model/             BookMetadata, Creator, Identifier, SeriesInfo, CoverImage
+    Containers/        one file per container, and nothing else:
+                       ZipContainer, TarContainer, PalmDbContainer, RawContainer
+    Formats/           one file per format, and nothing else — each holding its
+                       detection, read, write, rules and metadata document:
+                       EpubFormat (+ OPF, container.xml, xmlns repair),
+                       CbzFormat (CBZ + CBT, + ComicInfo.xml),
+                       Fb2Format (FB2 + FB2.ZIP, + the FictionBook document),
+                       MobiFormat (MOBI/PRC + AZW/AZW3, + the EXTH document);
+                       then the small shared vocabulary they are asked in:
+                       FormatCapabilities, FormatId, ReadOptions
+    Xml/               the plumbing XDocument makes necessary, shared by every
+                       XML format: XmlEncodingDetector, XmlSourceFormat,
+                       XmlExactWriter
+    Model/             BookMetadata, Creator, Identifier, SeriesInfo, CoverImage,
+                       BookDate (which owns date parsing, because more than one
+                       format needs it)
   EBookMeta.App/        net48          — WinForms, single instance, argv = paths
                        MainForm, BatchForm, SettingsForm, LogForm, AboutForm,
                        Dialogs (the chrome all four share),
@@ -151,29 +159,78 @@ next to it — `BookFormats` and `BookContainers` — and nothing outside those 
 files names a concrete implementation. `Book.Load` opens an `IContainer`, never a
 `ZipContainer`. Keep it that way; an abstraction the spine bypasses is decoration.
 
-**Four folders, and a file gets one only when several files share a subject.**
-A directory holding one file is pure navigation cost, so anything that stands
-alone lives at the Core root. Resist adding a folder for a single class, and
-resist splitting one feature across six files — a feature is a file until it
-genuinely is not. The one sanctioned split is `X.cs` / `X.Rules.cs`: validation
-rules are roughly half of each format and none of its interface, so they sit in
-a partial beside it rather than burying `Read` and `Write`. `EpubFormat.Repair.cs`
-is the same split applied a third time and the only one that earns it.
+**One file per format, one file per container. This is the layout rule that
+matters most, and it is not about tidiness.** `ls Formats/` is the answer to "what
+does this build support", and `ls Containers/` is the answer to "how does it read
+them". A format that spilled across `EpubFormat.cs`, `EpubFormat.Rules.cs`,
+`OpfDocument.cs`, `ContainerXml.cs` and a sniffer in a sixth file made both
+questions require a search, and made "what does EPUB depend on" unanswerable
+without reading five files. Each format file is now long — EPUB is around 2500
+lines — and that is the accepted cost. **Do not split one back out.** If a format
+file feels unwieldy, the fix is `#region`-free ordering and good headers within
+it, not a second file.
 
-**A helper only one format calls belongs to that format.** `EpubFormat.Repair.cs`
-sat at the Core root as `NamespaceRepair.cs` for a while, looking like general XML
-recovery. Every prefix in its table is an EPUB prefix, every rule it answers is an
-`EPUB-` rule, and nothing but `EpubFormat` ever called it — so it was an EPUB
-partial that had been filed as infrastructure. The test to apply before putting
-something at the root: if only one format would ever call it, it is that format's
-code no matter how general the name makes it sound.
+**A file gets a folder only when several files share a subject.** `Xml/` holds the
+three helpers every XML format needs and `Model/` the metadata types; both earn
+their folder. `Documents/` did not survive: once each metadata document moved into
+its format, what was left was the XML plumbing, so the folder was renamed to say
+what it actually holds. A directory holding one file is pure navigation cost.
+
+**The test for where something lives: how many formats call it?** One means it is
+that format's code, however general the name makes it sound — `NamespaceRepair.cs`
+sat at the Core root looking like general XML recovery when every prefix in its
+table was an EPUB prefix and every rule it answered was an `EPUB-` rule. Two or
+more means it is shared and belongs in `Xml/`, `Model/` or at the root —
+`BookDate.Parse` is there because EPUB, ComicInfo and the editors all parse dates.
+`ImageExtensions` went the other way: once the sniffer was gone, `CbzFormat` was
+its only caller, so it moved inside.
 
 **Adding a format is one implementation plus one line.** Implement `IBookFormat`,
-call `BookFormats.Register`, done: nothing in the UI or the open path changes,
-because the UI asks the registry which format to use and never names one.
-Detection stays outside the formats on purpose — the app must be able to say
-"this .cbz is really a RAR archive", which is an answer no registered format
-could give.
+call `BookFormats.Register`, done: nothing in the UI or the open path changes. The
+format brings its own `Extensions` — which is where the Settings form's
+context-menu list comes from — and its own `TryOpen`, so recognising its files is
+part of implementing it rather than a second edit in a sniffer somewhere else.
+
+### Opening a file: every format is asked
+
+There is no sniffer. `BookFormats.TryOpen` offers the file to every registered
+format and the strongest `FormatClaim` wins:
+
+```csharp
+using BookSource? source = BookFormats.TryOpen(path, out DetectedFormat detected);
+```
+
+`BookSource` is what makes that affordable. The file is opened **once** and the
+same `IContainer` is handed to every format that looks at it, so asking seven
+formats costs one header read and one container open — not one of each per format.
+A format whose `ContainerKind` does not match declines without touching the
+container at all. On success the container stays open and `Book.Load` reads
+straight through it, which is one file open fewer than sniffing and then opening.
+
+**`TryOpen` claims; it does not parse. This distinction is load-bearing.** A format
+checks the marker that identifies it and nothing more. A damaged file is still that
+format's file — an EPUB whose OPF will not parse is precisely the file the repair
+path exists for, and declining it would leave it claimed by nobody and reported as
+unsupported. Parsing happens in `Read`, after a winner is picked, where a failure
+is a real error rather than a reason to try the next format.
+`DetectionTests.A_damaged_file_is_still_claimed_by_its_own_format` exists to keep
+that true. For the same reason `TryOpen` must never throw: an exception abandons
+the loop before the formats after it are asked.
+
+`MatchConfidence` settles overlaps — an EPUB's `mimetype` is `Certain`, a
+`ComicInfo.xml` is `Strong`, an archive of nothing but images is `Weak` — so the
+answer never depends on registration order.
+
+**Two answers are still not available to any format**, because a format can only
+ever say "that is mine". Both live in `BookFormats`:
+
+- **Which container the bytes are.** Several formats share one, so the physical
+  sniff belongs to `BookContainers.Sniff` — the same one-place-decides rule as
+  `BookContainers.Open`, and it runs before any format is asked.
+- **"This is a format we recognise and cannot open."** RAR, 7z and PDF have no
+  registered format to speak for them, and saying a `.cbz` is really a RAR
+  (`GEN-W002`, `GEN-W004`) is a headline feature. Naming a format costs a few
+  magic-number comparisons; supporting it costs a container and a document.
 
 `EBookMeta.Core` referencing `System.Windows.Forms`, `System.Drawing` or any UI
 package is a build-breaking error, enforced by the
@@ -286,31 +343,55 @@ friction.
 
 ### Detection
 
-`FormatDetector` decides by content, never by extension. In collections,
-extensions lie constantly — a `.cbz` that is really RAR is common.
+Detection decides by content, never by extension. In collections, extensions lie
+constantly — a `.cbz` that is really RAR is common.
 
-- `PK\x03\x04` → ZIP; then inspect entries: `mimetype` containing
-  `application/epub+zip` → EPUB; `ComicInfo.xml` or only image files → comic;
-  a `.fb2` entry → FB2.ZIP
-- `Rar!\x1a\x07` (v4) or `Rar!\x1a\x07\x01\x00` (v5) → RAR — recognised, not supported
-- `7z\xBC\xAF\x27\x1C` → 7z — recognised, not supported
-- `ustar` at offset 257 → TAR → CBT
-- PDB type+creator at offset 60: `BOOKMOBI` or `TEXtREAd` → PalmDB → MOBI family
-- `%PDF-` → PDF — recognised, not supported
-- a `<FictionBook` root element in the first 2 KB of text → FB2
+It happens in two passes, and which pass a check belongs to is decided by whether
+more than one format shares the answer.
 
-Read at most the first 8 KB for the magic-number pass. Distinguishing the
-ZIP-based formats needs one more step, since EPUB and CBZ are both ZIPs: the
-first local file header sits at offset 0 and settles it for conformant files
-(an EPUB must store `mimetype` first). Only when that is inconclusive may the
-sniffer fall back to reading the central directory — entry names only, never
-content. If extension and content disagree, report it (`GEN-W002`).
+**`BookContainers.Sniff` — the physical pass, on the first 8 KB:**
 
-FB2 is the one format sniffed from text rather than a magic number, because it
-has none: it is an ordinary XML file whose root element is the only thing that
-distinguishes it. The search is bounded to the first 2 KB and gated on the file
-starting with an angle bracket, so it costs nothing for everything that is not
-XML.
+- `PK\x03\x04` → ZIP
+- `Rar!\x1a\x07` (v4) or `Rar!\x1a\x07\x01\x00` (v5) → RAR
+- `7z\xBC\xAF\x27\x1C` → 7z
+- `ustar` at offset 257 → TAR
+- PDB type+creator at offset 60: `BOOKMOBI` or `TEXtREAd` → PalmDB
+- anything else → Raw
+
+**`IBookFormat.TryOpen` — each format, asked with a shared `BookSource`:**
+
+| Format | What it claims on | Confidence |
+|---|---|---|
+| EPUB | ZIP with a `mimetype` entry whose content is `application/epub+zip` | certain |
+| EPUB | ZIP with a `mimetype` entry whose content is wrong or compressed | strong |
+| CBZ | ZIP holding `ComicInfo.xml` or `comet.xml` | strong |
+| CBZ | ZIP of nothing but images — the ComicRack convention | weak |
+| CBT | TAR, which no other supported format uses | strong |
+| FB2.ZIP | ZIP holding a `.fb2` entry | strong |
+| FB2 | a `<FictionBook` root element in the first 2 KB of text | certain |
+| MOBI | PalmDB | strong |
+
+The strongest claim wins, so the answer never depends on registration order. What
+is left in `BookFormats` is what no registered format can say: RAR → CBR, 7z → CB7,
+`%PDF-` → PDF, all recognised and none supported. If extension and content
+disagree, report it (`GEN-W002`).
+
+Read at most the first 8 KB for the magic-number pass. Beyond that a format reads
+the container's **entry names**, which the ZIP central directory has already
+supplied, and at most one entry's content — the EPUB `mimetype`, twenty stored
+bytes, because a CBZ can contain a file of that name too. Never decompress an
+entry to decide what a file is.
+
+The EPUB rows are worth reading twice. A `mimetype` that is compressed, misplaced
+or wrong still claims the file, one step down in confidence, because those are
+exactly the defects `EPUB-E040` describes and a save corrects. Refusing to open the
+files you know how to repair is the failure mode to watch for here.
+
+FB2 is the one format recognised from text rather than a container, because it has
+no magic number: it is an ordinary XML file whose root element is the only thing
+that distinguishes it. The search is bounded to the first 2 KB of `BookSource.Head`
+and gated on the file starting with an angle bracket, so it costs nothing for
+everything that is not XML — and no `RawContainer` is opened to decline a file.
 
 **Inconclusive includes a `mimetype` whose bytes cannot be read inline** — a
 compressed one, for instance. Falling back there rather than concluding "anonymous
@@ -533,8 +614,7 @@ not want to be told their file is broken; they want to edit it. So:
   memory. There is no repair-specific write path, which is what makes "the file on
   disk is what the user last saved" true by construction.
 
-Rules are still plain code inside the formats — in `EpubFormat.Rules.cs` and
-`CbzFormat.Rules.cs`, partials of the format itself — grouped by the question they
+Rules are plain code inside the format's own file, grouped by the question they
 answer (`CheckRequiredMetadata`, `CheckReferences`, `CheckArchive`, `CheckLayout`,
 `CheckPages`, `CheckFields`). The rule IDs are the stable part. Follow the existing
 shape when adding one; a rule engine would be its own change and is not needed to
@@ -789,9 +869,11 @@ Use `SystemFileAssociations`, not `HKCU\Software\Classes\<.ext>` — the latter
 hijacks the user's default association. Registration is opt-in per format group
 (ebooks / comics) so a user can tag comics without touching EPUB. Register only
 `.epub`, `.cbz`, `.cbt`, `.fb2`, `.mobi`, `.prc`, `.azw` and `.azw3`; do not
-register formats the app cannot open. The Settings form builds its list from
-`ShellRegistration.SupportedExtensions`, so adding a format there is the whole
-change.
+register formats the app cannot open. That list is not written down anywhere:
+`ShellRegistration.SupportedExtensions` is built from the registered formats'
+`IBookFormat.Extensions`, and the Settings form builds its checkboxes from that —
+so a new format reaches the context menu by declaring its own extensions and
+nothing else changes.
 
 `.fb2.zip` is deliberately not registered. `SystemFileAssociations` keys on a
 single extension, so the only thing available to register would be `.zip` — which
@@ -823,8 +905,13 @@ This is a product requirement — the whole point is right-click, fix, close.
   launch but nothing is opened; the file appears only once a warning or worse is
   logged, and then carries the whole session so far. Opening a file eagerly can
   cost an antivirus scan, which is real money against 400 ms.
-- Detect from the first 8 KB. Parse only the metadata document. Do not
-  enumerate, hash or decompress the whole archive on open.
+- Sniff the container from the first 8 KB. Parse only the metadata document. Do
+  not hash or decompress the whole archive on open.
+- **Opening a file costs one open, not two.** `BookFormats.TryOpen` opens the
+  container once and shares it with every format it asks, then hands it to the
+  winner still open — so `Book.Load` never reopens the file it just identified.
+  A `BookSource` per format, or an identify-then-open pair, would put that second
+  open back.
 - **FB2 is the format that could most easily break this budget, and the design is
   what stops it.** The metadata and the entire book are one XML file, illustrations
   base64-encoded into it, so a ten-megabyte document is ordinary and running it
@@ -877,8 +964,17 @@ This is a product requirement — the whole point is right-click, fix, close.
   format cannot be given that test, the design is wrong, not the test.
 - Prefer Core changes + tests over touching the UI. UI is the last step of a
   feature, not the first.
-- When adding a format, the order is: builder → sniffer → read → rules → write.
-  Never write before round-trip reading is proven.
+- When adding a format, the order is: builder → `TryOpen` → read → rules → write,
+  all of it in one new file under `Formats/`. Never write before round-trip
+  reading is proven.
+- **`TryOpen` claims, it never parses and never throws.** Claiming a damaged file
+  is the point — that is how it reaches the repair path instead of being reported
+  as unsupported.
+- **One file per format and per container.** Everything a format needs — its
+  detection, its metadata document, its rules, its repairs — goes in its own file,
+  so that `ls Formats/` answers "what is supported" and the file answers "what does
+  it depend on". Do not split one back out because it got long; they are meant to
+  be long.
 - A new rule goes where its evidence is. If the answer is in the parsed document or
   in entry names, it belongs in `Read`. If it is something a write can prove and
   fix, it belongs in `Write` and must report what it changed. Never add a third

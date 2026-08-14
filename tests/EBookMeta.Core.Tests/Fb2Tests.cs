@@ -425,11 +425,11 @@ public sealed class Fb2Tests
         string bare = new Fb2Builder().WriteTo(temp.File("book.fb2"));
         string zipped = new Fb2Builder().WriteZipTo(temp.File("book.fb2.zip"));
 
-        DetectedFormat bareFormat = FormatDetector.Detect(bare);
+        DetectedFormat bareFormat = BookFormats.Identify(bare);
         Assert.Equal(FormatId.Fb2, bareFormat.Format);
         Assert.Equal(ContainerKind.Raw, bareFormat.Container);
 
-        DetectedFormat zippedFormat = FormatDetector.Detect(zipped);
+        DetectedFormat zippedFormat = BookFormats.Identify(zipped);
         Assert.Equal(FormatId.Fb2Zip, zippedFormat.Format);
         Assert.Equal(ContainerKind.Zip, zippedFormat.Container);
 

@@ -1,6 +1,6 @@
 using System.Xml.Linq;
 
-namespace EBookMeta.Documents;
+namespace EBookMeta.Xml;
 
 /// <summary>
 /// Everything about how an XML document was written that its parsed tree does not

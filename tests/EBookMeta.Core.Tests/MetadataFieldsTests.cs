@@ -1,4 +1,4 @@
-using EBookMeta.Documents;
+using EBookMeta.Xml;
 using EBookMeta.Formats;
 using EBookMeta.Model;
 using Xunit;
@@ -23,7 +23,7 @@ public sealed class MetadataFieldsTests
             Publisher = "Headline",
             Language = "en-GB",
             Description = "A blurb.",
-            PublicationDate = OpfDocument.ParseDate("2013"),
+            PublicationDate = BookDate.Parse("2013"),
             Series = new SeriesInfo { Name = "London Below", Index = 2.5m },
         };
 

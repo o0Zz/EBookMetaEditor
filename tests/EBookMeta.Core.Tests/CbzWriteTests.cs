@@ -1,6 +1,6 @@
 using System.Text;
 using EBookMeta.Containers;
-using EBookMeta.Documents;
+using EBookMeta.Xml;
 using EBookMeta.Formats;
 using EBookMeta.Model;
 using EBookMeta.Tests.Builders;
@@ -286,7 +286,7 @@ public sealed class CbzWriteTests
         string source = new CbzBuilder().WriteTo(temp.File("comic.cbz"));
         string target = temp.File("saved.cbz");
 
-        Write(source, target, m => m.PublicationDate = OpfDocument.ParseDate("1990"));
+        Write(source, target, m => m.PublicationDate = BookDate.Parse("1990"));
 
         string after = ComicInfoText(target);
 

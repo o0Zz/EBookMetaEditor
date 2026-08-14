@@ -1,5 +1,5 @@
 using System.Globalization;
-using EBookMeta.Documents;
+using EBookMeta.Xml;
 using EBookMeta.Formats;
 using EBookMeta.Model;
 
@@ -267,7 +267,7 @@ public static class MetadataFields
             return false;
         }
 
-        metadata.PublicationDate = raw is null ? null : OpfDocument.ParseDate(raw);
+        metadata.PublicationDate = raw is null ? null : BookDate.Parse(raw);
         return true;
     }
 

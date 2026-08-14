@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace EBookMeta.Documents;
+namespace EBookMeta.Xml;
 
 /// <summary>What the bytes of an XML document say about their own encoding.</summary>
 public sealed record XmlEncodingInfo

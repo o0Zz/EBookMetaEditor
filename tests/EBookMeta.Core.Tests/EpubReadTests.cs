@@ -1,5 +1,5 @@
 using EBookMeta.Containers;
-using EBookMeta.Documents;
+using EBookMeta.Xml;
 using EBookMeta.Formats;
 using EBookMeta.Model;
 using EBookMeta.Tests.Builders;
@@ -87,7 +87,7 @@ public sealed class EpubReadTests
     [InlineData("sometime in the 90s", DatePrecision.Unknown)]
     public void Date_precision_reflects_what_the_source_stated(string raw, DatePrecision expected)
     {
-        BookDate date = OpfDocument.ParseDate(raw);
+        BookDate date = BookDate.Parse(raw);
 
         Assert.Equal(expected, date.Precision);
         Assert.Equal(raw, date.Raw);

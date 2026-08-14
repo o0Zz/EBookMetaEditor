@@ -13,13 +13,24 @@ internal static class ShellRegistration
     /// The extensions EBookMetaEditor can actually open.
     /// </summary>
     /// <remarks>
-    /// <c>.fb2.zip</c> is deliberately absent: a compound extension is not
-    /// something <c>SystemFileAssociations</c> can key on, and registering
-    /// <c>.zip</c> would put this app's verb on every archive on the machine.
-    /// Those files open by drag-and-drop or through the Open dialog instead.
+    /// Built from the registry rather than listed here, so a new format brings its
+    /// extensions to the context menu with it and this cannot fall out of step with
+    /// what the app can open.
+    /// <para>
+    /// <c>.fb2.zip</c> is absent because <c>Fb2Format</c> declares no extension for
+    /// its zipped instance: a compound extension is not something
+    /// <c>SystemFileAssociations</c> can key on, and registering <c>.zip</c> would
+    /// put this app's verb on every archive on the machine. Those files open by
+    /// drag-and-drop or through the Open dialog instead.
+    /// </para>
     /// </remarks>
     internal static IReadOnlyList<string> SupportedExtensions { get; } =
-        [".epub", ".cbz", ".cbt", ".fb2", ".mobi", ".prc", ".azw", ".azw3"];
+    [
+        .. BookFormats.All
+            .SelectMany(f => f.Extensions)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(e => e, StringComparer.Ordinal),
+    ];
 
     /// <summary>Registers the verb for the given extensions and removes it from the rest.</summary>
     /// <param name="extensions">The extensions to register, each with a leading dot.</param>

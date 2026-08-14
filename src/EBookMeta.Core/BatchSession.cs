@@ -266,7 +266,7 @@ public sealed class BatchSession
                 recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly);
 
             return [.. files
-                .Where(path => BookFormats.IsSupported(FormatDetector.FromExtension(path)))
+                .Where(path => BookFormats.IsSupported(BookFormats.FromExtension(path)))
                 .OrderBy(path => path, NaturalNameComparer.Instance)];
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)

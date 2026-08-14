@@ -1,6 +1,6 @@
 using System.Text;
 using EBookMeta.Containers;
-using EBookMeta.Documents;
+using EBookMeta.Xml;
 using EBookMeta.Formats;
 using EBookMeta.Model;
 using EBookMeta.Tests.Builders;
@@ -513,7 +513,7 @@ public sealed class MobiTests
         using var temp = new TempDir();
         string path = MobiBuilder.Typical().WriteTo(temp.File("book.mobi"));
 
-        DetectedFormat detected = FormatDetector.Detect(path);
+        DetectedFormat detected = BookFormats.Identify(path);
 
         Assert.Equal(FormatId.Mobi, detected.Format);
         Assert.Equal(ContainerKind.PalmDb, detected.Container);

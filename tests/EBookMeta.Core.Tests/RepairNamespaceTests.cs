@@ -1,5 +1,5 @@
 using System.Text;
-using EBookMeta.Documents;
+using EBookMeta.Xml;
 using EBookMeta.Formats;
 using EBookMeta.Tests.Builders;
 using Xunit;

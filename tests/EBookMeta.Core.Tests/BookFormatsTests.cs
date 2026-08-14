@@ -63,16 +63,20 @@ public sealed class BookFormatsTests
     }
 
     [Fact]
-    public void Resolve_picks_the_implementation_for_the_detected_format()
+    public void TryOpen_hands_back_the_file_open_and_claimed()
     {
         using var temp = new TempDir();
         string path = new EpubBuilder().WriteTo(temp.File("valid.epub"));
 
-        IBookFormat? format = BookFormats.Resolve(path, out DetectedFormat detected);
+        using BookSource? source = BookFormats.TryOpen(path, out DetectedFormat detected);
 
-        Assert.NotNull(format);
+        Assert.NotNull(source);
         Assert.Equal(FormatId.Epub, detected.Format);
-        Assert.Equal(FormatId.Epub, format!.Id);
+        Assert.Equal(FormatId.Epub, BookFormats.For(detected.Format)!.Id);
+
+        // The point of returning the source rather than just an id: the container
+        // is already open, so the read that follows does not reopen the file.
+        Assert.NotEmpty(source!.Container.Entries);
     }
 
     [Fact]
@@ -84,11 +88,13 @@ public sealed class BookFormatsTests
             path,
             [.. Encoding.ASCII.GetBytes("Rar!\x1a\x07\x00"), .. new byte[64]]);
 
-        // The case that makes detection worth keeping out of the formats: nothing
-        // can open this file, but the user still gets told what it really is.
-        IBookFormat? format = BookFormats.Resolve(path, out DetectedFormat detected);
+        // The case that makes the registry's own answer worth keeping: every format
+        // declines, so nothing can open this file, and the user is still told what
+        // it really is rather than merely refused.
+        using BookSource? source = BookFormats.TryOpen(path, out DetectedFormat detected);
 
-        Assert.Null(format);
+        Assert.Null(source);
+        Assert.Equal(FormatId.Cbr, detected.Format);
         Assert.Equal(ContainerKind.Rar, detected.Container);
         Assert.False(detected.ExtensionAgrees);
     }
@@ -120,6 +126,12 @@ public sealed class BookFormatsTests
         public FormatId Id { get; } = id;
 
         public FormatCapabilities Capabilities => new() { Format = Id, ReadableFields = MetadataField.None };
+
+        public IReadOnlyList<string> Extensions { get; } = [];
+
+        // Claims nothing, so registering it cannot disturb detection of the real
+        // formats in the tests that share the registry with it.
+        public FormatClaim? TryOpen(BookSource source) => null;
 
         public BookMetadata Read(
             IContainer container,

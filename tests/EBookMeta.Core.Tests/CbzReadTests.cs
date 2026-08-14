@@ -183,11 +183,11 @@ public sealed class CbzReadTests
         CbzBuilder builder = tagged ? new CbzBuilder() : new CbzBuilder().WithoutComicInfo();
         string path = builder.WriteTo(temp.File("comic.cbz"));
 
-        IBookFormat? format = BookFormats.Resolve(path, out DetectedFormat detected);
+        using BookSource? source = BookFormats.TryOpen(path, out DetectedFormat detected);
 
+        Assert.NotNull(source);
         Assert.Equal(FormatId.Cbz, detected.Format);
-        Assert.IsType<CbzFormat>(format);
-        Assert.IsType<CbzFormat>(BookFormats.For(FormatId.Cbz));
+        Assert.IsType<CbzFormat>(BookFormats.For(detected.Format));
     }
 
     [Fact]

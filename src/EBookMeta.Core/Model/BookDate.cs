@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace EBookMeta.Model;
 
 /// <summary>
@@ -43,4 +45,60 @@ public sealed record BookDate
 
     /// <summary>Returns the source text, which is the authoritative form.</summary>
     public override string ToString() => Raw;
+
+    /// <summary>
+    /// Parses a book date, keeping the source text and recording how much of it
+    /// was actually stated.
+    /// </summary>
+    /// <param name="raw">The date text as the source wrote it.</param>
+    /// <returns>
+    /// The parsed date. <see cref="Raw"/> is always the input, and
+    /// <see cref="Precision"/> says how much of it was real, so a bare year is
+    /// never silently promoted to a full calendar date.
+    /// </returns>
+    /// <remarks>
+    /// On the model rather than on a format, because it is the one piece of
+    /// parsing more than one format needs: EPUB reads an ISO 8601 <c>dc:date</c>,
+    /// ComicInfo composes one from its Year/Month/Day fields, and the editors
+    /// parse whatever the user typed. The precision is what makes that sharing
+    /// safe — a comic that stated only a year must not round-trip as 1 January.
+    /// </remarks>
+    public static BookDate Parse(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return new BookDate { Raw = raw, Precision = DatePrecision.Unknown };
+        }
+
+        string trimmed = raw.Trim();
+
+        // Try most-specific first so precision is not overstated. A bare "2011"
+        // must not come back as 1 January.
+        (string Format, DatePrecision Precision)[] formats =
+        [
+            ("yyyy-MM-ddTHH:mm:ssK", DatePrecision.Time),
+            ("yyyy-MM-ddTHH:mm:ss", DatePrecision.Time),
+            ("yyyy-MM-dd", DatePrecision.Day),
+            ("yyyy-MM", DatePrecision.Month),
+            ("yyyy", DatePrecision.Year),
+        ];
+
+        foreach ((string format, DatePrecision precision) in formats)
+        {
+            if (DateTimeOffset.TryParseExact(
+                    trimmed, format, CultureInfo.InvariantCulture,
+                    DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                    out DateTimeOffset value))
+            {
+                return new BookDate { Raw = trimmed, Value = value, Precision = precision };
+            }
+        }
+
+        return DateTimeOffset.TryParse(
+                trimmed, CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                out DateTimeOffset loose)
+            ? new BookDate { Raw = trimmed, Value = loose, Precision = DatePrecision.Day }
+            : new BookDate { Raw = trimmed, Precision = DatePrecision.Unknown };
+    }
 }

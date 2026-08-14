@@ -13,8 +13,8 @@ namespace EBookMeta;
 /// container. ZIP carries EPUB and CBZ; TAR carries CBT and shares the comic
 /// metadata document with CBZ, so it cost a container and nothing else. A kind
 /// arriving here that has no implementation is a programming error rather than a
-/// bad file — <c>FormatDetector</c> has already named the format and
-/// <see cref="BookFormats.Resolve"/> has already refused the ones no format can
+/// bad file — <see cref="Sniff"/> has already named the container and
+/// <see cref="BookFormats.TryOpen"/> has already refused the ones no format can
 /// edit.
 /// <para>
 /// RAR and 7z are deliberately absent. Both can be read, and neither can be
@@ -59,6 +59,91 @@ public static class BookContainers
     public static bool IsSupported(ContainerKind kind) =>
         kind is ContainerKind.Zip or ContainerKind.Tar or ContainerKind.Raw
             or ContainerKind.PalmDb;
+
+    private static ReadOnlySpan<byte> Rar4Magic => "Rar!\x1a\x07\x00"u8;
+    private static ReadOnlySpan<byte> Rar5Magic => "Rar!\x1a\x07\x01\x00"u8;
+    private static ReadOnlySpan<byte> SevenZipMagic => [0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C];
+    private static ReadOnlySpan<byte> TarMagic => "ustar"u8;
+    private static ReadOnlySpan<byte> MobiPdbType => "BOOKMOBI"u8;
+    private static ReadOnlySpan<byte> TextReadPdbType => "TEXtREAd"u8;
+
+    private const uint ZipLocalFileHeaderSignature = 0x04034B50;
+    private const uint ZipEmptyArchiveSignature = 0x06054B50;
+    private const uint ZipSpannedSignature = 0x08074B50;
+
+    /// <summary>
+    /// Names the physical container a file's leading bytes indicate.
+    /// </summary>
+    /// <param name="head">The first several kilobytes of the file.</param>
+    /// <returns>
+    /// The container kind and a short note on how it was recognised, or
+    /// <see cref="ContainerKind.Raw"/> when nothing archive-shaped was found.
+    /// </returns>
+    /// <remarks>
+    /// The physical half of detection, here rather than in <see cref="BookFormats"/>
+    /// for the same reason <see cref="Open"/> is: one place decides what container
+    /// a file has. It answers only that question — several formats share a
+    /// container, so which of them this is stays a question for the formats,
+    /// asked through <see cref="IBookFormat.TryOpen"/>.
+    /// <para>
+    /// RAR and 7z are named here even though nothing can open them. Recognising a
+    /// format costs a few magic-number comparisons and lets the app tell a user
+    /// their <c>.cbz</c> is really a RAR, which is worth far more than the
+    /// comparison costs; supporting one costs a container implementation.
+    /// </para>
+    /// </remarks>
+    public static (ContainerKind Kind, string? Detail) Sniff(ReadOnlySpan<byte> head)
+    {
+        if (head.Length >= 4)
+        {
+            uint signature = System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(head);
+
+            if (signature is ZipLocalFileHeaderSignature or ZipEmptyArchiveSignature
+                or ZipSpannedSignature)
+            {
+                return (ContainerKind.Zip, null);
+            }
+        }
+
+        if (head.StartsWith(Rar5Magic))
+        {
+            return (ContainerKind.Rar, "RAR 5 archive");
+        }
+
+        if (head.StartsWith(Rar4Magic))
+        {
+            return (ContainerKind.Rar, "RAR 4 archive");
+        }
+
+        if (head.StartsWith(SevenZipMagic))
+        {
+            return (ContainerKind.SevenZip, "7z archive");
+        }
+
+        // PalmDB stores an 8-byte type+creator pair at offset 60.
+        if (head.Length >= 68)
+        {
+            ReadOnlySpan<byte> pdbType = head.Slice(60, 8);
+
+            if (pdbType.SequenceEqual(MobiPdbType))
+            {
+                return (ContainerKind.PalmDb, "PalmDB BOOKMOBI");
+            }
+
+            if (pdbType.SequenceEqual(TextReadPdbType))
+            {
+                return (ContainerKind.PalmDb, "PalmDB TEXtREAd");
+            }
+        }
+
+        // TAR's magic sits inside the first header block, not at offset 0.
+        if (head.Length >= 262 && head.Slice(257, 5).SequenceEqual(TarMagic))
+        {
+            return (ContainerKind.Tar, "TAR archive");
+        }
+
+        return (ContainerKind.Raw, null);
+    }
 
     /// <summary>
     /// Opens a container file and hands the stream to the implementation, closing

@@ -1,6 +1,6 @@
 using System.Text;
 using EBookMeta.Containers;
-using EBookMeta.Documents;
+using EBookMeta.Xml;
 using EBookMeta.Formats;
 using EBookMeta.Model;
 using EBookMeta.Tests.Builders;
@@ -310,7 +310,7 @@ public sealed class CbtTests
         using var temp = new TempDir();
         string path = RealisticArchive().WriteTo(temp.File("comic.cbt"));
 
-        DetectedFormat detected = FormatDetector.Detect(path);
+        DetectedFormat detected = BookFormats.Identify(path);
 
         Assert.Equal(FormatId.Cbt, detected.Format);
         Assert.Equal(ContainerKind.Tar, detected.Container);

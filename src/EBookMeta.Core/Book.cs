@@ -86,14 +86,17 @@ public sealed class Book
         Throw.IfNullOrEmpty(path);
 
         var collected = new List<Finding>();
-        IBookFormat? format = BookFormats.Resolve(path, out DetectedFormat detected);
+
+        // Offered to every registered format; the strongest claim wins and the file
+        // comes back still open, so the read below does not reopen it.
+        using BookSource? source = BookFormats.TryOpen(path, out DetectedFormat detected);
 
         if (!detected.ExtensionAgrees)
         {
             collected.Add(ExtensionDisagrees(path, detected));
         }
 
-        if (format is null)
+        if (source is null)
         {
             // Reported before throwing: the extension disagreement is usually the
             // most useful thing anyone will learn about this file, and it is the
@@ -102,7 +105,10 @@ public sealed class Book
             throw new UnsupportedFormatException(detected, path);
         }
 
-        using IContainer container = BookContainers.Open(path, detected.Container);
+        IBookFormat format = BookFormats.For(detected.Format)
+            ?? throw new UnsupportedFormatException(detected, path);
+
+        IContainer container = source.Container;
 
         try
         {
