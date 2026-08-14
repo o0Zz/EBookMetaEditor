@@ -16,12 +16,19 @@
 
   <application xmlns="urn:schemas-microsoft-com:asm.v3">
     <windowsSettings>
-      <!-- Per-monitor v2 so the window stays sharp when dragged between a
-           laptop screen and an external monitor at a different scale. On
-           .NET Framework this manifest entry is only half the story: the
-           matching App.config switches are required too. -->
-      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true/pm</dpiAware>
-      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2,PerMonitor</dpiAwareness>
+      <!-- System DPI awareness, not per-monitor v2, and that is a consequence
+           of shipping one file. On .NET Framework the manifest is only half of
+           per-monitor support: WinForms also needs DpiAwareness=PerMonitorV2 in
+           <exe>.config, and a config file is a second file. Claiming
+           per-monitor here without the WinForms half is worse than not claiming
+           it — Windows would stop scaling the window and WinForms would not
+           start, leaving the UI undersized on a high-DPI display.
+
+           Declaring system awareness costs sharpness only when the window is
+           dragged to a monitor at a different scale, where Windows stretches
+           the bitmap. Restoring per-monitor v2 means restoring App.config and
+           shipping it beside the exe. -->
+      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true</dpiAware>
       <longPathAware xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">true</longPathAware>
     </windowsSettings>
   </application>

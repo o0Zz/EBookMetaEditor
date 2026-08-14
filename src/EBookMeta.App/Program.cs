@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 namespace EBookMeta.App;
 
@@ -8,12 +9,27 @@ namespace EBookMeta.App;
 /// </summary>
 internal static class Program
 {
+    /// <remarks>
+    /// This body does nothing but install the assembly resolver, and that is
+    /// the whole point. Dependencies live inside the exe rather than beside it
+    /// (see <see cref="EmbeddedAssemblies"/>), and the JIT loads every assembly
+    /// a method mentions before running its first instruction — so anything
+    /// touching EBookMeta.Core has to sit behind a separate, non-inlined call
+    /// that is not compiled until the resolver is already listening.
+    /// </remarks>
     [STAThread]
     internal static void Main(string[] args)
     {
+        EmbeddedAssemblies.Install();
+        Run(args);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void Run(string[] args)
+    {
         // On net48 these are explicit calls rather than the generated
         // ApplicationConfiguration.Initialize() of modern .NET; the DPI mode
-        // itself comes from app.manifest plus App.config.
+        // itself comes from app.manifest.
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
 
