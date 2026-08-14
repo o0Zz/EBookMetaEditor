@@ -1,4 +1,4 @@
-# EBookMetaEditor — Français.
+﻿# EBookMetaEditor — Français.
 # Toute ligne absente ici est affichée en anglais (voir en.lang).
 
 @name = Français
@@ -19,7 +19,6 @@ menu.file.exit = &Quitter
 menu.file.addFiles = Ajouter des &fichiers…
 menu.file.addFolder = Ajouter un d&ossier…
 menu.file.saveAll = &Enregistrer tout
-menu.file.validateAll = &Valider tout
 menu.file.close = Fe&rmer
 menu.edit = &Édition
 menu.edit.copy = &Copier
@@ -64,8 +63,6 @@ settings.title = Paramètres
 settings.language = Langue
 settings.language.auto = Automatique (langue du système)
 settings.keepBackup = Conserver une sauvegarde .bak à côté du fichier après l'enregistrement
-settings.validateFully = Exécuter toutes les vérifications à l'ouverture d'un fichier
-settings.validateNote = Certaines vérifications doivent lire toutes les entrées de l'archive. Laisser cette option désactivée garde l'ouverture instantanée ; ces vérifications s'exécutent lorsque vous consultez les résultats.
 settings.rememberGeometry = Mémoriser la taille et la position de la fenêtre
 settings.extensions = Afficher « Modifier les métadonnées » dans le menu contextuel pour :
 settings.contextMenu.add = Ajouter au menu contextuel
@@ -96,12 +93,10 @@ log.saveFailed = Impossible d'enregistrer le journal : {0}
 
 batch.title = Édition par lot — EBookMetaEditor
 batch.button.saveAll = &Enregistrer tout
-batch.button.validateAll = &Valider tout
 
 column.status = État
 column.file = Fichier
 column.format = Format
-column.findings = Résultats
 
 batch.state.reading = Lecture…
 batch.state.edited = Modifié
@@ -111,7 +106,6 @@ batch.state.failed = Échec
 
 batch.verb.reading = Lecture
 batch.verb.saving = Enregistrement
-batch.verb.validating = Vérification
 batch.busy = {0}…
 batch.progress = {0} {1} sur {2} — {3}
 batch.cancelled = {0} annulée.
@@ -133,8 +127,6 @@ batch.pastedSkipped.one = Collé dans 1 cellule ; {1} ne peut pas l'enregistrer.
 batch.pastedSkipped.many = Collé dans {0} cellules ; {1} ne peuvent pas l'enregistrer.
 
 batch.rowDirty = Enregistrez cette ligne avant de l'ouvrir séparément : elle contient des modifications non enregistrées.
-batch.findings.one = 1 résultat — voir le journal.
-batch.findings.many = {0} résultats — voir le journal.
 
 batch.summary.files.one = 1 fichier
 batch.summary.files.many = {0} fichiers

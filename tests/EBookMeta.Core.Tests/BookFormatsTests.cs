@@ -99,11 +99,16 @@ public sealed class BookFormatsTests
 
         public FormatCapabilities Capabilities => new() { Format = Id, ReadableFields = MetadataField.None };
 
-        public BookMetadata Read(IContainer container, ReadOptions? options = null) => new();
+        public BookMetadata Read(
+            IContainer container,
+            ReadOptions? options = null,
+            ICollection<Finding>? findings = null) => new();
 
-        public void Write(IContainer container, BookMetadata metadata, string targetPath) =>
+        public void Write(
+            IContainer container,
+            BookMetadata metadata,
+            string targetPath,
+            ICollection<Finding>? findings = null) =>
             throw new NotSupportedException();
-
-        public IEnumerable<Finding> Validate(IContainer container, BookMetadata metadata) => [];
     }
 }

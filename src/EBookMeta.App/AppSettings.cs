@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text;
 
 namespace EBookMeta.App;
@@ -37,17 +37,6 @@ internal sealed class AppSettings
 
     /// <summary>Whether a <c>.bak</c> is left beside a file after saving.</summary>
     internal bool KeepBackupOnSave { get; set; } = true;
-
-    /// <summary>
-    /// Whether every validation rule runs when a file opens, including the ones
-    /// that must walk the whole archive.
-    /// </summary>
-    /// <remarks>
-    /// Off by default. The cross-checks that enumerate every entry are exactly
-    /// the ones that would blow the startup budget on a 300-page comic, so they
-    /// run on demand unless the user asks for them up front.
-    /// </remarks>
-    internal bool ValidateFullyOnOpen { get; set; }
 
     /// <summary>Whether the window's size and position are restored between launches.</summary>
     internal bool RememberWindowGeometry { get; set; } = true;
@@ -116,7 +105,6 @@ internal sealed class AppSettings
         json.Append("{\n");
         Append(json, "language", Language, quote: true);
         Append(json, "keepBackupOnSave", KeepBackupOnSave ? "true" : "false", quote: false);
-        Append(json, "validateFullyOnOpen", ValidateFullyOnOpen ? "true" : "false", quote: false);
         Append(json, "rememberWindowGeometry", RememberWindowGeometry ? "true" : "false", quote: false);
         Append(json, "windowMaximised", WindowMaximised ? "true" : "false", quote: false);
         Append(json, "windowBounds", FormatBounds(WindowBounds), quote: true);
@@ -146,9 +134,6 @@ internal sealed class AppSettings
                 break;
             case "keepBackupOnSave":
                 settings.KeepBackupOnSave = value == "true";
-                break;
-            case "validateFullyOnOpen":
-                settings.ValidateFullyOnOpen = value == "true";
                 break;
             case "rememberWindowGeometry":
                 settings.RememberWindowGeometry = value == "true";

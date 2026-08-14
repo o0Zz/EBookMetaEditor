@@ -1,4 +1,4 @@
-using EBookMeta.Containers;
+﻿using EBookMeta.Containers;
 using EBookMeta.Formats;
 using EBookMeta.Tests.Builders;
 using Xunit;
@@ -213,13 +213,14 @@ public sealed class LogTests : IDisposable
 
         Log.Clear();
 
-        using ZipContainer container = ZipContainer.Open(path);
-        new EpubHandler().Read(container);
+        // Through Book.Load, which is the path the app takes: a repair is reported
+        // as a finding, and forwarding findings to the log is Book's job.
+        Book.Load(path);
 
         // A repair is exactly the kind of thing a user should be able to find out
         // about after the fact, so it is a warning rather than a debug line.
         LogEntry repair = Assert.Single(
-            Log.Entries.Where(e => e.Level == LogLevel.Warning && e.Message.Contains("repaired")));
+            Log.Entries, e => e.Level == LogLevel.Warning && e.Message.Contains("repaired"));
 
         Assert.Contains("xmlns", repair.Message, StringComparison.Ordinal);
         Assert.Contains("opf", repair.Message, StringComparison.Ordinal);
@@ -253,7 +254,10 @@ public sealed class LogTests : IDisposable
             System.Text.Encoding.ASCII.GetBytes("Rar!\x1a\x07\x00").Concat(new byte[64]).ToArray());
 
         Log.Clear();
-        FormatDetector.Detect(path);
+
+        // Detection alone says nothing: it answers a question and is asked more than
+        // once per file. The disagreement is rule GEN-W002, reported by the load.
+        Assert.Throws<UnsupportedFormatException>(() => Book.Load(path));
 
         Assert.Contains(
             Log.Entries,

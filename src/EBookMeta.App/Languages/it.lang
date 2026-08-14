@@ -1,4 +1,4 @@
-# EBookMetaEditor — Italiano.
+﻿# EBookMetaEditor — Italiano.
 # Le righe mancanti vengono mostrate in inglese (vedi en.lang).
 
 @name = Italiano
@@ -19,7 +19,6 @@ menu.file.exit = &Esci
 menu.file.addFiles = Aggiungi &file…
 menu.file.addFolder = Aggiungi &cartella…
 menu.file.saveAll = &Salva tutto
-menu.file.validateAll = &Verifica tutto
 menu.file.close = Chi&udi
 menu.edit = &Modifica
 menu.edit.copy = &Copia
@@ -64,8 +63,6 @@ settings.title = Impostazioni
 settings.language = Lingua
 settings.language.auto = Automatica (lingua di sistema)
 settings.keepBackup = Conservare una copia .bak accanto al file dopo il salvataggio
-settings.validateFully = Eseguire tutti i controlli all'apertura di un file
-settings.validateNote = Alcuni controlli devono leggere ogni voce dell'archivio. Lasciando questa opzione disattivata l'apertura resta immediata; quei controlli vengono eseguiti quando si consultano i risultati.
 settings.rememberGeometry = Ricordare dimensione e posizione della finestra
 settings.extensions = Mostrare «Modifica metadati» nel menu contestuale per:
 settings.contextMenu.add = Aggiungi al menu contestuale
@@ -96,12 +93,10 @@ log.saveFailed = Impossibile salvare il registro: {0}
 
 batch.title = Modifica in blocco — EBookMetaEditor
 batch.button.saveAll = &Salva tutto
-batch.button.validateAll = &Verifica tutto
 
 column.status = Stato
 column.file = File
 column.format = Formato
-column.findings = Risultati
 
 batch.state.reading = Lettura…
 batch.state.edited = Modificato
@@ -111,7 +106,6 @@ batch.state.failed = Non riuscito
 
 batch.verb.reading = Lettura
 batch.verb.saving = Salvataggio
-batch.verb.validating = Verifica
 batch.busy = {0}…
 batch.progress = {0} {1} di {2} — {3}
 batch.cancelled = {0} annullata.
@@ -133,8 +127,6 @@ batch.pastedSkipped.one = Incollato in 1 cella; {1} non può memorizzarlo.
 batch.pastedSkipped.many = Incollato in {0} celle; {1} non possono memorizzarlo.
 
 batch.rowDirty = Salva questa riga prima di aprirla da sola: contiene modifiche non salvate.
-batch.findings.one = 1 risultato — vedi il registro.
-batch.findings.many = {0} risultati — vedi il registro.
 
 batch.summary.files.one = 1 file
 batch.summary.files.many = {0} file

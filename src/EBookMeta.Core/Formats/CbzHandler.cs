@@ -59,21 +59,43 @@ public sealed class CbzHandler : IFormatHandler
     };
 
     /// <inheritdoc />
-    public BookMetadata Read(IContainer container, ReadOptions? options = null)
+    /// <exception cref="BookFormatException">
+    /// <c>ComicInfo.xml</c> is present but not well-formed (CBZ-F001).
+    /// </exception>
+    public BookMetadata Read(
+        IContainer container, ReadOptions? options = null, ICollection<Finding>? findings = null)
     {
         Throw.IfNull(container);
 
         options ??= ReadOptions.Default;
 
         ContainerEntry? entry = FindComicInfo(container);
+        ComicInfoDocument? document = null;
+        BookMetadata metadata;
 
-        BookMetadata metadata = entry is null
-            ? new BookMetadata()
-            : ComicInfoDocument.Parse(ReadAllBytes(container, entry), entry.Name).ReadMetadata();
+        if (entry is null)
+        {
+            metadata = new BookMetadata();
+        }
+        else
+        {
+            document = Parse(container, entry, findings);
+            metadata = document.ReadMetadata();
+        }
 
         if (options.IncludeCover)
         {
             ReadCover(container, metadata);
+        }
+
+        // Checked here rather than on request, because none of it costs anything:
+        // every rule below reads the parsed document or entry names the central
+        // directory already gave us, and nothing is decompressed to do it.
+        if (findings is not null)
+        {
+            CheckLayout(container, entry, findings);
+            CheckPages(container, entry, document, findings);
+            CheckFields(entry, document, findings);
         }
 
         Log.Info(
@@ -94,7 +116,11 @@ public sealed class CbzHandler : IFormatHandler
     /// The archive carries a comment — a ComicBookLover blob — which a rebuild
     /// cannot reproduce, or its <c>ComicInfo.xml</c> is not well-formed.
     /// </exception>
-    public void Write(IContainer container, BookMetadata metadata, string targetPath)
+    public void Write(
+        IContainer container,
+        BookMetadata metadata,
+        string targetPath,
+        ICollection<Finding>? findings = null)
     {
         Throw.IfNull(container);
         Throw.IfNull(metadata);
@@ -114,77 +140,99 @@ public sealed class CbzHandler : IFormatHandler
         }
 
         ContainerEntry? entry = FindComicInfo(container);
-        ComicInfoDocument document;
-
-        if (entry is null)
-        {
-            document = ComicInfoDocument.CreateEmpty();
-            document.SetPageCountIfAbsent(CountImages(container));
-        }
-        else
-        {
-            document = ComicInfoDocument.Parse(ReadAllBytes(container, entry), entry.Name);
-        }
+        ComicInfoDocument document =
+            entry is null ? ComicInfoDocument.CreateEmpty() : Parse(container, entry, findings);
 
         document.ApplyMetadata(metadata);
+
+        int images = CountImages(container);
+        int? declared = document.PageCount;
+
+        // Corrected, not merely reported. The images are right here to be counted,
+        // so a PageCount that disagrees with them is wrong rather than evidence of
+        // anything, and every reader that trusts it is misled until it is fixed.
+        if (document.SetPageCount(images) && entry is not null)
+        {
+            findings?.Add(new Finding
+            {
+                RuleId = "CBZ-E020",
+                Severity = Severity.Warning,
+                Message = declared is null
+                    ? $"No PageCount was declared; set to {images} on save."
+                    : $"PageCount said {declared} but the archive holds {images} "
+                        + $"image{(images == 1 ? "" : "s")}; corrected on save.",
+                Location = entry.Name,
+                HasAutofix = true,
+            });
+        }
+
+        // A nested ComicInfo.xml is one most readers never find, and the rebuild is
+        // already composing a fresh entry list, so moving it costs nothing. Only
+        // the metadata document moves: the images keep their order, which for a
+        // comic is the reading order.
+        bool relocate = entry is not null && entry.Name.IndexOf('/') >= 0;
+
+        if (relocate)
+        {
+            findings?.Add(new Finding
+            {
+                RuleId = "CBZ-E011",
+                Severity = Severity.Warning,
+                Message = $"'{entry!.Name}' was not at the archive root, where readers look "
+                    + $"for it; moved to '{ComicInfoDocument.DefaultEntryName}' on save.",
+                Location = entry.Name,
+                HasAutofix = true,
+            });
+        }
+
         byte[] bytes = document.Serialize();
+        bool replaceInPlace = entry is not null && !relocate;
 
         var entries = new List<PendingEntry>(container.Entries.Count + 1);
 
         foreach (ContainerEntry existing in container.Entries)
         {
-            entries.Add(entry is not null && existing.Index == entry.Index
+            if (relocate && existing.Index == entry!.Index)
+            {
+                continue;
+            }
+
+            entries.Add(replaceInPlace && existing.Index == entry!.Index
                 ? PendingEntry.FromBytes(
                     existing.Name, bytes, existing.CompressionMethod, existing.LastModified)
                 : PendingEntry.CopyOf(container, existing));
         }
 
-        if (entry is null)
+        if (!replaceInPlace)
         {
             // Appended rather than inserted first. Every reader finds the entry by
             // name, so its position buys nothing — while putting it anywhere but
             // the end would move existing entries, and preserving their order is
             // an invariant. For a comic the entry order is also the reading order.
             entries.Add(PendingEntry.FromBytes(
-                ComicInfoDocument.DefaultEntryName, bytes, ZipCompressionMethods.Deflate));
+                ComicInfoDocument.DefaultEntryName,
+                bytes,
+                entry?.CompressionMethod ?? ZipCompressionMethods.Deflate,
+                entry?.LastModified ?? default));
         }
 
         container.Rebuild(entries, targetPath);
 
         Log.Info(
-            entry is null
-                ? $"Wrote {entries.Count} entries, adding '{ComicInfoDocument.DefaultEntryName}'."
-                : $"Wrote {entries.Count} entries, replacing '{entry.Name}'.");
-    }
-
-    /// <inheritdoc />
-    public IEnumerable<Finding> Validate(IContainer container, BookMetadata metadata)
-    {
-        Throw.IfNull(container);
-        Throw.IfNull(metadata);
-
-        var findings = new List<Finding>();
-
-        List<ContainerEntry> images = Images(container).ToList();
-        ContainerEntry? entry = FindComicInfo(container);
-
-        // Parsed once and shared. Every rule below reads the same document, and
-        // decompressing it per rule would make the validator's cost a function of
-        // how many rules there are.
-        ComicInfoDocument? document = TryParse(container, entry, findings);
-
-        ValidateLayout(container, entry, findings);
-        ValidatePages(container, entry, document, images, findings);
-        ValidateFields(entry, document, findings);
-
-        return findings;
+            replaceInPlace
+                ? $"Wrote {entries.Count} entries, replacing '{entry!.Name}'."
+                : entry is null
+                    ? $"Wrote {entries.Count} entries, adding "
+                        + $"'{ComicInfoDocument.DefaultEntryName}'."
+                    : $"Wrote {entries.Count} entries, moving '{entry.Name}' to "
+                        + $"'{ComicInfoDocument.DefaultEntryName}'.");
     }
 
     /// <summary>
     /// Reports where the metadata document is, or that there is none.
     /// </summary>
-    private static void ValidateLayout(
-        IContainer container, ContainerEntry? entry, List<Finding> findings)
+    private static void CheckLayout(
+        IContainer container, ContainerEntry? entry, ICollection<Finding> findings)
     {
         if (entry is null)
         {
@@ -258,15 +306,17 @@ public sealed class CbzHandler : IFormatHandler
     /// <remarks>
     /// Every check here works from entry names alone, which the ZIP central
     /// directory already gave us. Nothing is decompressed, so a 300-page comic
-    /// costs no more to validate than a one-page one.
+    /// costs no more to check than a one-page one — which is why these run on every
+    /// read instead of waiting to be asked for.
     /// </remarks>
-    private static void ValidatePages(
+    private static void CheckPages(
         IContainer container,
         ContainerEntry? entry,
         ComicInfoDocument? document,
-        List<ContainerEntry> images,
-        List<Finding> findings)
+        ICollection<Finding> findings)
     {
+        List<ContainerEntry> images = Images(container).ToList();
+
         if (document is not null)
         {
             if (document.PageCount is { } declared && declared != images.Count)
@@ -329,28 +379,25 @@ public sealed class CbzHandler : IFormatHandler
     }
 
     /// <summary>
-    /// Parses the metadata document, reporting CBZ-F001 rather than throwing.
+    /// Parses the metadata document, reporting CBZ-F001 before giving up.
     /// </summary>
     /// <remarks>
-    /// Validation must survive a file it cannot parse: reporting "this is not
-    /// well-formed" is the single most useful thing it can say about such a file,
-    /// and it cannot say it by throwing.
+    /// The finding is added and the exception rethrown, rather than one or the
+    /// other. The rule ID is the useful part of the diagnosis and belongs in the
+    /// log; the exception is what stops the open, because a comic archive has no
+    /// recovery path for a malformed <c>ComicInfo.xml</c> — there is no missing
+    /// declaration to supply, and guessing further is what invariant 15 forbids.
     /// </remarks>
-    private static ComicInfoDocument? TryParse(
-        IContainer container, ContainerEntry? entry, List<Finding> findings)
+    private static ComicInfoDocument Parse(
+        IContainer container, ContainerEntry entry, ICollection<Finding>? findings)
     {
-        if (entry is null)
-        {
-            return null;
-        }
-
         try
         {
             return ComicInfoDocument.Parse(ReadAllBytes(container, entry), entry.Name);
         }
         catch (BookFormatException ex)
         {
-            findings.Add(new Finding
+            findings?.Add(new Finding
             {
                 RuleId = "CBZ-F001",
                 Severity = Severity.Fatal,
@@ -358,15 +405,15 @@ public sealed class CbzHandler : IFormatHandler
                 Location = entry.Name,
             });
 
-            return null;
+            throw;
         }
     }
 
     /// <summary>
     /// Checks the fields whose content can be wrong on its own terms.
     /// </summary>
-    private static void ValidateFields(
-        ContainerEntry? entry, ComicInfoDocument? document, List<Finding> findings)
+    private static void CheckFields(
+        ContainerEntry? entry, ComicInfoDocument? document, ICollection<Finding> findings)
     {
         if (document is null || entry is null)
         {

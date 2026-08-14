@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using EBookMeta.Containers;
 using EBookMeta.Formats;
 using EBookMeta.Model;
@@ -103,34 +103,47 @@ public sealed class RepairWriteTests
     }
 
     [Fact]
-    public void TheHandlerReportsWhatItCorrected()
+    public void TheReadReportsWhatItCorrected()
     {
         using var temp = new TempDir();
         string path = BrokenEpub(temp);
 
         using ZipContainer container = ZipContainer.Open(path);
-        var handler = new EpubHandler();
-        BookMetadata metadata = handler.Read(container);
+        var findings = new List<Finding>();
 
-        // Validation is the handler's job, not the UI's: the window renders
-        // findings without knowing what an OPF or a namespace prefix is.
-        Finding finding = Assert.Single(handler.Validate(container, metadata));
+        // Reported by the read itself. There is no separate validate step: a repair
+        // is something the load did, so the load is what says it happened.
+        new EpubHandler().Read(container, findings: findings);
 
-        Assert.Equal("EPUB-W070", finding.RuleId);
+        Finding finding = Assert.Single(findings, f => f.RuleId == "EPUB-W070");
+
         Assert.True(finding.HasAutofix);
         Assert.Equal("OEBPS/content.opf", finding.Location);
     }
 
+    /// <summary>
+    /// A well-formed book produces nothing an editor has to act on.
+    /// </summary>
+    /// <remarks>
+    /// Errors, not findings outright. A conformant EPUB 3 declares its cover and its
+    /// series the EPUB 3 way and nothing else, which is exactly what EPUB-W032 and
+    /// EPUB-W061 exist to point out — saving writes both conventions so older
+    /// readers can see them too. Those are advisories about what a save will improve,
+    /// so a fixture tripping them is right rather than broken.
+    /// </remarks>
     [Fact]
-    public void AValidBookReportsNothing()
+    public void AValidBookReportsNothingWrong()
     {
         using var temp = new TempDir();
         string path = new EpubBuilder().WriteTo(temp.File("valid.epub"));
 
         using ZipContainer container = ZipContainer.Open(path);
-        var handler = new EpubHandler();
+        var findings = new List<Finding>();
 
-        Assert.Empty(handler.Validate(container, handler.Read(container)));
+        new EpubHandler().Read(container, findings: findings);
+
+        Assert.DoesNotContain(findings, f => f.Severity >= Severity.Error);
+        Assert.DoesNotContain(findings, f => f.RuleId == "EPUB-W070");
     }
 
     // --- saving ----------------------------------------------------------

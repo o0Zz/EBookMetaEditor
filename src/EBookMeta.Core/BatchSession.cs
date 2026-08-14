@@ -54,14 +54,22 @@ public sealed class BatchEntry
     /// <summary>What has happened to this file so far.</summary>
     public BatchEntryStatus Status { get; internal set; }
 
+    /// <summary>
+    /// The open file, once it has been read; null while pending or after a failure.
+    /// </summary>
+    /// <remarks>
+    /// The same <see cref="EBookMeta.Book"/> both windows use. A batch row is one
+    /// book plus the baseline text that makes dirtiness meaningful, so the single
+    /// file editor and a three-hundred-row grid load and save by exactly the same
+    /// code — there is no second write path to keep correct.
+    /// </remarks>
+    public Book? Book { get; internal set; }
+
     /// <summary>What the content says the file is, once it has been looked at.</summary>
     public DetectedFormat? Detected { get; internal set; }
 
-    /// <summary>The handler that owns this format, or null when there is none.</summary>
-    public IFormatHandler? Handler { get; internal set; }
-
     /// <summary>What the format can store, or null before the file was looked at.</summary>
-    public FormatCapabilities? Capabilities => Handler?.Capabilities;
+    public FormatCapabilities? Capabilities => Book?.Capabilities;
 
     /// <summary>The metadata, once read.</summary>
     /// <remarks>
@@ -69,19 +77,13 @@ public sealed class BatchEntry
     /// <see cref="MetadataFields.Apply"/> and this object is what
     /// <see cref="BatchSession.Save"/> writes.
     /// </remarks>
-    public BookMetadata? Metadata { get; internal set; }
+    public BookMetadata? Metadata => Book?.Metadata;
 
     /// <summary>Why this file failed, in words suitable for showing a user.</summary>
     public string? Error { get; internal set; }
 
-    /// <summary>
-    /// How many findings validation reported, or null if it has not run for this
-    /// file.
-    /// </summary>
-    public int? FindingCount { get; internal set; }
-
     /// <summary>Whether this file can be written at all.</summary>
-    public bool IsWritable => Capabilities?.CanWrite == true && Metadata is not null;
+    public bool IsWritable => Book?.CanSave == true;
 
     /// <summary>The fields whose text differs from what was read off the disk.</summary>
     public IEnumerable<MetadataField> ChangedFields
@@ -388,26 +390,21 @@ public sealed class BatchSession
     {
         try
         {
-            IFormatHandler? handler = BookFormats.Resolve(entry.Path, out DetectedFormat detected);
-            entry.Detected = detected;
-
-            if (handler is null)
-            {
-                entry.Handler = null;
-                entry.Status = BatchEntryStatus.Unsupported;
-                entry.Error = $"{FormatIds.ToDisplayName(detected.Format)}"
-                    + (detected.Detail is null ? "" : $" ({detected.Detail})")
-                    + " — this build cannot edit that format.";
-                return;
-            }
-
-            using ZipContainer container = ZipContainer.Open(entry.Path);
-
-            entry.Handler = handler;
-            entry.Metadata = handler.Read(container, ReadOptions.WithoutCover);
+            // Covers are skipped: a grid of three hundred titles has no use for
+            // three hundred full-size images.
+            entry.Book = Book.Load(entry.Path, ReadOptions.WithoutCover);
+            entry.Detected = entry.Book.Detected;
             entry.Status = BatchEntryStatus.Loaded;
             entry.Error = null;
             entry.Snapshot();
+        }
+        catch (UnsupportedFormatException ex)
+        {
+            entry.Detected = ex.Detected;
+            entry.Status = BatchEntryStatus.Unsupported;
+            entry.Error = $"{FormatIds.ToDisplayName(ex.Detected.Format)}"
+                + (ex.Detected.Detail is null ? "" : $" ({ex.Detected.Detail})")
+                + " — this build cannot edit that format.";
         }
         catch (Exception ex) when (ex is BookFormatException or BookIoException)
         {
@@ -480,24 +477,12 @@ public sealed class BatchSession
 
     private static bool SaveOne(BatchEntry entry, bool keepBackup)
     {
-        // Locals so the callback closes over non-nullable copies, and so the
-        // handler cannot change underneath it.
-        string source = entry.Path;
-        BookMetadata metadata = entry.Metadata!;
-        IFormatHandler handler = entry.Handler!;
-
         try
         {
-            AtomicFileWriter.Write(
-                source,
-                temp =>
-                {
-                    // Reopened inside the callback so the source handle is closed
-                    // before File.Replace swaps the file underneath it.
-                    using ZipContainer container = ZipContainer.Open(source);
-                    handler.Write(container, metadata, temp);
-                },
-                keepBackup);
+            // The same call the single-file window makes. There is deliberately no
+            // batch write path: a second way to replace a user's file is the last
+            // thing this codebase needs.
+            entry.Book!.Save(keepBackup);
 
             entry.Status = BatchEntryStatus.Saved;
             entry.Error = null;
@@ -511,86 +496,8 @@ public sealed class BatchSession
         {
             entry.Status = BatchEntryStatus.Failed;
             entry.Error = ex.Message;
-            Log.Error($"Could not save '{source}'", ex);
+            Log.Error($"Could not save '{entry.Path}'", ex);
             return false;
-        }
-    }
-
-    /// <summary>Validates every file that was read, recording how many findings each has.</summary>
-    /// <param name="progress">Reported once per file, from a worker thread.</param>
-    /// <param name="cancellationToken">Stops validation between files.</param>
-    /// <exception cref="OperationCanceledException">The caller cancelled.</exception>
-    /// <remarks>
-    /// Separate from <see cref="Load"/> and never automatic, because validating a
-    /// folder means opening every file again to cross-check its entries. Every
-    /// finding also goes to the log, which is where a user looks for what is
-    /// actually wrong; the count is only enough to know which rows to look at.
-    /// </remarks>
-    public void Validate(IProgress<BatchProgress>? progress = null, CancellationToken cancellationToken = default)
-    {
-        int completed = 0;
-        int total = _entries.Count;
-        var findings = new ConcurrentBag<Finding>();
-
-        var options = new ParallelOptions
-        {
-            MaxDegreeOfParallelism = Math.Max(1, Math.Min(4, Environment.ProcessorCount)),
-            CancellationToken = cancellationToken,
-        };
-
-        Parallel.ForEach(_entries, options, entry =>
-        {
-            ValidateOne(entry, findings);
-            progress?.Report(new BatchProgress(Interlocked.Increment(ref completed), total, entry.Path));
-        });
-
-        // Logged here rather than as each file finishes, so the log reads in file
-        // order instead of in whatever order four threads happened to finish.
-        foreach (BatchEntry entry in _entries)
-        {
-            foreach (Finding finding in findings.Where(f => f.Location == entry.Path))
-            {
-                Log.Finding(finding);
-            }
-        }
-
-        Log.Info($"Batch validation finished: {findings.Count} finding(s) across {total} file(s).");
-    }
-
-    private static void ValidateOne(BatchEntry entry, ConcurrentBag<Finding> findings)
-    {
-        if (entry.Handler is not { } handler || entry.Metadata is not { } metadata)
-        {
-            return;
-        }
-
-        try
-        {
-            using ZipContainer container = ZipContainer.Open(entry.Path);
-
-            int count = 0;
-
-            foreach (Finding finding in handler.Validate(container, metadata))
-            {
-                // Relocated onto the file, because a batch finding that says
-                // "ComicInfo.xml" without saying which file's is useless.
-                findings.Add(finding with
-                {
-                    Location = entry.Path,
-                    Detail = finding.Location is null
-                        ? finding.Detail
-                        : $"{finding.Location}{(finding.Detail is null ? "" : $" — {finding.Detail}")}",
-                });
-
-                count++;
-            }
-
-            entry.FindingCount = count;
-        }
-        catch (Exception ex) when (ex is BookFormatException or BookIoException)
-        {
-            entry.FindingCount = null;
-            Log.Error($"Could not validate '{entry.Path}'", ex);
         }
     }
 

@@ -1,4 +1,4 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using EBookMeta.Formats;
@@ -17,11 +17,14 @@ namespace EBookMeta.App;
 /// <see cref="BatchSession"/>; this is a grid over it.
 /// </para>
 /// <para>
-/// Two things it does not do, deliberately. It does not show the description or the
-/// cover: both need room a row does not have, and both are what the single-file
-/// editor is for. And it does not validate on open — a folder of four hundred comics
-/// would mean four hundred archives cross-checked before the first row appeared, so
-/// that is a button.
+/// One thing it does not do, deliberately: it does not show the description or the
+/// cover. Both need room a row does not have, and both are what the single-file
+/// editor is for.
+/// </para>
+/// <para>
+/// There is no validate button, here or anywhere. Reading a file reports what is
+/// wrong with it and saving corrects what can be corrected, so every row's problems
+/// are already in the log by the time it appears.
 /// </para>
 /// </remarks>
 internal sealed class BatchForm : Form, IPathReceiver
@@ -50,8 +53,7 @@ internal sealed class BatchForm : Form, IPathReceiver
     private const int StatusColumn = 0;
     private const int FileColumn = 1;
     private const int FormatColumn = 2;
-    private const int FindingsColumn = 3;
-    private const int FirstFieldColumn = 4;
+    private const int FirstFieldColumn = 3;
 
     private readonly AppSettings _settings;
     private readonly BatchSession _session;
@@ -70,10 +72,9 @@ internal sealed class BatchForm : Form, IPathReceiver
         ClipboardCopyMode = DataGridViewClipboardCopyMode.EnableWithoutHeaderText,
     };
 
-    // AutoSize throughout rather than fixed widths: "Validate all" is "Alle prüfen"
+    // AutoSize throughout rather than fixed widths: "Save all" is "Alle speichern"
     // in German, which does not fit in a width measured against English.
     private readonly Button _saveAll = Action("batch.button.saveAll", 96);
-    private readonly Button _validateAll = Action("batch.button.validateAll", 96);
     private readonly Button _cancel = Action("button.cancel", 84);
 
     private readonly StatusStrip _status = new();
@@ -130,7 +131,6 @@ internal sealed class BatchForm : Form, IPathReceiver
         _grid.ContextMenuStrip = BuildCellMenu();
 
         _saveAll.Click += (_, _) => SaveAll();
-        _validateAll.Click += (_, _) => ValidateAll();
         _cancel.Click += (_, _) => _work?.Cancel();
 
         DragEnter += OnDragEnter;
@@ -237,7 +237,6 @@ internal sealed class BatchForm : Form, IPathReceiver
         file.DropDownItems.Add(Item("menu.file.addFolder", AddFolder));
         file.DropDownItems.Add(new ToolStripSeparator());
         file.DropDownItems.Add(Item("menu.file.saveAll", SaveAll, Keys.Control | Keys.S));
-        file.DropDownItems.Add(Item("menu.file.validateAll", ValidateAll));
         file.DropDownItems.Add(new ToolStripSeparator());
         file.DropDownItems.Add(Item("menu.file.close", Close));
 
@@ -301,7 +300,7 @@ internal sealed class BatchForm : Form, IPathReceiver
             Padding = new Padding(8, 6, 8, 6),
         };
 
-        buttons.Controls.AddRange([_saveAll, _validateAll, _cancel]);
+        buttons.Controls.AddRange([_saveAll, _cancel]);
 
         _status.Items.Add(_statusText);
         _status.Items.Add(_progress);
@@ -320,7 +319,6 @@ internal sealed class BatchForm : Form, IPathReceiver
         _grid.Columns.Add(ReadOnlyColumn(Strings.Get("column.status"), 110));
         _grid.Columns.Add(ReadOnlyColumn(Strings.Get("column.file"), 200));
         _grid.Columns.Add(ReadOnlyColumn(Strings.Get("column.format"), 70));
-        _grid.Columns.Add(ReadOnlyColumn(Strings.Get("column.findings"), 70));
 
         foreach ((MetadataField field, string headerKey, int width) in FieldColumns)
         {
@@ -395,7 +393,6 @@ internal sealed class BatchForm : Form, IPathReceiver
         row.Cells[FormatColumn].Value = entry.Detected is { } detected
             ? FormatIds.ToDisplayName(detected.Format)
             : string.Empty;
-        row.Cells[FindingsColumn].Value = entry.FindingCount?.ToString() ?? string.Empty;
 
         foreach (DataGridViewCell cell in FieldCells(row))
         {
@@ -837,25 +834,6 @@ internal sealed class BatchForm : Form, IPathReceiver
             (progress, token) => _session.Save(keepBackup, progress, token).ToString());
     }
 
-    private void ValidateAll()
-    {
-        if (_busy)
-        {
-            return;
-        }
-
-        RunInBackground(
-            "batch.verb.validating",
-            "Validating",
-            (progress, token) =>
-            {
-                _session.Validate(progress, token);
-
-                int findings = _session.Entries.Sum(e => e.FindingCount ?? 0);
-                return Strings.Plural("batch.findings", findings, findings);
-            });
-    }
-
     /// <summary>
     /// Runs a batch operation off the UI thread, with progress and a working cancel.
     /// </summary>
@@ -975,7 +953,6 @@ internal sealed class BatchForm : Form, IPathReceiver
         _busy = busy;
 
         _grid.Enabled = !busy;
-        _validateAll.Enabled = !busy;
         _saveAll.Enabled = !busy && _session.DirtyCount > 0;
         _cancel.Visible = busy;
         _progress.Visible = busy;

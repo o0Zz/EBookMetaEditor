@@ -1,4 +1,4 @@
-# CLAUDE.md
+﻿# CLAUDE.md
 
 Guidance for Claude Code working in this repository.
 
@@ -8,13 +8,14 @@ Guidance for Claude Code working in this repository.
 the Explorer right-click menu. Two things make it different from calibre,
 Sigil, ComicTagger or epub-metadata-editor:
 
-1. **It validates.** Every file is checked for structural and semantic
-   consistency before and after editing, with findings reported by stable rule
-   ID, file, line and column.
+1. **It checks, without being asked.** Every file is examined for structural and
+   semantic consistency as it is opened, with findings reported by stable rule ID,
+   file, line and column.
 2. **It repairs, quietly.** Broken XML and inconsistent metadata are recovered
    on open, so a file that no other tool will load becomes editable. The
    correction lives in memory: the bytes on disk are untouched until the user
-   saves, and saving writes the correction along with their edits.
+   saves, and saving writes the correction along with their edits — and fixes
+   whatever else it can prove wrong while it is there.
 
 Non-goals: reading books, editing content/XHTML/CSS, format conversion, DRM,
 library management, page-image processing. If a feature request drifts toward
@@ -87,8 +88,9 @@ behalf, and a warning they can dismiss is not consent.
 EBookMeta.sln
 src/
   EBookMeta.Core/       net48          — all logic. ZERO UI dependencies.
+    Book.cs                one open file: Load and Save, and what they noticed
     BookFormats.cs         the handler registry: Register / For / Resolve
-    BookExceptions.cs      BookFormatException, BookIoException
+    BookExceptions.cs      BookFormatException, BookIoException, UnsupportedFormatException
     AtomicFileWriter.cs    the only sanctioned way a user's file is replaced
     BatchSession.cs        many files read, edited and saved together
     MetadataFields.cs      the text projection of a field, shared by both editors
@@ -178,11 +180,15 @@ read-only container is a real concept the callers should keep handling.
 interface IFormatHandler {
     FormatId Id { get; }
     FormatCapabilities Capabilities { get; }
-    BookMetadata Read(IContainer c);
-    void Write(IContainer c, BookMetadata m, string targetPath);
-    IEnumerable<Finding> Validate(IContainer c, BookMetadata m);
+    BookMetadata Read(IContainer c, ReadOptions? o = null, ICollection<Finding>? findings = null);
+    void Write(IContainer c, BookMetadata m, string targetPath, ICollection<Finding>? findings = null);
 }
 ```
+
+Two methods, not three. Reading reports what it noticed and writing reports what it
+corrected, so there is nowhere for a `Validate` to live — see **Validation rules**.
+Handlers are stateless singletons: the registry hands the same instance to every
+caller, including four parallel batch threads.
 
 `FormatCapabilities` declares which model fields the format can store, and
 whether writing is supported. **The UI reads this to disable fields**, so that
@@ -209,6 +215,12 @@ first local file header sits at offset 0 and settles it for conformant files
 (an EPUB must store `mimetype` first). Only when that is inconclusive may the
 sniffer fall back to reading the central directory — entry names only, never
 content. If extension and content disagree, report it (`GEN-W002`).
+
+**Inconclusive includes a `mimetype` whose bytes cannot be read inline** — a
+compressed one, for instance. Falling back there rather than concluding "anonymous
+ZIP" is what lets the tool open the one broken EPUB it can fix outright, since
+`EPUB-E040` is corrected by storing the entry on save. Refusing to open the files
+you know how to repair is the failure mode to watch for here.
 
 ### Metadata model
 
@@ -257,8 +269,9 @@ codebase needs.
 - `Load` reads only `Pending` entries, so adding files later is cheap and calling
   it twice cannot discard unsaved edits by re-reading the files they were made
   against. There is deliberately no reload.
-- Validation is separate and on demand. Validating a folder means opening every
-  archive again, which is not something to do before the first row appears.
+- A row is a `Book`, so the grid loads and saves through exactly the same code as
+  the single-file window. `BatchEntry` adds only the baseline text that makes
+  dirtiness meaningful; `SaveOne` is a call to `Book.Save`.
 
 **Both editors share `MetadataFields`.** The rules for what a field looks like in
 a box and what typing in it does to the model — authors split on semicolons,
@@ -285,8 +298,15 @@ Not style preferences. Violating these corrupts users' libraries.
    do not recompress. Detect stored vs deflated on read and reproduce it.
 5. Reject and report absolute paths and `..` traversal in entry names and
    manifest hrefs rather than following them.
-6. Round-tripping is a no-op: open a file, save without editing, get identical
-   bytes. There is a test per format; keep them green.
+6. **Round-tripping a valid file is a no-op**: open it, save without editing, get
+   identical bytes. There is a test per format; keep them green.
+
+   An *invalid* file round-trips to a corrected one, and that is the point rather
+   than a violation — saving is where a defect gets fixed. Every correction is
+   logged, and every correction is provable from the file alone: a page count is
+   recomputed from the images that are present, not guessed. So the property to
+   protect is "saving does not gratuitously rewrite", not "saving never changes
+   anything". A change with no finding behind it is the bug.
 
 Accepted limitation: `System.IO.Compression` does not preserve ZIP extra fields,
 original timestamps, or the archive comment. Round-trip byte-identity therefore
@@ -331,7 +351,8 @@ fields. Document it; do not hand-roll a ZIP writer.
 ### Repair
 
 13. Original bytes of every parsed document are retained for the session.
-14. **A repair never writes a file by itself.** Recovery happens on open and is
+14. **A repair never writes a file by itself.** `Book.Load` recovers, `Book.Save`
+    persists, and there is nothing in between. Recovery happens on open and is
     held in memory; it reaches the disk only through the ordinary save path,
     when the user asks for a save. There is deliberately no repair-specific
     write path, which is what makes "the file on disk is what the user last
@@ -384,18 +405,39 @@ rather than reading the file back.
 
 ## Validation rules
 
-The validator is the core value of this project. Rules are data, not scattered
-`if` statements: each is a class implementing `IRule` with a stable ID,
-severity, message and optional autofix. Adding a rule must not require
-touching the engine.
+Checking is the core value of this project, and **it is not a feature the user
+invokes.** There is no Validate button, no Validate menu item, no findings panel
+and no `Validate` method on `IFormatHandler` — those existed once and were removed
+deliberately. Do not reintroduce them.
 
-**That engine does not exist yet.** Today each handler's `Validate` builds a
-`List<Finding>` directly, and the rule IDs below are the stable part. Follow the
-existing shape when adding a rule rather than inventing half an engine for it;
-introducing `IRule` properly is its own change.
+The reason is that a separate validate step gets the model backwards. A user does
+not want to be told their file is broken; they want to edit it. So:
 
-IDs are namespaced by format. `F` = fatal (cannot edit), `E` = error,
-`W` = warning.
+- **Loading reports.** `Read` takes an `ICollection<Finding>` and fills it. Every
+  rule works from the parsed metadata document and from container entry *names*,
+  which the central directory has already supplied — so running all of them costs
+  a read essentially nothing, and there is no reason to defer any of it. Anything
+  recoverable is recovered in memory on the way in.
+- **Saving corrects.** `Write` takes the same sink and reports what it fixed. A
+  correction must be provable from the file alone: a page count recomputed from the
+  images present, a `mimetype` entry put back where the specification requires it, a
+  namespace declaration a published spec fixes. Anything needing an assumption is
+  reported by the read and left alone.
+- **`Book` joins the two.** `Book.Load` and `Book.Save` are the only entry points
+  either window uses, and `Book` is what forwards findings to `Log`. Handlers report;
+  they do not log rules.
+- **Nothing reaches the disk without a save.** A repair found on open lives in
+  memory. There is no repair-specific write path, which is what makes "the file on
+  disk is what the user last saved" true by construction.
+
+Rules are still plain code inside the handlers, grouped by the question they answer
+(`CheckRequiredMetadata`, `CheckReferences`, `CheckArchive`, `CheckLayout`,
+`CheckPages`, `CheckFields`). The rule IDs are the stable part. Follow the existing
+shape when adding one; a rule engine would be its own change and is not needed to
+add a rule.
+
+IDs are namespaced by format. `F` = fatal (cannot edit — reported *and* thrown, so
+the ID reaches the log before the open fails), `E` = error, `W` = warning.
 
 ### General
 
@@ -575,9 +617,14 @@ This is a product requirement — the whole point is right-click, fix, close.
   cost an antivirus scan, which is real money against 400 ms.
 - Detect from the first 8 KB. Parse only the metadata document. Do not
   enumerate, hash or decompress the whole archive on open.
-- Cross-checks that require full enumeration (`EPUB-E021`, `EPUB-W023`,
-  `CBZ-E020`, `CBZ-W021`) run **lazily**, on request rather than on open.
-  A 300-page CBZ must not be walked on launch.
+- **Every rule runs on open, and that is affordable because of what they read.**
+  Cross-checks like `EPUB-E021`, `EPUB-W023`, `CBZ-E020` and `CBZ-W021` compare
+  entry *names* against the metadata document, and `ZipContainer.Open` has already
+  parsed the central directory — so they walk an in-memory list and decompress
+  nothing. A 300-page CBZ costs no more to check than a one-page one, which
+  `CbzValidateTests.Validating_a_long_comic_reads_only_the_metadata_document`
+  exists to keep true. The thing to never do is decompress or hash entries; it was
+  never enumeration that was expensive.
 - Decode the cover image off the UI thread.
 - Single instance: a named mutex decides who is first, and later launches hand
   their paths over a named pipe and exit (`SingleInstance`). Both names are
@@ -607,8 +654,12 @@ This is a product requirement — the whole point is right-click, fix, close.
   standing between a bug and a corrupted library.
 - Prefer Core changes + tests over touching the UI. UI is the last step of a
   feature, not the first.
-- When adding a format, the order is: builder → sniffer → read → validate →
-  write. Never write before round-trip reading is proven.
+- When adding a format, the order is: builder → sniffer → read → rules → write.
+  Never write before round-trip reading is proven.
+- A new rule goes where its evidence is. If the answer is in the parsed document or
+  in entry names, it belongs in `Read`. If it is something a write can prove and
+  fix, it belongs in `Write` and must report what it changed. Never add a third
+  place for it to live.
 - When a change touches serialisation, run round-trip and golden-file tests
   first.
 - Resist scope creep back toward the formats listed as out of scope. They were

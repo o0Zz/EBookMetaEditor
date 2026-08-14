@@ -1,4 +1,4 @@
-# EBookMetaEditor — English. The master file: every other language falls back to
+﻿# EBookMetaEditor — English. The master file: every other language falls back to
 # this one key by key, so a line missing elsewhere shows in English rather than
 # showing its key.
 #
@@ -26,7 +26,6 @@ menu.file.exit = E&xit
 menu.file.addFiles = Add &files…
 menu.file.addFolder = Add f&older…
 menu.file.saveAll = &Save all
-menu.file.validateAll = &Validate all
 menu.file.close = &Close
 menu.edit = &Edit
 menu.edit.copy = &Copy
@@ -75,8 +74,6 @@ settings.title = Settings
 settings.language = Language
 settings.language.auto = Automatic (system language)
 settings.keepBackup = Keep a .bak backup beside the file after saving
-settings.validateFully = Run all validation checks when a file opens
-settings.validateNote = Some checks must read every entry in the archive. Leaving this off keeps opening instant; those checks run when you view the findings.
 settings.rememberGeometry = Remember the window size and position
 settings.extensions = Show "Edit metadata" in the right-click menu for:
 settings.contextMenu.add = Add to context menu
@@ -109,12 +106,10 @@ log.saveFailed = The log could not be saved: {0}
 
 batch.title = Batch edit — EBookMetaEditor
 batch.button.saveAll = &Save all
-batch.button.validateAll = &Validate all
 
 column.status = Status
 column.file = File
 column.format = Format
-column.findings = Findings
 
 batch.state.reading = Reading…
 batch.state.edited = Edited
@@ -125,7 +120,6 @@ batch.state.failed = Failed
 # Verbs for the progress line, used as "Saving 3 of 40 — book.epub".
 batch.verb.reading = Reading
 batch.verb.saving = Saving
-batch.verb.validating = Validating
 batch.busy = {0}…
 batch.progress = {0} {1} of {2} — {3}
 batch.cancelled = {0} cancelled.
@@ -147,8 +141,6 @@ batch.pastedSkipped.one = Pasted into 1 cell; {1} could not store it.
 batch.pastedSkipped.many = Pasted into {0} cells; {1} could not store it.
 
 batch.rowDirty = Save this row before opening it on its own — it has unsaved edits here.
-batch.findings.one = 1 finding — see the log.
-batch.findings.many = {0} findings — see the log.
 
 batch.summary.files.one = 1 file
 batch.summary.files.many = {0} files

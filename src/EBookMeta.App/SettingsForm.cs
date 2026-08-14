@@ -1,4 +1,4 @@
-namespace EBookMeta.App;
+﻿namespace EBookMeta.App;
 
 /// <summary>
 /// The settings dialog, reached from <b>File ▸ Settings</b>.
@@ -21,7 +21,6 @@ internal sealed class SettingsForm : Form
     private readonly AppSettings _settings;
     private readonly ComboBox _language;
     private readonly CheckBox _keepBackup;
-    private readonly CheckBox _validateFully;
     private readonly CheckBox _rememberGeometry;
     private readonly CheckedListBox _extensions;
     private readonly Button _contextMenu;
@@ -57,17 +56,6 @@ internal sealed class SettingsForm : Form
             Checked = settings.KeepBackupOnSave,
             AutoSize = true,
         };
-
-        _validateFully = new CheckBox
-        {
-            Text = Strings.Get("settings.validateFully"),
-            Checked = settings.ValidateFullyOnOpen,
-            AutoSize = true,
-        };
-
-        // Say why the default is off, so the setting reads as a trade-off rather
-        // than a missing feature.
-        Label validateNote = Note("settings.validateNote", indent: 20);
 
         _rememberGeometry = new CheckBox
         {
@@ -108,14 +96,14 @@ internal sealed class SettingsForm : Form
 
         Label registrationNote = Note("settings.registrationNote", indent: 0);
 
-        Controls.Add(BuildLayout(validateNote, extensionsLabel, registrationNote));
+        Controls.Add(BuildLayout(extensionsLabel, registrationNote));
         Controls.Add(BuildButtons());
     }
 
     /// <summary>
     /// One column of controls, each sized to whatever its translation needs.
     /// </summary>
-    private TableLayoutPanel BuildLayout(Label validateNote, Label extensionsLabel, Label registrationNote)
+    private TableLayoutPanel BuildLayout(Label extensionsLabel, Label registrationNote)
     {
         var layout = new TableLayoutPanel
         {
@@ -147,7 +135,7 @@ internal sealed class SettingsForm : Form
 
         Control[] rows =
         [
-            languageRow, _keepBackup, _validateFully, validateNote, _rememberGeometry,
+            languageRow, _keepBackup, _rememberGeometry,
             extensionsLabel, _extensions, _contextMenu, registrationNote,
         ];
 
@@ -286,7 +274,6 @@ internal sealed class SettingsForm : Form
         Strings.Use(_settings.Language);
 
         _settings.KeepBackupOnSave = _keepBackup.Checked;
-        _settings.ValidateFullyOnOpen = _validateFully.Checked;
         _settings.RememberWindowGeometry = _rememberGeometry.Checked;
         _settings.RegisteredExtensions = CheckedExtensions();
 

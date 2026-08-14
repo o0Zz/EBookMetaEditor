@@ -1,3 +1,5 @@
+using EBookMeta.Formats;
+
 namespace EBookMeta;
 
 
@@ -56,6 +58,34 @@ public class BookFormatException : Exception
     /// <see langword="null"/> when the problem is not attributable to one.
     /// </summary>
     public string? Path { get; }
+}
+
+/// <summary>
+/// Thrown when a file is recognised but this build cannot edit it.
+/// </summary>
+/// <remarks>
+/// Distinct from a plain <see cref="BookFormatException"/> because the file is not
+/// damaged and there is nothing to repair — it is simply a format with no handler,
+/// most often a RAR archive wearing a <c>.cbz</c> extension. Naming it precisely is
+/// the useful answer, so <see cref="Detected"/> carries the sniffer's verdict and
+/// the UI can say what the file actually is instead of "unsupported file".
+/// </remarks>
+public class UnsupportedFormatException : BookFormatException
+{
+    /// <summary>Initialises a new instance for a detected but unhandled format.</summary>
+    /// <param name="detected">What the content turned out to be.</param>
+    /// <param name="path">The file that could not be opened.</param>
+    public UnsupportedFormatException(DetectedFormat detected, string? path)
+        : base(
+            $"'{path}' is {FormatIds.ToDisplayName(detected.Format)}, "
+            + "which this build cannot edit.",
+            path)
+    {
+        Detected = detected;
+    }
+
+    /// <summary>What the content turned out to be.</summary>
+    public DetectedFormat Detected { get; }
 }
 
 /// <summary>

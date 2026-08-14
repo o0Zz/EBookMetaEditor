@@ -95,11 +95,6 @@ public sealed record Finding
     /// </summary>
     public string? Detail { get; init; }
 
-    /// <summary>
-    /// Whether this finding blocks editing, which fatal findings do.
-    /// </summary>
-    public bool BlocksEditing => Severity == Severity.Fatal;
-
     /// <summary>Returns "RULE-ID severity: message (location:line:col)".</summary>
     public override string ToString()
     {

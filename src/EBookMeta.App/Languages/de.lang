@@ -1,4 +1,4 @@
-# EBookMetaEditor — Deutsch.
+﻿# EBookMetaEditor — Deutsch.
 # Fehlende Zeilen werden auf Englisch angezeigt (siehe en.lang).
 
 @name = Deutsch
@@ -19,7 +19,6 @@ menu.file.exit = &Beenden
 menu.file.addFiles = Dateien &hinzufügen…
 menu.file.addFolder = &Ordner hinzufügen…
 menu.file.saveAll = &Alle speichern
-menu.file.validateAll = Alle &prüfen
 menu.file.close = S&chließen
 menu.edit = &Bearbeiten
 menu.edit.copy = &Kopieren
@@ -64,8 +63,6 @@ settings.title = Einstellungen
 settings.language = Sprache
 settings.language.auto = Automatisch (Systemsprache)
 settings.keepBackup = Nach dem Speichern eine .bak-Sicherung neben der Datei behalten
-settings.validateFully = Beim Öffnen einer Datei alle Prüfungen ausführen
-settings.validateNote = Manche Prüfungen müssen jeden Eintrag des Archivs lesen. Ausgeschaltet bleibt das Öffnen sofort; diese Prüfungen laufen dann, wenn Sie die Ergebnisse ansehen.
 settings.rememberGeometry = Fenstergröße und -position merken
 settings.extensions = „Metadaten bearbeiten“ im Kontextmenü anzeigen für:
 settings.contextMenu.add = Zum Kontextmenü hinzufügen
@@ -96,12 +93,10 @@ log.saveFailed = Das Protokoll konnte nicht gespeichert werden: {0}
 
 batch.title = Stapelverarbeitung — EBookMetaEditor
 batch.button.saveAll = &Alle speichern
-batch.button.validateAll = Alle &prüfen
 
 column.status = Status
 column.file = Datei
 column.format = Format
-column.findings = Befunde
 
 batch.state.reading = Wird gelesen…
 batch.state.edited = Bearbeitet
@@ -111,7 +106,6 @@ batch.state.failed = Fehlgeschlagen
 
 batch.verb.reading = Lesen
 batch.verb.saving = Speichern
-batch.verb.validating = Prüfen
 batch.busy = {0}…
 batch.progress = {0} {1} von {2} — {3}
 batch.cancelled = {0} abgebrochen.
@@ -133,8 +127,6 @@ batch.pastedSkipped.one = In 1 Zelle eingefügt; {1} kann das nicht speichern.
 batch.pastedSkipped.many = In {0} Zellen eingefügt; {1} können das nicht speichern.
 
 batch.rowDirty = Speichern Sie diese Zeile, bevor Sie sie einzeln öffnen — sie enthält ungespeicherte Änderungen.
-batch.findings.one = 1 Befund — siehe Protokoll.
-batch.findings.many = {0} Befunde — siehe Protokoll.
 
 batch.summary.files.one = 1 Datei
 batch.summary.files.many = {0} Dateien

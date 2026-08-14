@@ -463,23 +463,41 @@ public sealed class ComicInfoDocument
     }
 
     /// <summary>
-    /// Records the page count on a document that does not state one.
+    /// Records the archive's real page count, replacing a wrong one.
     /// </summary>
-    /// <param name="pageCount">The number of images in the archive.</param>
+    /// <param name="pageCount">The number of images actually in the archive.</param>
+    /// <returns>
+    /// <see langword="true"/> when the document changed, so the caller can report
+    /// the correction.
+    /// </returns>
     /// <remarks>
-    /// Only ever fills a gap. An existing <c>PageCount</c> is left alone even when
-    /// it disagrees with the archive, because that disagreement is rule CBZ-E020's
-    /// to report and the user's to fix — silently correcting it would hide a file
-    /// that is missing pages.
+    /// <para>
+    /// An earlier version of this only ever filled a gap, on the reasoning that
+    /// silently overwriting a disagreeing count would hide an archive with missing
+    /// pages. That reasoning had the mechanism backwards. The count is not evidence
+    /// of anything — the images are, and they are right here to be counted — so a
+    /// <c>PageCount</c> that disagrees with them is simply wrong, and leaving it
+    /// wrong is what hides the problem from every reader that trusts it. The
+    /// disagreement is still reported, as CBZ-E020, so it appears in the log
+    /// alongside the correction rather than instead of it.
+    /// </para>
+    /// <para>
+    /// Returns without touching the tree when the value already agrees. That
+    /// early return is what keeps saving an unedited, correct archive
+    /// byte-identical.
+    /// </para>
     /// </remarks>
-    public void SetPageCountIfAbsent(int pageCount)
+    public bool SetPageCount(int pageCount)
     {
-        if (Root is not { } root || Value("PageCount") is not null)
+        string wanted = pageCount.ToString(CultureInfo.InvariantCulture);
+
+        if (Root is not { } root || string.Equals(Value("PageCount"), wanted, StringComparison.Ordinal))
         {
-            return;
+            return false;
         }
 
-        SetElement(root, "PageCount", null, pageCount.ToString(CultureInfo.InvariantCulture));
+        SetElement(root, "PageCount", Value("PageCount"), wanted);
+        return true;
     }
 
     private void ApplySeries(XElement root, BookMetadata current, BookMetadata metadata)

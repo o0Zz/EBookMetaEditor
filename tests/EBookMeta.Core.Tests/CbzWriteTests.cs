@@ -14,13 +14,14 @@ namespace EBookMeta.Tests;
 /// </summary>
 public sealed class CbzWriteTests
 {
-    private static void Write(string source, string target, Action<BookMetadata> edit)
+    private static void Write(
+        string source, string target, Action<BookMetadata> edit, ICollection<Finding>? findings = null)
     {
         using ZipContainer container = ZipContainer.Open(source);
         var handler = new CbzHandler();
         BookMetadata metadata = handler.Read(container);
         edit(metadata);
-        handler.Write(container, metadata, target);
+        handler.Write(container, metadata, target, findings);
     }
 
     private static BookMetadata Read(string path)
@@ -72,8 +73,19 @@ public sealed class CbzWriteTests
         Assert.Equal(File.ReadAllBytes(source), File.ReadAllBytes(target));
     }
 
+    /// <summary>
+    /// A document with no <c>PageCount</c> gains the right one, and nothing else.
+    /// </summary>
+    /// <remarks>
+    /// The one place saving an unedited file deliberately changes it. Byte-identity
+    /// is a property of saving a <em>correct</em> archive: this one is missing a
+    /// field whose value is sitting in the archive waiting to be counted, and
+    /// supplying it is the whole point of correcting on save. Everything else in the
+    /// document still has to survive untouched, which is what the second assertion
+    /// is for.
+    /// </remarks>
     [Fact]
-    public void Saving_a_minimal_document_without_editing_is_byte_identical()
+    public void Saving_a_minimal_document_supplies_the_missing_page_count()
     {
         using var temp = new TempDir();
         string source = new CbzBuilder()
@@ -81,9 +93,76 @@ public sealed class CbzWriteTests
             .WriteTo(temp.File("comic.cbz"));
         string target = temp.File("saved.cbz");
 
-        Write(source, target, _ => { });
+        var findings = new List<Finding>();
+        Write(source, target, _ => { }, findings);
 
-        Assert.Equal(File.ReadAllBytes(source), File.ReadAllBytes(target));
+        string saved = ComicInfoText(target);
+
+        Assert.Contains("<PageCount>3</PageCount>", saved, StringComparison.Ordinal);
+        Assert.Contains("<Series>The Sandman</Series>", saved, StringComparison.Ordinal);
+
+        Finding correction = Assert.Single(findings, f => f.RuleId == "CBZ-E020");
+        Assert.True(correction.HasAutofix);
+    }
+
+    /// <summary>
+    /// A metadata document below the root is moved up to it.
+    /// </summary>
+    /// <remarks>
+    /// The only correction that changes the archive's entry list rather than a
+    /// document's contents, and it is safe because the entry it moves is not a page.
+    /// The images keep their order, which for a comic is the reading order, and
+    /// invariant 4 is about them.
+    /// </remarks>
+    [Fact]
+    public void Saving_moves_a_nested_metadata_document_to_the_root()
+    {
+        using var temp = new TempDir();
+        string source = new CbzBuilder()
+            .WithComicInfoAt("meta/ComicInfo.xml")
+            .WriteTo(temp.File("comic.cbz"));
+        string target = temp.File("saved.cbz");
+
+        var findings = new List<Finding>();
+        Write(source, target, _ => { }, findings);
+
+        using ZipContainer saved = ZipContainer.Open(target);
+        List<string> names = [.. saved.Entries.Select(e => e.Name)];
+
+        Assert.Contains("ComicInfo.xml", names);
+        Assert.DoesNotContain("meta/ComicInfo.xml", names);
+
+        // The pages are untouched, and still in reading order.
+        Assert.Equal(
+            ["01.png", "02.png", "03.png"],
+            names.Where(n => n.EndsWith(".png", StringComparison.Ordinal)));
+
+        Finding correction = Assert.Single(findings, f => f.RuleId == "CBZ-E011");
+        Assert.True(correction.HasAutofix);
+    }
+
+    /// <summary>
+    /// A page count that disagrees with the images is corrected, not left wrong.
+    /// </summary>
+    [Fact]
+    public void Saving_corrects_a_wrong_page_count()
+    {
+        using var temp = new TempDir();
+        string source = new CbzBuilder()
+            .WithComicInfo(CbzBuilder.MinimalComicInfo.Replace(
+                "<Series>The Sandman</Series>",
+                "<Series>The Sandman</Series>\n  <PageCount>99</PageCount>"))
+            .WriteTo(temp.File("comic.cbz"));
+        string target = temp.File("saved.cbz");
+
+        var findings = new List<Finding>();
+        Write(source, target, _ => { }, findings);
+
+        Assert.Contains("<PageCount>3</PageCount>", ComicInfoText(target), StringComparison.Ordinal);
+        Assert.DoesNotContain("99", ComicInfoText(target), StringComparison.Ordinal);
+
+        Finding correction = Assert.Single(findings, f => f.RuleId == "CBZ-E020");
+        Assert.Contains("99", correction.Message, StringComparison.Ordinal);
     }
 
     /// <summary>

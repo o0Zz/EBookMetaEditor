@@ -1,4 +1,4 @@
-using EBookMeta.Containers;
+﻿using EBookMeta.Containers;
 using EBookMeta.Formats;
 using EBookMeta.Model;
 
@@ -81,10 +81,10 @@ internal sealed class MainForm : Form, IPathReceiver
     private readonly System.Windows.Forms.Timer _handover = new();
 
     private string? _initialPath;
-    private string? _path;
-    private BookMetadata? _metadata;
-    private FormatCapabilities? _capabilities;
-    private IFormatHandler? _handler;
+
+    // One object, not a quartet of parallel nullables. Core owns what it means to
+    // have a file open; the window only needs to know whether there is one.
+    private Book? _book;
 
     /// <summary>Creates the window, optionally opening a file immediately.</summary>
     /// <param name="settings">The loaded user settings.</param>
@@ -272,7 +272,7 @@ internal sealed class MainForm : Form, IPathReceiver
             relabel();
         }
 
-        if (_path is null)
+        if (_book is null)
         {
             Text = Strings.Get("app.name");
             SetStatus(Strings.Get("main.status.begin"));
@@ -387,13 +387,13 @@ internal sealed class MainForm : Form, IPathReceiver
         string[] arrived = [.. _handoverPaths];
         _handoverPaths.Clear();
 
-        if (arrived.Length == 1 && _path is null && !Directory.Exists(arrived[0]))
+        if (arrived.Length == 1 && _book is null && !Directory.Exists(arrived[0]))
         {
             Open(arrived[0]);
             return;
         }
 
-        OpenBatch(_path is null ? arrived : [_path, .. arrived]);
+        OpenBatch(_book is null ? arrived : [_book.Path, .. arrived]);
     }
 
     /// <summary>
@@ -428,47 +428,41 @@ internal sealed class MainForm : Form, IPathReceiver
 
         try
         {
-            IFormatHandler? handler = BookFormats.Resolve(path, out DetectedFormat detected);
+            // Everything the open needs — detection, recovery of what is
+            // recoverable, and reporting what was noticed — happens in here. The
+            // window's job starts once it has a Book.
+            Book book = Book.Load(path);
+            _book = book;
 
-            if (handler is null)
-            {
-                Log.Warning(
-                    $"'{path}' is {FormatIds.ToDisplayName(detected.Format)}, which this build cannot edit.");
+            Populate(book.Metadata);
+            ApplyCapabilities(book.Capabilities);
 
-                // Naming the format precisely is the point: "this .cbz is really
-                // a RAR archive" is more useful than "unsupported file". The
-                // format's own name is not translated — it is what the format is
-                // called everywhere.
-                string name = FormatIds.ToDisplayName(detected.Format);
-
-                MessageBox.Show(
-                    this,
-                    Strings.Format(
-                        "main.unsupported",
-                        detected.Detail is null ? name : Strings.Format("main.formatWithDetail", name, detected.Detail)),
-                    Strings.Get("app.name"),
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Information);
-
-                return;
-            }
-
-            using ZipContainer container = ZipContainer.Open(path);
-
-            _metadata = handler.Read(container);
-            _capabilities = handler.Capabilities;
-            _handler = handler;
-            _path = path;
-
-            Populate(_metadata);
-            ApplyCapabilities(_capabilities);
-            LogFindings(handler, container, _metadata);
-
-            _saveItem.Enabled = _capabilities.CanWrite;
+            _saveItem.Enabled = book.CanSave;
             Text = Strings.Format("app.title.file", Path.GetFileName(path));
             SetStatus(Strings.Format(
-                "main.status.format", FormatIds.ToDisplayName(detected.Format), container.Entries.Count));
-            Log.Info($"Opened '{path}' — {container.Entries.Count} entries.");
+                "main.status.format", FormatIds.ToDisplayName(book.Detected.Format), book.EntryCount));
+            Log.Info($"Opened '{path}' — {book.EntryCount} entries.");
+        }
+        catch (UnsupportedFormatException ex)
+        {
+            Log.Warning(ex.Message);
+
+            // Naming the format precisely is the point: "this .cbz is really
+            // a RAR archive" is more useful than "unsupported file". The
+            // format's own name is not translated — it is what the format is
+            // called everywhere.
+            string name = FormatIds.ToDisplayName(ex.Detected.Format);
+
+            MessageBox.Show(
+                this,
+                Strings.Format(
+                    "main.unsupported",
+                    ex.Detected.Detail is null
+                        ? name
+                        : Strings.Format("main.formatWithDetail", name, ex.Detected.Detail)),
+                Strings.Get("app.name"),
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
         }
         catch (Exception ex) when (ex is BookFormatException or BookIoException)
         {
@@ -556,65 +550,32 @@ internal sealed class MainForm : Form, IPathReceiver
         }
     }
 
-    /// <summary>Records what the handler found out about the file, in the log.</summary>
-    /// <remarks>
-    /// The window has no findings panel: rules go to the log, which is where a
-    /// user looks when they want to know what happened rather than being told
-    /// while they are trying to edit a title. The UI still knows nothing about
-    /// what any rule means — it forwards findings and lets <c>Log</c> grade them.
-    /// </remarks>
-    private static void LogFindings(IFormatHandler handler, IContainer container, BookMetadata metadata)
-    {
-        int count = 0;
-
-        foreach (Finding finding in handler.Validate(container, metadata))
-        {
-            Log.Finding(finding);
-            count++;
-        }
-
-        if (count == 0)
-        {
-            Log.Debug("No findings from the format handler.");
-        }
-    }
-
     private void Save()
     {
-        if (_path is null || _metadata is null || _handler is null || _capabilities is null || !_capabilities.CanWrite)
+        if (_book is not { CanSave: true } book)
         {
             return;
         }
 
         try
         {
-            CollectInto(_metadata);
-            Log.Info($"Saving '{_path}' (keep backup: {_settings.KeepBackupOnSave}).");
+            CollectInto(book.Metadata);
+            Log.Info($"Saving '{book.Path}' (keep backup: {_settings.KeepBackupOnSave}).");
 
-            string source = _path;
-            BookMetadata metadata = _metadata;
-            IFormatHandler handler = _handler;
-
-            AtomicFileWriter.Write(
-                source,
-                temp =>
-                {
-                    // Reopened inside the callback so the source handle is
-                    // closed before File.Replace swaps the file underneath it.
-                    using ZipContainer container = ZipContainer.Open(source);
-                    handler.Write(container, metadata, temp);
-                },
-                _settings.KeepBackupOnSave);
+            // Whatever was recovered on the way in is written here, along with the
+            // user's edits, by the one save path. Until this line runs, the file on
+            // disk is exactly as they found it.
+            book.Save(_settings.KeepBackupOnSave);
 
             SetStatus(_settings.KeepBackupOnSave
-                ? Strings.Format("main.status.savedBackup", Path.GetFileName(source))
+                ? Strings.Format("main.status.savedBackup", Path.GetFileName(book.Path))
                 : Strings.Get("main.status.saved"));
 
-            Log.Info($"Saved '{source}'.");
+            Log.Info($"Saved '{book.Path}'.");
         }
-        catch (Exception ex) when (ex is BookFormatException or BookIoException)
+        catch (Exception ex) when (ex is BookFormatException or BookIoException or NotSupportedException)
         {
-            Log.Error($"Could not save '{_path}'", ex);
+            Log.Error($"Could not save '{book.Path}'", ex);
             MessageBox.Show(this, ex.Message, Strings.Get("app.name"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }

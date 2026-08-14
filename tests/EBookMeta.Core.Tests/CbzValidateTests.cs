@@ -17,26 +17,35 @@ namespace EBookMeta.Tests;
 /// </remarks>
 public sealed class CbzValidateTests
 {
-    private static string[] Rules(string path)
+    /// <summary>
+    /// Everything opening the file noticed, whether or not it opened.
+    /// </summary>
+    /// <remarks>
+    /// There is no validate call to make: the rules run as part of the load, so this
+    /// is a load. The fatal case is a document that cannot be parsed at all, which
+    /// throws — and the finding that says so is published on the way out, which is
+    /// why the sink is read after the catch rather than the return value.
+    /// </remarks>
+    private static List<Finding> Load(string path)
     {
-        using ZipContainer container = ZipContainer.Open(path);
+        var findings = new List<Finding>();
 
-        // A fresh model rather than a read one: the fatal case is a document that
-        // cannot be read at all, and validation still has to work on it.
-        return [.. new CbzHandler()
-            .Validate(container, new BookMetadata())
-            .Select(f => f.RuleId)
-            .OrderBy(id => id, StringComparer.Ordinal)];
+        try
+        {
+            Book.Load(path, ReadOptions.WithoutCover, findings);
+        }
+        catch (BookFormatException)
+        {
+        }
+
+        return findings;
     }
 
-    private static Finding Single(string path, string ruleId)
-    {
-        using ZipContainer container = ZipContainer.Open(path);
+    private static string[] Rules(string path) =>
+        [.. Load(path).Select(f => f.RuleId).OrderBy(id => id, StringComparer.Ordinal)];
 
-        return new CbzHandler()
-            .Validate(container, new BookMetadata())
-            .Single(f => f.RuleId == ruleId);
-    }
+    private static Finding Single(string path, string ruleId) =>
+        Load(path).Single(f => f.RuleId == ruleId);
 
     [Fact]
     public void A_valid_archive_has_no_findings()
@@ -57,8 +66,13 @@ public sealed class CbzValidateTests
 
         Finding finding = Single(path, "CBZ-F001");
         Assert.Equal(Severity.Fatal, finding.Severity);
-        Assert.True(finding.BlocksEditing);
         Assert.Equal("ComicInfo.xml", finding.Location);
+
+        // Fatal means the open fails, not that it returns a book with a complaint
+        // attached. There is nothing to recover: no declaration is missing, and
+        // invariant 15 forbids guessing further.
+        using var container = ZipContainer.Open(path);
+        Assert.Throws<BookFormatException>(() => new CbzHandler().Read(container));
     }
 
     /// <summary>

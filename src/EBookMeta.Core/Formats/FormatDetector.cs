@@ -148,13 +148,10 @@ public static class FormatDetector
             + (detail is null ? string.Empty : $" ({detail})")
             + $" from {read} header bytes of '{fileName ?? "(stream)"}'.");
 
-        if (!result.ExtensionAgrees)
-        {
-            Log.Warning(
-                $"'{fileName}' has the extension of {FormatIds.ToDisplayName(claimed)} "
-                + $"but its content is {FormatIds.ToDisplayName(result.Format)}.");
-        }
-
+        // The disagreement is not logged here. Detection is a question, not a
+        // verdict, and the same file is often sniffed more than once; reporting it
+        // from one place — Book.Load, as rule GEN-W002 — is what keeps it to one
+        // line in the log with a rule ID attached.
         return result;
     }
 
@@ -237,16 +234,12 @@ public static class FormatDetector
 
         if (firstEntry is not null)
         {
-            if (firstEntry.Equals("mimetype", StringComparison.Ordinal))
+            if (firstEntry.Equals("mimetype", StringComparison.Ordinal) &&
+                firstEntryData.StartsWith(EpubMediaType))
             {
-                // Check the declared media type rather than trusting the entry
-                // name: a CBZ could contain a file called mimetype too.
-                if (firstEntryData.StartsWith(EpubMediaType))
-                {
-                    return (FormatId.Epub, ContainerKind.Zip, "mimetype declares application/epub+zip");
-                }
-
-                return (FormatId.UnknownZip, ContainerKind.Zip, "mimetype entry with unexpected content");
+                // The content is checked rather than the name alone, because a CBZ
+                // could contain a file called mimetype too.
+                return (FormatId.Epub, ContainerKind.Zip, "mimetype declares application/epub+zip");
             }
 
             (FormatId, ContainerKind, string?)? byName = ClassifyByEntryName(firstEntry, "first entry");
@@ -257,8 +250,15 @@ public static class FormatDetector
         }
 
         // Inconclusive: a non-conformant EPUB with mimetype somewhere other than
-        // first, or a comic whose first entry is a stray file. Fall back to the
+        // first, or one whose mimetype is compressed so its bytes cannot be read
+        // inline, or a comic whose first entry is a stray file. Fall back to the
         // central directory — names only, nothing decompressed.
+        //
+        // A compressed mimetype used to stop here and be reported as an anonymous
+        // ZIP, which meant the one kind of broken EPUB this tool can repair
+        // outright — rule EPUB-E040, fixed by storing the entry on save — was the
+        // one it refused to open. Recognising the format is not the same as
+        // endorsing the file: the defect is still reported, and still corrected.
         return IdentifyZipFromCentralDirectory(stream, origin);
     }
 
