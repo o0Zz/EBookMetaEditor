@@ -12,62 +12,15 @@ namespace EBookMeta.Documents;
 public sealed partial class OpfDocument
 {
     /// <summary>
-    /// Characters between the XML declaration and the rest of the document.
-    /// </summary>
-    internal string PrologSeparator { get; private set; } = string.Empty;
-
-    /// <summary>Characters after the root element — usually a trailing newline.</summary>
-    internal string Epilogue { get; private set; } = string.Empty;
-
-    /// <summary>
-    /// Whether the source wrote empty elements as <c>&lt;x /&gt;</c> rather than
-    /// <c>&lt;x/&gt;</c>.
-    /// </summary>
-    internal bool SelfClosingHasSpace { get; private set; }
-
-    /// <summary>The line ending the source used.</summary>
-    internal string NewLine { get; private set; } = "\n";
-
-    /// <summary>
     /// Serialises the document back to bytes.
     /// </summary>
     /// <returns>The complete package document.</returns>
     /// <remarks>
-    /// <para>
-    /// Formatting is disabled and whitespace was preserved on load, so an
-    /// untouched document serialises to exactly the characters it arrived as,
-    /// and a one-field edit produces a one-line diff. Reformatting a file the
-    /// user did not ask to reformat would bury their actual change.
-    /// </para>
-    /// <para>
-    /// The declaration is re-emitted as the literal text it arrived as rather
-    /// than through <c>XDeclaration</c>, whose round trip is not
-    /// character-exact — it can change attribute quoting or drop
-    /// <c>standalone</c>.
-    /// </para>
+    /// An untouched document serialises to exactly the characters it arrived as,
+    /// and a one-field edit produces a one-line diff — see
+    /// <see cref="XmlSourceFormat"/> for what that costs and why.
     /// </remarks>
-    public byte[] Serialize()
-    {
-        string body = Document.Root is null
-            ? string.Empty
-            : XmlExactWriter.Write(Document.Root, SelfClosingHasSpace);
-
-        if (NewLine != "\n")
-        {
-            // Restore the source's line endings, which XML parsing normalised
-            // away. The body contains only LF at this point, so this cannot
-            // double up existing CRLFs.
-            body = body.Replace("\n", NewLine);
-        }
-
-        string text = DeclarationText is null
-            ? body + Epilogue
-            : DeclarationText + PrologSeparator + body + Epilogue;
-
-        // Shared with the repair path, which has to re-encode the same document
-        // after a surgical edit and must preserve the BOM identically.
-        return XmlBytes.Encode(text, Encoding);
-    }
+    public byte[] Serialize() => Format.Compose(Document.Root);
 
     /// <summary>
     /// Applies metadata to the document, writing both EPUB 2 and EPUB 3
@@ -125,12 +78,27 @@ public sealed partial class OpfDocument
 
     private void ApplyTitle(XElement metadataElement, BookMetadata current, BookMetadata metadata)
     {
+        XElement? title = DcElements("title").FirstOrDefault();
+
         if (metadata.Title is null)
         {
+            if (title is null)
+            {
+                return;
+            }
+
+            // Removed rather than ignored. A cleared field that quietly keeps its
+            // old value is the worst of the three options: the user is told nothing
+            // and the editor then disagrees with the file. The publication is now
+            // missing a required element, which is what rule EPUB-E012 is for.
+            Log.Warning(
+                $"The title was cleared, so '{EntryName}' no longer has a dc:title. "
+                + "EPUB requires one, and readers will show the file name instead.");
+
+            RemoveRefinement(title, null);
+            RemoveWithWhitespace(title);
             return;
         }
-
-        XElement? title = DcElements("title").FirstOrDefault();
 
         if (title is null)
         {
@@ -400,14 +368,25 @@ public sealed partial class OpfDocument
 
     private void ApplyDate(XElement metadataElement, BookMetadata current, BookMetadata metadata)
     {
-        if (metadata.PublicationDate is null ||
-            Same(current.PublicationDate?.Raw, metadata.PublicationDate.Raw))
+        if (Same(current.PublicationDate?.Raw, metadata.PublicationDate?.Raw))
         {
             return;
         }
 
         XElement? date = DcElements("date")
             .FirstOrDefault(e => (string?)e.Attribute(OpfNs + "event") is null or "publication");
+
+        if (metadata.PublicationDate is null)
+        {
+            // Cleared, so the element goes. Unlike the title, nothing requires a
+            // publication date, so this needs no warning.
+            if (date is not null)
+            {
+                RemoveWithWhitespace(date);
+            }
+
+            return;
+        }
 
         date ??= AddDcElement(metadataElement, "date", position: null);
 

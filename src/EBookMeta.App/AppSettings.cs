@@ -47,6 +47,17 @@ internal sealed class AppSettings
     /// <summary>Whether the window was last maximised.</summary>
     internal bool WindowMaximised { get; set; }
 
+    /// <summary>The last bounds of the batch window, which is sized separately.</summary>
+    /// <remarks>
+    /// Its own setting rather than sharing the editor's, because the two windows
+    /// want different shapes: a form over one file is tall and narrow, a grid over
+    /// four hundred is wide.
+    /// </remarks>
+    internal Rectangle BatchWindowBounds { get; set; } = Rectangle.Empty;
+
+    /// <summary>Whether the batch window was last maximised.</summary>
+    internal bool BatchWindowMaximised { get; set; }
+
     /// <summary>
     /// The extensions the context-menu button registers.
     /// </summary>
@@ -97,6 +108,8 @@ internal sealed class AppSettings
         Append(json, "rememberWindowGeometry", RememberWindowGeometry ? "true" : "false", quote: false);
         Append(json, "windowMaximised", WindowMaximised ? "true" : "false", quote: false);
         Append(json, "windowBounds", FormatBounds(WindowBounds), quote: true);
+        Append(json, "batchWindowMaximised", BatchWindowMaximised ? "true" : "false", quote: false);
+        Append(json, "batchWindowBounds", FormatBounds(BatchWindowBounds), quote: true);
         Append(json, "registeredExtensions", string.Join(";", RegisteredExtensions), quote: true);
         json.Length -= 2; // trailing ",\n"
         json.Append("\n}\n");
@@ -130,6 +143,12 @@ internal sealed class AppSettings
                 break;
             case "windowBounds":
                 settings.WindowBounds = ParseBounds(value);
+                break;
+            case "batchWindowMaximised":
+                settings.BatchWindowMaximised = value == "true";
+                break;
+            case "batchWindowBounds":
+                settings.BatchWindowBounds = ParseBounds(value);
                 break;
             case "registeredExtensions":
                 settings.RegisteredExtensions = value

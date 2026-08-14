@@ -143,14 +143,19 @@ public sealed class EpubHandler : IFormatHandler
     }
 
     /// <inheritdoc />
-    public BookMetadata Read(IContainer container)
+    public BookMetadata Read(IContainer container, ReadOptions? options = null)
     {
         Throw.IfNull(container);
+
+        options ??= ReadOptions.Default;
 
         OpfDocument opf = OpenPackageDocument(container);
         BookMetadata metadata = opf.ReadMetadata();
 
-        ReadCover(container, opf, metadata);
+        if (options.IncludeCover)
+        {
+            ReadCover(container, opf, metadata);
+        }
 
         Log.Info(
             $"Read EPUB {opf.Version ?? "(unversioned)"} metadata from '{opf.EntryName}': "

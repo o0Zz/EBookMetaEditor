@@ -42,6 +42,20 @@ public interface IContainer : IDisposable
     /// </remarks>
     IReadOnlyList<ContainerEntry> Entries { get; }
 
+    /// <summary>
+    /// Data the container carries outside its entries, which a rebuild would not
+    /// reproduce — a ZIP's archive comment. <see langword="null"/> when there is
+    /// none, which is the ordinary case.
+    /// </summary>
+    /// <remarks>
+    /// On the interface rather than on <c>ZipContainer</c> because a handler has
+    /// to be able to refuse a write that would lose it, and refusing is a
+    /// decision about the user's file, not about ZIP. Comic archives sometimes
+    /// store a ComicBookLover JSON blob here, and
+    /// <c>System.IO.Compression</c> cannot write one back.
+    /// </remarks>
+    string? ArchiveComment { get; }
+
     /// <summary>Opens a readable stream over an entry's decompressed content.</summary>
     /// <param name="entry">An entry from <see cref="Entries"/>.</param>
     /// <returns>A readable stream; the caller disposes it.</returns>

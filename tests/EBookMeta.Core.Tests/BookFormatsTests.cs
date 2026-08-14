@@ -99,7 +99,7 @@ public sealed class BookFormatsTests
 
         public FormatCapabilities Capabilities => new() { Format = Id, ReadableFields = MetadataField.None };
 
-        public BookMetadata Read(IContainer container) => new();
+        public BookMetadata Read(IContainer container, ReadOptions? options = null) => new();
 
         public void Write(IContainer container, BookMetadata metadata, string targetPath) =>
             throw new NotSupportedException();

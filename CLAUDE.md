@@ -58,9 +58,11 @@ blob in the ZIP archive comment. Read all three, write `ComicInfo.xml`,
 preserve the others untouched.
 
 Note on that last point: `System.IO.Compression` cannot write a ZIP archive
-comment. A CBZ carrying a ComicBookLover blob therefore cannot currently be
-rebuilt with it intact. Resolve this before CBZ writing ships — either by
-refusing to write such files, or by warning the user that the blob will be lost.
+comment, so a CBZ carrying a ComicBookLover blob cannot be rebuilt with it
+intact. **Resolved by refusing:** `CbzHandler.Write` throws rather than saving
+such a file, and `CBZ-W012` reports the blob on open. Losing a user's
+ComicBookLover metadata to a title edit is not a trade this tool makes on their
+behalf, and a warning they can dismiss is not consent.
 
 ## Target and deployment
 
@@ -88,18 +90,20 @@ src/
     BookFormats.cs         the handler registry: Register / For / Resolve
     BookExceptions.cs      BookFormatException, BookIoException
     AtomicFileWriter.cs    the only sanctioned way a user's file is replaced
+    BatchSession.cs        many files read, edited and saved together
+    MetadataFields.cs      the text projection of a field, shared by both editors
     Finding.cs             Finding + Severity
     NamespaceRepair.cs     recovery of missing xmlns declarations
     Log.cs                 the session log: Info / Warning / Error / Finding
     Compat.cs              everything net48 lacks, in one file
     Containers/        IContainer + ZipContainer
-    Formats/           IFormatHandler, EpubHandler, FormatDetector,
-                       FormatCapabilities, FormatId
-    Documents/         OpfDocument, ComicInfoDocument
+    Formats/           IFormatHandler, EpubHandler, CbzHandler, FormatDetector,
+                       FormatCapabilities, FormatId, ReadOptions
+    Documents/         OpfDocument, ComicInfoDocument, XmlSourceFormat
     Model/             BookMetadata, Creator, Identifier, SeriesInfo, CoverImage
-  EBookMeta.App/        net48          — WinForms, single instance, argv[0] = path
-                       MainForm, SettingsForm, LogForm, AboutForm,
-                       ShellRegistration
+  EBookMeta.App/        net48          — WinForms, single instance, argv = paths
+                       MainForm, BatchForm, SettingsForm, LogForm, AboutForm,
+                       ShellRegistration, SingleInstance, AppIcon
 tests/
   EBookMeta.Core.Tests/ net48
     Fixtures/          golden expected-byte files only
@@ -223,6 +227,43 @@ Two rules that matter more than the model itself:
   MARC relators. Keep the native role string alongside the mapped one; when
   writing back to the originating format, prefer the native string.
 
+### Editing many files at once
+
+`BatchSession` is the batch equivalent of what the single-file window does, and
+deliberately the same machinery underneath: one `AtomicFileWriter.Write` per
+file, with the container reopened inside the callback. There is no batch write
+path, because a second way to replace a user's file is the last thing this
+codebase needs.
+
+- **No transaction across files.** Twenty files are twenty independent saves. One
+  that fails leaves its own file untouched, does not stop the other nineteen, and
+  says why on its own row. Rolling back nineteen good writes because the
+  twentieth was read-only would be worse behaviour, not better.
+- **Only edited files are written.** `BatchEntry` snapshots the text of every
+  field on read, so dirtiness is "differs from what is on disk" rather than
+  "somebody touched this row". Typing a value and typing it back writes nothing.
+  A file nobody edited is not rewritten byte-identically — it is not opened.
+- **Covers are not read** (`ReadOptions.WithoutCover`). A grid of titles has no
+  use for three hundred full-size images.
+- **Capabilities gate per cell, not per window.** A row's format decides which of
+  its cells are editable, so `Sort title` is dead on a comic and live on a book
+  in the same column. `BatchEntry.Apply` refuses a field the format cannot store
+  even if a caller asks, which is what stops a bulk "apply to every selected row"
+  from writing into files that would discard it.
+- `Load` reads only `Pending` entries, so adding files later is cheap and calling
+  it twice cannot discard unsaved edits by re-reading the files they were made
+  against. There is deliberately no reload.
+- Validation is separate and on demand. Validating a folder means opening every
+  archive again, which is not something to do before the first row appears.
+
+**Both editors share `MetadataFields`.** The rules for what a field looks like in
+a box and what typing in it does to the model — authors split on semicolons,
+subjects on commas, a date kept as the characters the file used, a sort name
+carried forward only when its author did not change — live in Core, once. Those
+early-return checks are what make "open a file and save it without editing"
+byte-identical, and a second implementation would keep that property for one
+editor and quietly lose it for the other.
+
 ## Hard invariants
 
 Not style preferences. Violating these corrupts users' libraries.
@@ -344,6 +385,11 @@ The validator is the core value of this project. Rules are data, not scattered
 severity, message and optional autofix. Adding a rule must not require
 touching the engine.
 
+**That engine does not exist yet.** Today each handler's `Validate` builds a
+`List<Finding>` directly, and the rule IDs below are the stable part. Follow the
+existing shape when adding a rule rather than inventing half an engine for it;
+introducing `IRule` properly is its own change.
+
 IDs are namespaced by format. `F` = fatal (cannot edit), `E` = error,
 `W` = warning.
 
@@ -459,8 +505,9 @@ there is no separate setup executable. For each supported extension:
 
 ```
 HKCU\Software\Classes\SystemFileAssociations\<.ext>\shell\EBookMetaEditorEdit
-  (default) = "Edit metadata"
-  Icon      = "<exe>,0"
+  (default)        = "Edit metadata"
+  Icon             = "<exe>,0"
+  MultiSelectModel = "Player"
 HKCU\Software\Classes\SystemFileAssociations\<.ext>\shell\EBookMetaEditorEdit\command
   (default) = "\"<exe>\" \"%1\""
 ```
@@ -469,6 +516,14 @@ Use `SystemFileAssociations`, not `HKCU\Software\Classes\<.ext>` — the latter
 hijacks the user's default association. Registration is opt-in per format group
 (ebooks / comics) so a user can tag comics without touching EPUB. Register only
 `.epub` and `.cbz`; do not register formats the app cannot open.
+
+`MultiSelectModel = "Player"` asks Explorer to invoke the verb **once** with the
+whole selection rather than once per file, which is what makes right-clicking
+thirty comics open one window with thirty rows. It is a request, not a guarantee:
+Explorer still falls back to one process per file, and hides the verb entirely
+past its own item limit (around fifteen). The single-instance forwarding in
+`SingleInstance` covers the fallback, and Open-folder and drag-and-drop cover the
+limit — which is why all three exist rather than any one of them.
 
 Never write to `HKLM`. Never touch `HKCU\...\Explorer\FileExts` — that is the
 user's choice of default app. An `IExplorerCommand` COM handler for the
@@ -493,7 +548,15 @@ This is a product requirement — the whole point is right-click, fix, close.
   `CBZ-E020`, `CBZ-W021`) run **lazily**, on request rather than on open.
   A 300-page CBZ must not be walked on launch.
 - Decode the cover image off the UI thread.
-- Single instance: a second launch forwards its path to the running process.
+- Single instance: a named mutex decides who is first, and later launches hand
+  their paths over a named pipe and exit (`SingleInstance`). Both names are
+  per-user and per-session. Forwarding failure is never fatal — the second
+  process opens its own window, because a duplicate window is a smaller problem
+  than a file the user asked for that never appeared.
+- **The batch grid is exempt from the 400 ms budget**, and the exemption is the
+  point of stating it: that budget is about right-clicking one file. A folder of
+  five hundred books cannot be read in 400 ms and must not pretend to be, so the
+  grid shows its rows immediately and fills them in as reads complete.
 
 ## Style
 
@@ -508,8 +571,9 @@ This is a product requirement — the whole point is right-click, fix, close.
 
 ## Working style for Claude
 
-- EPUB first, CBZ second. Do not start CBZ writing while EPUB round-trip tests
-  are red.
+- Both formats are implemented. Never touch a serialisation path while the
+  round-trip or golden-byte tests for either one are red — they are the only thing
+  standing between a bug and a corrupted library.
 - Prefer Core changes + tests over touching the UI. UI is the last step of a
   feature, not the first.
 - When adding a format, the order is: builder → sniffer → read → validate →

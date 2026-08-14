@@ -27,13 +27,19 @@ public interface IFormatHandler
     /// The metadata document is missing or too malformed to parse. Repair is
     /// offered separately; this means the read could not produce a result.
     /// </exception>
+    /// <param name="options">
+    /// How much to read. <see langword="null"/> means
+    /// <see cref="ReadOptions.Default"/>, which reads everything — the optional
+    /// parameter exists so a single-file editor never has to say so, while a batch
+    /// read can ask for metadata without covers.
+    /// </param>
     /// <remarks>
-    /// Reads only the metadata document. It does not enumerate, hash or
-    /// decompress the rest of the archive — a 300-page comic must not be walked
-    /// just to show its title, because cold launch to a populated window has a
-    /// 400 ms budget.
+    /// Reads only the metadata document, plus the cover when asked for one. It does
+    /// not enumerate, hash or decompress the rest of the archive — a 300-page comic
+    /// must not be walked just to show its title, because cold launch to a
+    /// populated window has a 400 ms budget.
     /// </remarks>
-    BookMetadata Read(IContainer container);
+    BookMetadata Read(IContainer container, ReadOptions? options = null);
 
     /// <summary>
     /// Writes metadata, producing a complete new file at

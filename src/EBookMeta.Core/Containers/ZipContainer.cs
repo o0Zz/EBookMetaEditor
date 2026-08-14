@@ -59,14 +59,13 @@ public sealed class ZipContainer : IContainer
     /// <summary>The file this container was opened from, when it came from one.</summary>
     public string? Path { get; }
 
-    /// <summary>
-    /// The archive-level comment, or <see langword="null"/>.
-    /// </summary>
+    /// <inheritdoc />
     /// <remarks>
     /// Comic archives sometimes store a ComicBookLover JSON blob here.
     /// <c>System.IO.Compression</c> cannot write archive comments, so
-    /// <see cref="Rebuild"/> does not reproduce this — a limitation that needs
-    /// resolving before CBZ writing ships in phase 2.
+    /// <see cref="Rebuild"/> does not reproduce this — which is why
+    /// <c>CbzHandler</c> refuses to write a file that has one rather than
+    /// dropping it.
     /// </remarks>
     public string? ArchiveComment { get; }
 

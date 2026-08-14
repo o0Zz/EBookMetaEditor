@@ -59,6 +59,36 @@ public sealed class EpubWriteTests
     }
 
     /// <summary>
+    /// Clearing a field has to reach the file. Silently keeping the old value would
+    /// be the worst of the three possible behaviours: worse than removing it, and
+    /// worse than refusing, because the user is told nothing and the grid then
+    /// disagrees with the disk.
+    /// </summary>
+    [Fact]
+    public void Clearing_the_title_removes_it()
+    {
+        using var temp = new TempDir();
+        string source = new EpubBuilder().WriteTo(temp.File("valid-epub3.epub"));
+        string target = temp.File("saved.epub");
+
+        Write(source, target, m => m.Title = null);
+
+        Assert.Null(Read(target).Title);
+    }
+
+    [Fact]
+    public void Clearing_the_publication_date_removes_it()
+    {
+        using var temp = new TempDir();
+        string source = new EpubBuilder().WriteTo(temp.File("valid-epub3.epub"));
+        string target = temp.File("saved.epub");
+
+        Write(source, target, m => m.PublicationDate = null);
+
+        Assert.Null(Read(target).PublicationDate);
+    }
+
+    /// <summary>
     /// Hard invariant 7. Readers reject an EPUB whose <c>mimetype</c> is not the
     /// first entry, stored uncompressed, with exactly the right content.
     /// </summary>

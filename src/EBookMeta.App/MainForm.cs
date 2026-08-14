@@ -14,7 +14,7 @@ namespace EBookMeta.App;
 /// media type, and the <see cref="Bitmap"/> is constructed here — Core has no
 /// idea what an image is.
 /// </remarks>
-internal sealed class MainForm : Form
+internal sealed class MainForm : Form, IPathReceiver
 {
     private readonly AppSettings _settings;
     private readonly TextBox _title = NewText();
@@ -34,9 +34,36 @@ internal sealed class MainForm : Form
         BackColor = SystemColors.ControlLight,
     };
 
+    /// <summary>
+    /// Every text field paired with the model field it edits.
+    /// </summary>
+    /// <remarks>
+    /// One list drives populating, capability gating and collecting, so a field
+    /// cannot be shown but not saved, or saved but never disabled for a format
+    /// that has nowhere to put it. Order matters: the series name carries the
+    /// index, so it is applied first.
+    /// </remarks>
+    private readonly (MetadataField Field, TextBox Box)[] _fields;
+
     private readonly StatusStrip _status = new();
     private readonly ToolStripStatusLabel _statusText = new() { Spring = true, TextAlign = ContentAlignment.MiddleLeft };
     private readonly ToolStripMenuItem _saveItem;
+
+    /// <summary>
+    /// Paths that arrived from other launches, waiting to be dealt with together.
+    /// </summary>
+    /// <remarks>
+    /// Explorer starts one process per selected file, so a selection of thirty
+    /// arrives here as thirty separate deliveries within a few hundred
+    /// milliseconds. Acting on the first would open a batch of two and then fight
+    /// the next twenty-nine, so they are collected behind a timer that restarts on
+    /// each arrival and fires once the flurry stops.
+    /// </remarks>
+    private readonly List<string> _handoverPaths = [];
+
+    // Fully qualified: the implicit usings bring in System.Threading, where there is
+    // a different Timer that does not marshal to the UI thread.
+    private readonly System.Windows.Forms.Timer _handover = new();
 
     private string? _initialPath;
     private string? _path;
@@ -51,10 +78,44 @@ internal sealed class MainForm : Form
     {
         _settings = settings;
 
+        _fields =
+        [
+            (MetadataField.Title, _title),
+            (MetadataField.SortTitle, _sortTitle),
+            (MetadataField.Creators, _authors),
+            (MetadataField.Series, _series),
+            (MetadataField.SeriesIndex, _seriesIndex),
+            (MetadataField.Publisher, _publisher),
+            (MetadataField.PublicationDate, _published),
+            (MetadataField.Language, _language),
+            (MetadataField.Subjects, _subjects),
+            (MetadataField.Description, _description),
+        ];
+
         Text = "EBookMetaEditor";
         AppIcon.Apply(this);
         ClientSize = new Size(880, 560);
         MinimumSize = new Size(700, 480);
+        AllowDrop = true;
+
+        DragEnter += (_, e) => e.Effect = e.Data?.GetDataPresent(DataFormats.FileDrop) == true
+            ? DragDropEffects.Copy
+            : DragDropEffects.None;
+
+        DragDrop += (_, e) =>
+        {
+            if (e.Data?.GetData(DataFormats.FileDrop) is string[] dropped)
+            {
+                AcceptPaths(dropped);
+            }
+        };
+
+        // Only forwarded paths are debounced, never the one from the command line:
+        // delaying the ordinary right-click by half a second to see whether more
+        // files are coming would spend the entire startup budget waiting for
+        // something that usually never arrives.
+        _handover.Interval = 600;
+        _handover.Tick += (_, _) => HandOverToBatch();
 
         _saveItem = new ToolStripMenuItem("&Save", null, (_, _) => Save())
         {
@@ -66,6 +127,10 @@ internal sealed class MainForm : Form
         file.DropDownItems.Add(new ToolStripMenuItem("&Open…", null, (_, _) => OpenWithDialog())
         {
             ShortcutKeys = Keys.Control | Keys.O,
+        });
+        file.DropDownItems.Add(new ToolStripMenuItem("&Batch edit folder…", null, (_, _) => OpenFolder())
+        {
+            ShortcutKeys = Keys.Control | Keys.B,
         });
         file.DropDownItems.Add(_saveItem);
         file.DropDownItems.Add(new ToolStripSeparator());
@@ -177,13 +242,106 @@ internal sealed class MainForm : Form
         using var dialog = new OpenFileDialog
         {
             Title = "Open a book or comic",
+            Multiselect = true,
             Filter = "Supported files (*.epub;*.cbz)|*.epub;*.cbz|EPUB (*.epub)|*.epub|Comic archive (*.cbz)|*.cbz|All files (*.*)|*.*",
+        };
+
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        if (dialog.FileNames.Length == 1)
+        {
+            Open(dialog.FileNames[0]);
+            return;
+        }
+
+        OpenBatch(dialog.FileNames);
+    }
+
+    private void OpenFolder()
+    {
+        using var dialog = new FolderBrowserDialog
+        {
+            Description = "Edit the metadata of every book and comic in a folder",
         };
 
         if (dialog.ShowDialog(this) == DialogResult.OK)
         {
-            Open(dialog.FileName);
+            OpenBatch([dialog.SelectedPath]);
         }
+    }
+
+    /// <inheritdoc />
+    public void AcceptPaths(string[] paths)
+    {
+        Activate();
+
+        if (paths.Length == 0)
+        {
+            return;
+        }
+
+        _handoverPaths.AddRange(paths);
+
+        _handover.Stop();
+        _handover.Start();
+    }
+
+    /// <summary>
+    /// Deals with everything that arrived while the timer was running.
+    /// </summary>
+    /// <remarks>
+    /// One file with nothing already open is just an open. Anything else is a batch,
+    /// and the file this window is already showing joins it — a user who right-clicks
+    /// a second book expects both, not a window that forgot the first.
+    /// </remarks>
+    private void HandOverToBatch()
+    {
+        _handover.Stop();
+
+        if (_handoverPaths.Count == 0)
+        {
+            return;
+        }
+
+        string[] arrived = [.. _handoverPaths];
+        _handoverPaths.Clear();
+
+        if (arrived.Length == 1 && _path is null && !Directory.Exists(arrived[0]))
+        {
+            Open(arrived[0]);
+            return;
+        }
+
+        OpenBatch(_path is null ? arrived : [_path, .. arrived]);
+    }
+
+    /// <summary>
+    /// Opens the batch grid over the given paths and steps out of its way.
+    /// </summary>
+    /// <remarks>
+    /// This window hides rather than closes, because it owns the message loop: the
+    /// application ends when it does. It comes back when the grid is closed, which is
+    /// also what gives the user somewhere to land rather than the process
+    /// disappearing.
+    /// </remarks>
+    private void OpenBatch(IEnumerable<string> paths)
+    {
+        var batch = new BatchForm(_settings, paths);
+
+        batch.FormClosed += (_, _) =>
+        {
+            if (!IsDisposed)
+            {
+                Show();
+                Activate();
+            }
+        };
+
+        Hide();
+        batch.Show();
     }
 
     private void Open(string path)
@@ -239,19 +397,18 @@ internal sealed class MainForm : Form
         }
     }
 
+    /// <summary>Fills the form from the model.</summary>
+    /// <remarks>
+    /// Field text comes from <see cref="MetadataFields"/> rather than from
+    /// per-control code here, so this window and the batch grid show a value
+    /// identically and write it back identically.
+    /// </remarks>
     private void Populate(BookMetadata m)
     {
-        _title.Text = m.Title ?? string.Empty;
-        _sortTitle.Text = m.SortTitle ?? string.Empty;
-        _authors.Text = string.Join("; ", m.Creators.Where(c => c.Kind == CreatorKind.Creator).Select(c => c.Name));
-        _series.Text = m.Series?.Name ?? string.Empty;
-        _seriesIndex.Text = m.Series?.Index?.ToString(System.Globalization.CultureInfo.InvariantCulture)
-            ?? m.Series?.RawIndex ?? string.Empty;
-        _publisher.Text = m.Publisher ?? string.Empty;
-        _published.Text = m.PublicationDate?.Raw ?? string.Empty;
-        _language.Text = m.Language ?? string.Empty;
-        _subjects.Text = string.Join(", ", m.Subjects);
-        _description.Text = m.Description ?? string.Empty;
+        foreach ((MetadataField field, TextBox box) in _fields)
+        {
+            box.Text = MetadataFields.Read(m, field);
+        }
 
         ShowCover(m.Cover);
     }
@@ -308,23 +465,12 @@ internal sealed class MainForm : Form
     /// </remarks>
     private void ApplyCapabilities(FormatCapabilities capabilities)
     {
-        Enable(_title, capabilities, MetadataField.Title);
-        Enable(_sortTitle, capabilities, MetadataField.SortTitle);
-        Enable(_authors, capabilities, MetadataField.Creators);
-        Enable(_series, capabilities, MetadataField.Series);
-        Enable(_seriesIndex, capabilities, MetadataField.SeriesIndex);
-        Enable(_publisher, capabilities, MetadataField.Publisher);
-        Enable(_published, capabilities, MetadataField.PublicationDate);
-        Enable(_language, capabilities, MetadataField.Language);
-        Enable(_subjects, capabilities, MetadataField.Subjects);
-        Enable(_description, capabilities, MetadataField.Description);
-    }
-
-    private static void Enable(Control control, FormatCapabilities capabilities, MetadataField field)
-    {
-        bool writable = (capabilities.WritableFields & field) == field;
-        control.Enabled = writable;
-        control.BackColor = writable ? SystemColors.Window : SystemColors.Control;
+        foreach ((MetadataField field, TextBox box) in _fields)
+        {
+            bool writable = capabilities.CanWriteAll(field);
+            box.Enabled = writable;
+            box.BackColor = writable ? SystemColors.Window : SystemColors.Control;
+        }
     }
 
     /// <summary>Records what the handler found out about the file, in the log.</summary>
@@ -391,113 +537,19 @@ internal sealed class MainForm : Form
     }
 
     /// <summary>Reads the form back into the model.</summary>
+    /// <remarks>
+    /// Every field goes through <see cref="MetadataFields.Apply"/>, which leaves
+    /// the model alone when the text has not changed. That is what makes opening a
+    /// file and saving it produce identical bytes, and it is shared with the batch
+    /// grid so both editors mean the same thing by an edit.
+    /// </remarks>
     private void CollectInto(BookMetadata m)
     {
-        m.Title = Nullable(_title.Text);
-        m.SortTitle = Nullable(_sortTitle.Text);
-        m.Publisher = Nullable(_publisher.Text);
-        m.Language = Nullable(_language.Text);
-        m.Description = Nullable(_description.Text);
-
-        string? published = Nullable(_published.Text);
-        if (published != m.PublicationDate?.Raw)
+        foreach ((MetadataField field, TextBox box) in _fields)
         {
-            m.PublicationDate = published is null
-                ? null
-                : EBookMeta.Documents.OpfDocument.ParseDate(published);
-        }
-
-        UpdateCreators(m);
-        UpdateSeries(m);
-        UpdateSubjects(m);
-    }
-
-    private void UpdateCreators(BookMetadata m)
-    {
-        string[] names = _authors.Text
-            .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
-            .Select(n => n.Trim())
-            .Where(n => n.Length > 0)
-            .ToArray();
-
-        List<Creator> primaries = m.Creators.Where(c => c.Kind == CreatorKind.Creator).ToList();
-
-        if (names.Length == primaries.Count &&
-            names.SequenceEqual(primaries.Select(c => c.Name), StringComparer.Ordinal))
-        {
-            return;
-        }
-
-        // Rebuild only the primary creators, leaving contributors untouched —
-        // the form does not expose them, so it must not delete them either.
-        List<Creator> contributors = m.Creators.Where(c => c.Kind == CreatorKind.Contributor).ToList();
-        m.Creators.Clear();
-
-        for (int i = 0; i < names.Length; i++)
-        {
-            Creator? previous = i < primaries.Count ? primaries[i] : null;
-
-            m.Creators.Add(new Creator
-            {
-                Name = names[i],
-                // Keep the sort name and role only where the name itself did not
-                // change; carrying "Gaiman, Neil" onto a different author would
-                // be worse than leaving it empty.
-                SortName = previous is not null && previous.Name == names[i] ? previous.SortName : null,
-                NativeRole = previous is not null && previous.Name == names[i] ? previous.NativeRole : "aut",
-                Role = previous is not null && previous.Name == names[i] ? previous.Role : "aut",
-                SourceId = previous is not null && previous.Name == names[i] ? previous.SourceId : null,
-                Kind = CreatorKind.Creator,
-            });
-        }
-
-        foreach (Creator contributor in contributors)
-        {
-            m.Creators.Add(contributor);
+            MetadataFields.Apply(m, field, box.Text);
         }
     }
-
-    private void UpdateSeries(BookMetadata m)
-    {
-        string? name = Nullable(_series.Text);
-
-        if (name is null)
-        {
-            m.Series = null;
-            return;
-        }
-
-        string? raw = Nullable(_seriesIndex.Text);
-
-        m.Series = decimal.TryParse(
-                raw, System.Globalization.NumberStyles.Number,
-                System.Globalization.CultureInfo.InvariantCulture, out decimal index)
-            ? new SeriesInfo { Name = name, Index = index }
-            : new SeriesInfo { Name = name, RawIndex = raw };
-    }
-
-    private void UpdateSubjects(BookMetadata m)
-    {
-        string[] subjects = _subjects.Text
-            .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
-            .Select(s => s.Trim())
-            .Where(s => s.Length > 0)
-            .ToArray();
-
-        if (subjects.SequenceEqual(m.Subjects, StringComparer.Ordinal))
-        {
-            return;
-        }
-
-        m.Subjects.Clear();
-        foreach (string subject in subjects)
-        {
-            m.Subjects.Add(subject);
-        }
-    }
-
-    private static string? Nullable(string text) =>
-        string.IsNullOrWhiteSpace(text) ? null : text.Trim();
 
     private void ShowLog()
     {

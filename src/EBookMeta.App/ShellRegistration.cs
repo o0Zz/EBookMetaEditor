@@ -106,6 +106,14 @@ internal static class ShellRegistration
         verb.SetValue(null, VerbLabel);
         verb.SetValue("Icon", exe + ",0");
 
+        // Asks Explorer to invoke the verb once with the whole selection rather
+        // than once per file, which is what makes right-clicking thirty comics open
+        // one window with thirty rows. "Player" is the value media players use for
+        // exactly this. It is a request, not a guarantee — Explorer still falls back
+        // to one process per file beyond its own item limit, and on those the
+        // single-instance forwarding in SingleInstance does the same job.
+        verb.SetValue("MultiSelectModel", "Player");
+
         using RegistryKey command = verb.CreateSubKey("command")
             ?? throw new IOException($"Could not create the command key for {extension}.");
 

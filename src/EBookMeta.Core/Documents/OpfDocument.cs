@@ -99,14 +99,12 @@ public sealed partial class OpfDocument
     private OpfDocument(
         XDocument document,
         byte[] originalBytes,
-        XmlEncodingInfo encoding,
-        string? declaration,
+        XmlSourceFormat format,
         string entryName)
     {
         Document = document;
         OriginalBytes = originalBytes;
-        Encoding = encoding;
-        DeclarationText = declaration;
+        Format = format;
         EntryName = entryName;
     }
 
@@ -120,13 +118,19 @@ public sealed partial class OpfDocument
     public byte[] OriginalBytes { get; }
 
     /// <summary>What the bytes said about their own encoding.</summary>
-    public XmlEncodingInfo Encoding { get; }
+    public XmlEncodingInfo Encoding => Format.Encoding;
 
     /// <summary>
     /// The XML declaration exactly as it appeared, or <see langword="null"/> if
     /// the document had none. Re-emitted verbatim on save.
     /// </summary>
-    public string? DeclarationText { get; }
+    public string? DeclarationText => Format.DeclarationText;
+
+    /// <summary>
+    /// How the source was written, in the respects the parsed tree does not
+    /// record — declaration, prolog, epilogue, empty-element style, line endings.
+    /// </summary>
+    internal XmlSourceFormat Format { get; }
 
     /// <summary>The container entry this document was read from.</summary>
     public string EntryName { get; }
@@ -192,84 +196,11 @@ public sealed partial class OpfDocument
                 $"'{entryName}' is not well-formed XML: {ex.Message}", entryName, ex);
         }
 
-        string? declaration = ExtractDeclaration(text);
-        var opf = new OpfDocument(document, original, encoding, declaration, entryName);
-
-        // XDocument does not model whitespace between the declaration and the
-        // root element, nor anything after the root. Both are captured here so
-        // that saving an unedited document reproduces the original byte for
-        // byte, which is what makes the round-trip invariant testable.
-        if (declaration is not null)
-        {
-            string rest = text.Substring(declaration.Length);
-            opf.PrologSeparator = rest.Substring(0, rest.Length - rest.TrimStart().Length);
-        }
-
-        opf.Epilogue = text.Substring(text.TrimEnd().Length);
-
-        // XElement.ToString always writes "<x />"; most EPUBs write "<x/>".
-        // Detect which this document uses so serialisation can match it and a
-        // save does not reformat every empty element in the manifest.
-        opf.SelfClosingHasSpace = DetectSelfClosingStyle(text);
-
-        // XML parsing is required by spec to normalise CRLF to LF, so a
-        // Windows-authored package document would otherwise come back with
-        // every line ending rewritten — a whole-file diff from a one-word edit.
-        opf.NewLine = text.IndexOf("\r\n", StringComparison.Ordinal) >= 0 ? "\r\n" : "\n";
-        return opf;
-    }
-
-    /// <summary>
-    /// Captures the XML declaration as literal text.
-    /// </summary>
-    /// <remarks>
-    /// Taken from the source characters rather than from
-    /// <see cref="XDocument.Declaration"/>, whose round trip is not
-    /// character-exact: it can change attribute quoting and normalise or drop
-    /// <c>standalone</c>. Preserving the declaration verbatim is an invariant,
-    /// so the only safe copy is the original text.
-    /// </remarks>
-    private static string? ExtractDeclaration(string text)
-    {
-        int start = text.IndexOf("<?xml", StringComparison.Ordinal);
-        if (start < 0 || text.Substring(0, start).TrimStart().Length > 0)
-        {
-            return null;
-        }
-
-        int end = text.IndexOf("?>", start, StringComparison.Ordinal);
-        return end < 0 ? null : text.Substring(start, end + 2 - start);
-    }
-
-    /// <summary>
-    /// Decides whether the document writes empty elements with a space before
-    /// the slash, by counting how it does it.
-    /// </summary>
-    private static bool DetectSelfClosingStyle(string text)
-    {
-        int withSpace = 0;
-        int without = 0;
-
-        for (int i = 1; i + 1 < text.Length; i++)
-        {
-            if (text[i] != '/' || text[i + 1] != '>')
-            {
-                continue;
-            }
-
-            if (text[i - 1] == ' ')
-            {
-                withSpace++;
-            }
-            else
-            {
-                without++;
-            }
-        }
-
-        // A document with no empty elements at all gets the majority-of-nothing
-        // default, which is the compact form the EPUB corpus overwhelmingly uses.
-        return withSpace > without;
+        // The declaration, the whitespace around the root, the empty-element
+        // style and the line ending are all captured here rather than left to
+        // the serialiser, because none of them survives in the parsed tree and
+        // each would otherwise turn a one-field edit into a whole-file diff.
+        return new OpfDocument(document, original, XmlSourceFormat.Detect(text, encoding), entryName);
     }
 
     private static XElement? FindChild(XElement? parent, string localName) =>

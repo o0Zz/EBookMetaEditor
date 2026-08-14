@@ -32,8 +32,9 @@ public static class BookFormats
 
     static BookFormats()
     {
-        // The formats this build supports. CBZ joins them here.
+        // The formats this build supports, and the whole list.
         Register(new EpubHandler());
+        Register(new CbzHandler());
     }
 
     /// <summary>Every registered handler.</summary>
