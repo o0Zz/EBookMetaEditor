@@ -11,15 +11,6 @@ internal sealed record ZipCentralDirectoryRecord
 
     /// <summary>The compression method code — the reason this parser exists.</summary>
     internal required ushort CompressionMethod { get; init; }
-
-    /// <summary>General purpose bit flags.</summary>
-    internal ushort Flags { get; init; }
-
-    /// <summary>Stored size in bytes.</summary>
-    internal long CompressedSize { get; init; }
-
-    /// <summary>Uncompressed size in bytes.</summary>
-    internal long UncompressedSize { get; init; }
 }
 
 /// <summary>
@@ -28,8 +19,8 @@ internal sealed record ZipCentralDirectoryRecord
 /// </summary>
 /// <remarks>
 /// This exists because <c>ZipArchiveEntry</c> does not expose the compression
-/// method, and preserving it per entry is a hard invariant. Comparing
-/// <c>CompressedLength</c> to <c>Length</c> is not a sound substitute — a deflate
+/// method, and preserving it per entry is a hard invariant. Comparing that type's
+/// <c>CompressedLength</c> to its <c>Length</c> is not a sound substitute — a deflate
 /// stream can equal or exceed its input, so that heuristic misreports exactly the
 /// case rule EPUB-E040 cares most about. Structure only, never content: the two
 /// views are paired by index rather than by name, because ZIP does not guarantee
@@ -247,8 +238,6 @@ internal sealed class ZipCentralDirectory
 
             ushort flags = BinaryPrimitives.ReadUInt16LittleEndian(header.Slice(8));
             ushort method = BinaryPrimitives.ReadUInt16LittleEndian(header.Slice(10));
-            uint compressedSize = BinaryPrimitives.ReadUInt32LittleEndian(header.Slice(20));
-            uint uncompressedSize = BinaryPrimitives.ReadUInt32LittleEndian(header.Slice(24));
             ushort nameLength = BinaryPrimitives.ReadUInt16LittleEndian(header.Slice(28));
             ushort extraLength = BinaryPrimitives.ReadUInt16LittleEndian(header.Slice(30));
             ushort commentLength = BinaryPrimitives.ReadUInt16LittleEndian(header.Slice(32));
@@ -265,84 +254,21 @@ internal sealed class ZipCentralDirectory
                 header.Slice(CentralFileHeaderFixedSize, nameLength),
                 utf8: (flags & 0x0800) != 0);
 
-            long realCompressed = compressedSize;
-            long realUncompressed = uncompressedSize;
-
-            if (compressedSize == Zip64Marker32 || uncompressedSize == Zip64Marker32)
-            {
-                ReadZip64Extra(
-                    header.Slice(CentralFileHeaderFixedSize + nameLength, extraLength),
-                    ref realUncompressed,
-                    ref realCompressed,
-                    uncompressedSize,
-                    compressedSize);
-            }
-
+            // Sizes are deliberately not read. A ZIP64 record saturates them and
+            // puts the real values in an extra field, so taking them at face value
+            // would be wrong — and nothing here needs them: the entry's authoritative
+            // length comes from ZipArchive, and this parser exists only to recover the
+            // compression method that ZipArchiveEntry does not expose.
             records.Add(new ZipCentralDirectoryRecord
             {
                 Name = name,
                 CompressionMethod = method,
-                Flags = flags,
-                CompressedSize = realCompressed,
-                UncompressedSize = realUncompressed,
             });
 
             offset += recordLength;
         }
 
         return records;
-    }
-
-    /// <summary>
-    /// Reads the ZIP64 extended information extra field (header id 0x0001).
-    /// </summary>
-    /// <remarks>
-    /// The field contains only those values that were saturated in the base
-    /// record, in a fixed order: uncompressed size, compressed size, local
-    /// header offset, disk number. So the fields present cannot be determined
-    /// from the field's length alone — each must be consumed conditionally, in
-    /// order, which is why this reads the way it does.
-    /// </remarks>
-    private static void ReadZip64Extra(
-        ReadOnlySpan<byte> extra,
-        ref long uncompressed,
-        ref long compressed,
-        uint rawUncompressed,
-        uint rawCompressed)
-    {
-        int offset = 0;
-        while (offset + 4 <= extra.Length)
-        {
-            ushort headerId = BinaryPrimitives.ReadUInt16LittleEndian(extra.Slice(offset));
-            ushort dataSize = BinaryPrimitives.ReadUInt16LittleEndian(extra.Slice((offset + 2)));
-            int dataStart = offset + 4;
-
-            if (dataStart + dataSize > extra.Length)
-            {
-                return;
-            }
-
-            if (headerId == 0x0001)
-            {
-                ReadOnlySpan<byte> data = extra.Slice(dataStart, dataSize);
-                int cursor = 0;
-
-                if (rawUncompressed == Zip64Marker32 && cursor + 8 <= data.Length)
-                {
-                    uncompressed = (long)BinaryPrimitives.ReadUInt64LittleEndian(data.Slice(cursor));
-                    cursor += 8;
-                }
-
-                if (rawCompressed == Zip64Marker32 && cursor + 8 <= data.Length)
-                {
-                    compressed = (long)BinaryPrimitives.ReadUInt64LittleEndian(data.Slice(cursor));
-                }
-
-                return;
-            }
-
-            offset = dataStart + dataSize;
-        }
     }
 
     /// <summary>

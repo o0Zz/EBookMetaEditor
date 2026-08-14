@@ -106,6 +106,7 @@ src/
   EBookMeta.Core/       net48          — all logic. ZERO UI dependencies.
     IBookFormat.cs      ── seam 1: the metadata-document axis. Read / Write
     IContainer.cs       ── seam 2: the physical axis. Entries / OpenRead / Rebuild
+                           + ReadAllBytes, the one extension every format needs
     BookFormats.cs         registry of seam 1: Register / For / Resolve
     BookContainers.cs      factory for seam 2: Open / IsSupported
     Book.cs                one open file: Load and Save, and what they noticed
@@ -114,7 +115,6 @@ src/
     BatchSession.cs        many files read, edited and saved together
     MetadataFields.cs      the text projection of a field, shared by both editors
     Finding.cs             Finding + Severity
-    NamespaceRepair.cs     recovery of missing xmlns declarations
     NaturalNameComparer.cs so 2.jpg sorts before 10.jpg
     Log.cs                 the session log: Info / Warning / Error / Finding
     Compat.cs              everything net48 lacks, in one file
@@ -125,7 +125,8 @@ src/
     Formats/           implementations of IBookFormat: EpubFormat, CbzFormat
                        (CBZ + CBT), Fb2Format (FB2 + FB2.ZIP), MobiFormat
                        (MOBI/PRC + AZW/AZW3); each split X.cs (Read/Write) +
-                       X.Rules.cs (the rules);
+                       X.Rules.cs (the rules), plus EpubFormat.Repair.cs
+                       (recovery of missing xmlns declarations);
                        FormatDetector, FormatCapabilities, FormatId, ReadOptions
     Documents/         OpfDocument (+ .Write), ComicInfoDocument, Fb2Document,
                        MobiDocument, ContainerXml,
@@ -133,6 +134,7 @@ src/
     Model/             BookMetadata, Creator, Identifier, SeriesInfo, CoverImage
   EBookMeta.App/        net48          — WinForms, single instance, argv = paths
                        MainForm, BatchForm, SettingsForm, LogForm, AboutForm,
+                       Dialogs (the chrome all four share),
                        ShellRegistration, SingleInstance, AppIcon,
                        Strings, EmbeddedAssemblies
     Languages/         one key = value file per interface language
@@ -155,7 +157,16 @@ alone lives at the Core root. Resist adding a folder for a single class, and
 resist splitting one feature across six files — a feature is a file until it
 genuinely is not. The one sanctioned split is `X.cs` / `X.Rules.cs`: validation
 rules are roughly half of each format and none of its interface, so they sit in
-a partial beside it rather than burying `Read` and `Write`.
+a partial beside it rather than burying `Read` and `Write`. `EpubFormat.Repair.cs`
+is the same split applied a third time and the only one that earns it.
+
+**A helper only one format calls belongs to that format.** `EpubFormat.Repair.cs`
+sat at the Core root as `NamespaceRepair.cs` for a while, looking like general XML
+recovery. Every prefix in its table is an EPUB prefix, every rule it answers is an
+`EPUB-` rule, and nothing but `EpubFormat` ever called it — so it was an EPUB
+partial that had been filed as infrastructure. The test to apply before putting
+something at the root: if only one format would ever call it, it is that format's
+code no matter how general the name makes it sound.
 
 **Adding a format is one implementation plus one line.** Implement `IBookFormat`,
 call `BookFormats.Register`, done: nothing in the UI or the open path changes,
@@ -465,8 +476,8 @@ tar 1.34 — while `ZipContainer` can only promise to reproduce its own.
     to correct a typo would save a file in which nothing is where they left it.
 17. **Never infer what a name means.** Supplying a missing namespace URI is only
     legitimate for prefixes fixed by a published specification —
-    `WellKnownNamespaces` is that list, and a prefix absent from it is reported,
-    never bound. Inventing a plausible URI would fabricate metadata that was
+    `EpubFormat.KnownNamespaces` is that list, and a prefix absent from it is
+    reported, never bound. Inventing a plausible URI would fabricate metadata that was
     never in the file, and the user would have no reason to doubt it.
 18. Diagnosis reads the markup, never the exception message. `XmlException`
     text is localised by the framework, so a regex over

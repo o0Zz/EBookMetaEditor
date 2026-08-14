@@ -88,19 +88,7 @@ public sealed class ContainerXml
             throw new BookFormatException($"'{EntryName}' is missing.", EntryName);
         }
 
-        using Stream stream = container.OpenRead(entry);
-        using var buffer = new MemoryStream();
-        stream.CopyTo(buffer);
-
-        return Parse(buffer.GetBuffer().AsSpan(0, (int)buffer.Length));
+        return Parse(container.ReadAllBytes(entry));
     }
 
-    /// <summary>Whether the declared namespace matches the specification's.</summary>
-    /// <param name="document">A parsed container document.</param>
-    /// <returns><see langword="true"/> when the root is in the expected namespace.</returns>
-    public static bool HasExpectedNamespace(XDocument document)
-    {
-        Throw.IfNull(document);
-        return document.Root?.Name.Namespace == Ns;
-    }
 }

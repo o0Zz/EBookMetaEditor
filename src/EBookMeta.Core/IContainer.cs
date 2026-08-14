@@ -65,3 +65,36 @@ public interface IContainer : IDisposable
     /// <exception cref="BookIoException">The target could not be written.</exception>
     void Rebuild(IEnumerable<PendingEntry> entries, string targetPath);
 }
+
+/// <summary>
+/// Convenience over <see cref="IContainer"/> that every format needs.
+/// </summary>
+/// <remarks>
+/// Reading one entry whole is what a metadata document always requires, and each
+/// format having its own copy of the three-line stream drain was three chances
+/// for them to disagree about buffer sizing. It belongs on the physical seam
+/// rather than in the formats, because it is a fact about entries, not books.
+/// </remarks>
+public static class ContainerExtensions
+{
+    /// <summary>Reads an entry's whole decompressed content.</summary>
+    /// <param name="container">The container holding the entry.</param>
+    /// <param name="entry">An entry from <see cref="IContainer.Entries"/>.</param>
+    /// <returns>The entry's bytes.</returns>
+    /// <exception cref="BookFormatException">The entry's content is unreadable.</exception>
+    public static byte[] ReadAllBytes(this IContainer container, ContainerEntry entry)
+    {
+        Throw.IfNull(container);
+        Throw.IfNull(entry);
+
+        using Stream stream = container.OpenRead(entry);
+
+        // Sized from the entry's declared length so the common case never grows
+        // the buffer. A bogus length only costs a resize, so it is not validated.
+        using var buffer = new MemoryStream(
+            entry.Length > 0 && entry.Length < int.MaxValue ? (int)entry.Length : 4096);
+
+        stream.CopyTo(buffer);
+        return buffer.ToArray();
+    }
+}

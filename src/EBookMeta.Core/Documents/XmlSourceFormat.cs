@@ -114,7 +114,7 @@ internal sealed class XmlSourceFormat
 
         // Shared with the repair path, which has to re-encode the same document
         // after a surgical edit and must preserve the BOM identically.
-        return XmlBytes.Encode(text, Encoding);
+        return XmlEncodingDetector.Encode(text, Encoding);
     }
 
     /// <summary>

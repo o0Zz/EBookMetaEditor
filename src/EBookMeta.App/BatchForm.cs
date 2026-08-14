@@ -51,8 +51,8 @@ internal sealed class BatchForm : Form, IPathReceiver
 
     // AutoSize throughout rather than fixed widths: "Save all" is "Alle speichern"
     // in German, which does not fit in a width measured against English.
-    private readonly Button _saveAll = Action("batch.button.saveAll", 96);
-    private readonly Button _cancel = Action("button.cancel", 84);
+    private readonly Button _saveAll = Dialogs.Action("batch.button.saveAll", 96);
+    private readonly Button _cancel = Dialogs.Action("button.cancel");
 
     private readonly StatusStrip _status = new();
     private readonly ToolStripStatusLabel _statusText = new()
@@ -169,15 +169,6 @@ internal sealed class BatchForm : Form, IPathReceiver
     }
 
     /// <summary>A button labelled from the language files, wide enough for its text.</summary>
-    private static Button Action(string key, int minimumWidth) => new()
-    {
-        Text = Strings.Get(key),
-        AutoSize = true,
-        AutoSizeMode = AutoSizeMode.GrowAndShrink,
-        MinimumSize = new Size(minimumWidth, 26),
-        Margin = new Padding(4, 3, 4, 3),
-    };
-
     private static ToolStripMenuItem Item(string key, Action? action = null, Keys shortcut = Keys.None)
     {
         var item = new ToolStripMenuItem(Strings.Get(key));
@@ -246,15 +237,7 @@ internal sealed class BatchForm : Form, IPathReceiver
 
     private void BuildLayout(MenuStrip menu)
     {
-        var buttons = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Bottom,
-            FlowDirection = FlowDirection.RightToLeft,
-            Height = 40,
-            Padding = new Padding(8, 6, 8, 6),
-        };
-
-        buttons.Controls.AddRange([_saveAll, _cancel]);
+        FlowLayoutPanel buttons = Dialogs.ButtonStrip(_saveAll, _cancel);
 
         _status.Items.Add(_statusText);
         _status.Items.Add(_progress);

@@ -74,31 +74,7 @@ public sealed class ZipContainer : IContainer
     {
         Throw.IfNullOrEmpty(path);
 
-        FileStream stream;
-        try
-        {
-            stream = new FileStream(
-                path,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.ReadWrite | FileShare.Delete,
-                bufferSize: 4096,
-                FileOptions.RandomAccess);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
-        {
-            throw new BookIoException($"Could not open '{path}' for reading.", path, ex);
-        }
-
-        try
-        {
-            return Open(stream, path, leaveOpen: false);
-        }
-        catch
-        {
-            stream.Dispose();
-            throw;
-        }
+        return BookContainers.OpenFile(path, stream => Open(stream, path, leaveOpen: false));
     }
 
     /// <summary>Opens a ZIP container over an existing seekable stream.</summary>
@@ -156,7 +132,6 @@ public sealed class ZipContainer : IContainer
                     Name = zipEntry.FullName,
                     Index = i,
                     Length = zipEntry.Length,
-                    CompressedLength = zipEntry.CompressedLength,
                     CompressionMethod = record.CompressionMethod,
                     LastModified = zipEntry.LastWriteTime,
                     IsDirectory = zipEntry.FullName.EndsWith('/') && zipEntry.Length == 0,

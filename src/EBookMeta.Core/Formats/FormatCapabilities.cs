@@ -83,24 +83,6 @@ public sealed record FormatCapabilities
     /// <summary>Whether this format can be written at all.</summary>
     public bool CanWrite => WritableFields != MetadataField.None;
 
-    /// <summary>
-    /// Why the format cannot be written, in words suitable for showing a user.
-    /// <see langword="null"/> when it can be.
-    /// </summary>
-    public string? WriteBlockedReason { get; init; }
-
-    /// <summary>
-    /// A format this file can be converted to in order to become editable, or
-    /// <see langword="null"/> if none.
-    /// </summary>
-    public FormatId? ConversionTarget { get; init; }
-
-    /// <summary>
-    /// Whether the format writes slowly enough to warrant telling the user
-    /// before starting — CB7, which recompresses with LZMA.
-    /// </summary>
-    public bool WriteIsSlow { get; init; }
-
     /// <summary>Returns whether every field in <paramref name="fields"/> can be written.</summary>
     /// <param name="fields">The fields an edit would touch.</param>
     /// <returns><see langword="true"/> if all of them are writable.</returns>

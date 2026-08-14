@@ -32,9 +32,6 @@ public sealed class PalmDbContainer : IContainer
     /// <summary>Where the record count sits in the header.</summary>
     private const int RecordCountOffset = 76;
 
-    /// <summary>Where the type and creator tags sit.</summary>
-    private const int TypeOffset = 60;
-
     private readonly Stream _stream;
     private readonly bool _ownsStream;
     private readonly ContainerEntry[] _entries;
@@ -57,9 +54,7 @@ public sealed class PalmDbContainer : IContainer
         byte[] header,
         ContainerEntry[] entries,
         long[] offsets,
-        RecordInfo[] records,
-        string type,
-        string creator)
+        RecordInfo[] records)
     {
         _stream = stream;
         _ownsStream = ownsStream;
@@ -68,8 +63,6 @@ public sealed class PalmDbContainer : IContainer
         _offsets = offsets;
         _records = records;
         Path = path;
-        DatabaseType = type;
-        DatabaseCreator = creator;
     }
 
     /// <inheritdoc />
@@ -80,12 +73,6 @@ public sealed class PalmDbContainer : IContainer
 
     /// <summary>The file this container was opened from, when it came from one.</summary>
     public string? Path { get; }
-
-    /// <summary>The four-character type tag — <c>BOOK</c> for a MOBI.</summary>
-    public string DatabaseType { get; }
-
-    /// <summary>The four-character creator tag — <c>MOBI</c> or <c>TEXt</c>.</summary>
-    public string DatabaseCreator { get; }
 
     /// <inheritdoc />
     /// <remarks>Always <see langword="null"/>: PalmDB has no archive-level comment.</remarks>
@@ -100,31 +87,7 @@ public sealed class PalmDbContainer : IContainer
     {
         Throw.IfNullOrEmpty(path);
 
-        FileStream stream;
-        try
-        {
-            stream = new FileStream(
-                path,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.ReadWrite | FileShare.Delete,
-                bufferSize: 4096,
-                FileOptions.RandomAccess);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
-        {
-            throw new BookIoException($"Could not open '{path}' for reading.", path, ex);
-        }
-
-        try
-        {
-            return Open(stream, path, leaveOpen: false);
-        }
-        catch
-        {
-            stream.Dispose();
-            throw;
-        }
+        return BookContainers.OpenFile(path, stream => Open(stream, path, leaveOpen: false));
     }
 
     /// <summary>Opens a PalmDB over an existing seekable stream.</summary>
@@ -219,7 +182,6 @@ public sealed class PalmDbContainer : IContainer
                 Name = "record" + i.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 Index = i,
                 Length = Math.Max(0, end - offsets[i]),
-                CompressedLength = Math.Max(0, end - offsets[i]),
                 CompressionMethod = ZipCompressionMethods.Stored,
             };
         }
@@ -231,13 +193,8 @@ public sealed class PalmDbContainer : IContainer
             header,
             entries,
             offsets,
-            records,
-            Tag(header, TypeOffset),
-            Tag(header, TypeOffset + 4));
+            records);
     }
-
-    private static string Tag(byte[] header, int offset) =>
-        Encoding.ASCII.GetString(header, offset, 4);
 
     /// <inheritdoc />
     public Stream OpenRead(ContainerEntry entry)
@@ -259,22 +216,8 @@ public sealed class PalmDbContainer : IContainer
             return new SectionStream(_stream, start, length, ownsStream: false);
         }
 
-        FileStream own;
-        try
-        {
-            own = new FileStream(
-                Path,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.ReadWrite | FileShare.Delete,
-                bufferSize: 4096,
-                FileOptions.SequentialScan);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            throw new BookFormatException(
-                $"Record {entry.Index} could not be read.", entry.Name, ex);
-        }
+        FileStream own = BookContainers.ReopenForEntry(
+            Path, entry.Name, $"Record {entry.Index}");
 
         return new SectionStream(own, start, length, ownsStream: true);
     }

@@ -1,5 +1,6 @@
 using System.Text;
 using EBookMeta.Documents;
+using EBookMeta.Formats;
 using EBookMeta.Tests.Builders;
 using Xunit;
 
@@ -16,7 +17,7 @@ public sealed class RepairNamespaceTests
     private static string Text(byte[] bytes) => new UTF8Encoding(false).GetString(bytes);
 
     private static NamespaceRepairResult Repair(string opf) =>
-        Assert.IsType<NamespaceRepairResult>(NamespaceRepair.Repair(Utf8(opf)));
+        Assert.IsType<NamespaceRepairResult>(EpubFormat.RepairNamespaces(Utf8(opf)));
 
     // --- detection -------------------------------------------------------
 
@@ -32,27 +33,19 @@ public sealed class RepairNamespaceTests
     }
 
     [Fact]
-    public void Validate_reports_the_prefix_with_its_position()
+    public void Repair_reports_where_the_prefix_was_first_used()
     {
-        Finding finding = Assert.Single(
-            NamespaceRepair.Validate(Utf8(EpubBuilder.Epub2OpfUndeclaredOpfPrefix), "OEBPS/content.opf"));
+        NamespaceRepairResult result = Repair(EpubBuilder.Epub2OpfUndeclaredOpfPrefix);
 
-        Assert.Equal("EPUB-W070", finding.RuleId);
-        Assert.Equal(Severity.Warning, finding.Severity);
-        Assert.True(finding.HasAutofix);
-        Assert.Equal("OEBPS/content.opf", finding.Location);
-        Assert.Equal(4, finding.Line);
-        Assert.Equal(15, finding.Column);
-        Assert.Contains("opf", finding.Message, StringComparison.Ordinal);
-        Assert.Contains("opf:file-as", finding.Detail!, StringComparison.Ordinal);
+        Assert.Equal(4, result.Line);
+        Assert.Equal(15, result.Column);
     }
 
     [Fact]
     public void A_document_that_needs_no_repair_is_left_alone()
     {
-        Assert.Empty(NamespaceRepair.Validate(Utf8(EpubBuilder.Epub2Opf)));
-        Assert.Null(NamespaceRepair.Repair(Utf8(EpubBuilder.Epub2Opf)));
-        Assert.Null(NamespaceRepair.Repair(Utf8(EpubBuilder.Epub3Opf)));
+        Assert.Null(EpubFormat.RepairNamespaces(Utf8(EpubBuilder.Epub2Opf)));
+        Assert.Null(EpubFormat.RepairNamespaces(Utf8(EpubBuilder.Epub3Opf)));
 
         // xml: and xmlns: are bound by the XML specification. Reporting them would
         // be a false positive on a perfectly correct document.
@@ -65,17 +58,16 @@ public sealed class RepairNamespaceTests
             </package>
             """;
 
-        Assert.Empty(NamespaceRepair.Validate(Utf8(specBound)));
-        Assert.Null(NamespaceRepair.Repair(Utf8(specBound)));
+        Assert.Null(EpubFormat.RepairNamespaces(Utf8(specBound)));
     }
 
     [Fact]
     public void Only_specification_backed_prefixes_are_known()
     {
-        Assert.True(NamespaceRepair.IsKnownPrefix("opf"));
-        Assert.True(NamespaceRepair.IsKnownPrefix("dc"));
-        Assert.False(NamespaceRepair.IsKnownPrefix("acme"));
-        Assert.False(NamespaceRepair.IsKnownPrefix("calibre"));
+        Assert.True(EpubFormat.IsKnownNamespacePrefix("opf"));
+        Assert.True(EpubFormat.IsKnownNamespacePrefix("dc"));
+        Assert.False(EpubFormat.IsKnownNamespacePrefix("acme"));
+        Assert.False(EpubFormat.IsKnownNamespacePrefix("calibre"));
     }
 
     // --- repair ----------------------------------------------------------
@@ -134,11 +126,6 @@ public sealed class RepairNamespaceTests
 
         // Nothing was invented, so the bytes come back as they went in.
         Assert.Equal(EpubBuilder.OpfUnknownPrefix, Text(result.RepairedBytes));
-
-        Finding finding = Assert.Single(NamespaceRepair.Validate(Utf8(EpubBuilder.OpfUnknownPrefix)));
-        Assert.Equal("EPUB-W070", finding.RuleId);
-        Assert.False(finding.HasAutofix);
-        Assert.Contains("cannot be repaired automatically", finding.Detail!, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -205,7 +192,7 @@ public sealed class RepairNamespaceTests
             .Concat(Utf8(EpubBuilder.Epub2OpfUndeclaredOpfPrefix))
             .ToArray();
 
-        NamespaceRepairResult bom = Assert.IsType<NamespaceRepairResult>(NamespaceRepair.Repair(withBom));
+        NamespaceRepairResult bom = Assert.IsType<NamespaceRepairResult>(EpubFormat.RepairNamespaces(withBom));
 
         Assert.True(bom.IsComplete);
         Assert.Equal(new UTF8Encoding(true).GetPreamble(), bom.RepairedBytes.Take(3));
@@ -222,7 +209,7 @@ public sealed class RepairNamespaceTests
 
         Encoding cp1252 = Encoding.GetEncoding(1252);
         NamespaceRepairResult result =
-            Assert.IsType<NamespaceRepairResult>(NamespaceRepair.Repair(cp1252.GetBytes(opf)));
+            Assert.IsType<NamespaceRepairResult>(EpubFormat.RepairNamespaces(cp1252.GetBytes(opf)));
 
         Assert.True(result.IsComplete);
         Assert.Contains("Gaimån", cp1252.GetString(result.RepairedBytes), StringComparison.Ordinal);

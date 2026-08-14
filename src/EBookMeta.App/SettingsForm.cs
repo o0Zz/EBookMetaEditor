@@ -17,15 +17,7 @@ internal sealed class SettingsForm : Form
     {
         _settings = settings;
 
-        Text = Strings.Get("settings.title");
-        AppIcon.Apply(this);
-        FormBorderStyle = FormBorderStyle.FixedDialog;
-        StartPosition = FormStartPosition.CenterParent;
-        MinimizeBox = false;
-        MaximizeBox = false;
-        ShowInTaskbar = false;
-        AutoScaleMode = AutoScaleMode.Font;
-        ClientSize = new Size(460, 405);
+        Dialogs.Chrome(this, "settings.title", new Size(460, 405));
 
         _language = new ComboBox
         {
@@ -130,34 +122,13 @@ internal sealed class SettingsForm : Form
 
     private FlowLayoutPanel BuildButtons()
     {
-        var ok = new Button
-        {
-            Text = Strings.Get("button.ok"),
-            DialogResult = DialogResult.OK,
-            AutoSize = true,
-            MinimumSize = new Size(80, 27),
-        };
-
-        var cancel = new Button
-        {
-            Text = Strings.Get("button.cancel"),
-            DialogResult = DialogResult.Cancel,
-            AutoSize = true,
-            MinimumSize = new Size(80, 27),
-        };
+        Button ok = Dialogs.Action("button.ok", DialogResult.OK);
+        Button cancel = Dialogs.Action("button.cancel", DialogResult.Cancel);
 
         ok.Click += (_, _) => Commit();
 
-        var buttons = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Bottom,
-            FlowDirection = FlowDirection.RightToLeft,
-            AutoSize = true,
-            Padding = new Padding(8, 6, 14, 10),
-        };
-
-        buttons.Controls.Add(cancel);
-        buttons.Controls.Add(ok);
+        // Rightmost first: the strip flows right to left.
+        FlowLayoutPanel buttons = Dialogs.ButtonStrip(cancel, ok);
 
         AcceptButton = ok;
         CancelButton = cancel;

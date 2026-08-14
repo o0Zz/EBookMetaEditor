@@ -25,9 +25,6 @@ namespace EBookMeta.Documents;
 /// </remarks>
 public sealed class Fb2Document
 {
-    /// <summary>The FictionBook 2.0 namespace, for documents that declare one.</summary>
-    public const string FictionBookNamespace = "http://www.gribuser.ru/xml/fictionbook/2.0";
-
     private readonly string _text;
     private readonly int _descriptionStart;
     private readonly int _descriptionEnd;
@@ -351,7 +348,7 @@ public sealed class Fb2Document
             + body
             + _text.Substring(_descriptionEnd);
 
-        return XmlBytes.Encode(text, _encoding);
+        return XmlEncodingDetector.Encode(text, _encoding);
     }
 
     /// <summary>Reads the metadata this document carries.</summary>

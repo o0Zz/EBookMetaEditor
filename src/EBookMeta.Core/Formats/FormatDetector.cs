@@ -60,7 +60,16 @@ public static class FormatDetector
     private static ReadOnlySpan<byte> EpubMediaType => "application/epub+zip"u8;
     private static ReadOnlySpan<byte> Utf8Bom => [0xEF, 0xBB, 0xBF];
 
-    private static readonly string[] ImageExtensions =
+    /// <summary>
+    /// The extensions this build treats as page images, lowercase and with the dot.
+    /// </summary>
+    /// <remarks>
+    /// Shared with <c>CbzFormat</c> rather than duplicated: the sniffer decides a
+    /// ZIP of nothing but images is a comic, and the format then counts those same
+    /// images for CBZ-E020. Two lists would let a comic be recognised and then have
+    /// its pages miscounted.
+    /// </remarks>
+    internal static readonly string[] ImageExtensions =
         [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".avif", ".jxl", ".tif", ".tiff"];
 
     /// <summary>Detects a file by path.</summary>

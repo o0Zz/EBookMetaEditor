@@ -38,9 +38,6 @@ public sealed record SpineItemRef
     /// <summary>The manifest <c>id</c> this reference points at.</summary>
     public required string IdRef { get; init; }
 
-    /// <summary>Whether the item is part of the linear reading order.</summary>
-    public bool IsLinear { get; init; } = true;
-
     /// <summary>The element itself.</summary>
     public required XElement Element { get; init; }
 }
@@ -119,12 +116,6 @@ public sealed partial class OpfDocument
 
     /// <summary>The declared <c>package/@version</c>, such as <c>2.0</c> or <c>3.0</c>.</summary>
     public string? Version => (string?)Package?.Attribute("version");
-
-    /// <summary>
-    /// Whether the package declares EPUB 3. Both conventions are written on
-    /// save regardless, so this informs reporting rather than writing.
-    /// </summary>
-    public bool IsEpub3 => Version?.StartsWith('3') == true;
 
     /// <summary>The <c>package/@unique-identifier</c>, naming a <c>dc:identifier</c>.</summary>
     public string? UniqueIdentifierRef => (string?)Package?.Attribute("unique-identifier");
@@ -218,7 +209,6 @@ public sealed partial class OpfDocument
             .Select(e => new SpineItemRef
             {
                 IdRef = (string?)e.Attribute("idref") ?? string.Empty,
-                IsLinear = !string.Equals((string?)e.Attribute("linear"), "no", StringComparison.OrdinalIgnoreCase),
                 Element = e,
             })];
     }

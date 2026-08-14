@@ -14,15 +14,7 @@ internal sealed class AboutForm : Form
         Assembly assembly = Assembly.GetExecutingAssembly();
         string version = assembly.GetName().Version?.ToString(3) ?? "0.0.0";
 
-        Text = Strings.Get("about.title");
-        AppIcon.Apply(this);
-        FormBorderStyle = FormBorderStyle.FixedDialog;
-        StartPosition = FormStartPosition.CenterParent;
-        MinimizeBox = false;
-        MaximizeBox = false;
-        ShowInTaskbar = false;
-        AutoScaleMode = AutoScaleMode.Font;
-        ClientSize = new Size(460, 300);
+        Dialogs.Chrome(this, "about.title", new Size(460, 300));
 
         // Stacked by a layout panel rather than placed at coordinates, so a
         // translation that runs to four lines where English took three pushes
@@ -73,23 +65,8 @@ internal sealed class AboutForm : Form
 
         Label author = Paragraph(Strings.Get("about.author"), SystemColors.GrayText);
 
-        var ok = new Button
-        {
-            Text = Strings.Get("button.ok"),
-            DialogResult = DialogResult.OK,
-            AutoSize = true,
-            MinimumSize = new Size(80, 27),
-        };
-
-        var buttons = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Bottom,
-            FlowDirection = FlowDirection.RightToLeft,
-            AutoSize = true,
-            Padding = new Padding(8, 4, 16, 10),
-        };
-
-        buttons.Controls.Add(ok);
+        Button ok = Dialogs.Action("button.ok", DialogResult.OK);
+        FlowLayoutPanel buttons = Dialogs.ButtonStrip(ok);
 
         foreach (Control row in new Control[] { name, detail, what, formatsLabel, formats, author })
         {

@@ -3,10 +3,23 @@ using System.Xml;
 using System.Xml.Linq;
 using EBookMeta.Documents;
 
-namespace EBookMeta;
+namespace EBookMeta.Formats;
 
 /// <summary>
-/// What repairing a document's namespace declarations would produce.
+/// A package document as bytes, before any attempt to parse it.
+/// </summary>
+/// <seealso cref="EpubFormat.ReadRawPackageDocument" />
+public sealed record RawPackageDocument
+{
+    /// <summary>The container entry the document came from — <c>OEBPS/content.opf</c>.</summary>
+    public required string EntryName { get; init; }
+
+    /// <summary>The document's bytes, exactly as stored.</summary>
+    public required byte[] Bytes { get; init; }
+}
+
+/// <summary>
+/// What repairing a package document's namespace declarations would produce.
 /// </summary>
 public sealed record NamespaceRepairResult
 {
@@ -20,6 +33,12 @@ public sealed record NamespaceRepairResult
 
     /// <summary>Prefixes that were declared, in first-use order.</summary>
     public required IReadOnlyList<string> Added { get; init; }
+
+    /// <summary>The line of the first undeclared prefix, 1-based.</summary>
+    public int Line { get; init; }
+
+    /// <summary>The column of the first undeclared prefix, 1-based.</summary>
+    public int Column { get; init; }
 
     /// <summary>
     /// Prefixes left alone because no specification says what they mean.
@@ -37,16 +56,33 @@ public sealed record NamespaceRepairResult
 }
 
 /// <summary>
-/// Supplies namespace declarations a document uses but never declares.
+/// The one repair an EPUB read performs: supplying namespace declarations the
+/// package document uses but never declares (EPUB-W070).
 /// </summary>
-public static class NamespaceRepair
+/// <remarks>
+/// The third face of <see cref="EpubFormat"/>, beside <c>EpubFormat.cs</c> and
+/// <c>EpubFormat.Rules.cs</c> and the same class as both. It lives here rather
+/// than at the Core root because every prefix it knows how to bind is an EPUB
+/// prefix, the rule it answers is an <c>EPUB-</c> rule, and nothing outside this
+/// format has ever called it — a general-purpose XML repair is what it looked
+/// like, not what it is.
+/// <para>
+/// The repair is an insertion into the original text, never a reserialisation.
+/// Parsing permissively and re-emitting through a strict writer would fix the
+/// document and rewrite every line of it doing so, which is invariant 16.
+/// </para>
+/// </remarks>
+public sealed partial class EpubFormat
 {
-    /// <summary>The rule this repair answers.</summary>
-    public const string RuleId = "EPUB-W070";
-
     /// <summary>
     /// Namespace URIs a missing declaration can be recovered from, by prefix.
     /// </summary>
+    /// <remarks>
+    /// Every entry is fixed by a published specification. A prefix absent from
+    /// here is reported and never bound: inventing a plausible URI would fabricate
+    /// metadata that was never in the file, and the user would have no reason to
+    /// doubt it.
+    /// </remarks>
     private static readonly Dictionary<string, string> KnownNamespaces = new(StringComparer.Ordinal)
     {
         ["opf"] = "http://www.idpf.org/2007/opf",
@@ -64,20 +100,19 @@ public static class NamespaceRepair
 
     /// <summary>Whether a missing declaration for this prefix can be recovered.</summary>
     /// <param name="prefix">The prefix, without the colon.</param>
-    /// <returns><see langword="true"/> when the URI is known.</returns>
-    public static bool IsKnownPrefix(string prefix) =>
+    /// <returns><see langword="true"/> when a specification fixes the URI.</returns>
+    public static bool IsKnownNamespacePrefix(string prefix) =>
         prefix is not null && KnownNamespaces.ContainsKey(prefix);
 
     /// <summary>
-    /// Repairs a document's missing namespace declarations.
+    /// Repairs a package document's missing namespace declarations.
     /// </summary>
     /// <param name="bytes">The document's bytes.</param>
-    /// <param name="entryName">The container entry name, for diagnostics.</param>
     /// <returns>
     /// The result, or <see langword="null"/> when every prefix the document uses
     /// is declared and there is nothing to repair.
     /// </returns>
-    public static NamespaceRepairResult? Repair(ReadOnlySpan<byte> bytes, string entryName = "content.opf")
+    public static NamespaceRepairResult? RepairNamespaces(ReadOnlySpan<byte> bytes)
     {
         XmlEncodingInfo encoding = XmlEncodingDetector.Detect(bytes);
         string text = XmlEncodingDetector.Decode(bytes, encoding);
@@ -95,7 +130,7 @@ public static class NamespaceRepair
 
         foreach (Undeclared use in undeclared)
         {
-            if (IsKnownPrefix(use.Prefix))
+            if (IsKnownNamespacePrefix(use.Prefix))
             {
                 added.Add(use.Prefix);
             }
@@ -136,51 +171,18 @@ public static class NamespaceRepair
 
         return new NamespaceRepairResult
         {
-            RepairedBytes = added.Count == 0 ? bytes.ToArray() : XmlBytes.Encode(repairedText, encoding),
+            RepairedBytes = added.Count == 0 ? bytes.ToArray() : XmlEncodingDetector.Encode(repairedText, encoding),
             IsComplete = remaining is null && skipped.Count == 0,
             Added = added,
             Skipped = skipped,
             RemainingError = remaining,
+            Line = undeclared[0].Line,
+            Column = undeclared[0].Column,
         };
     }
 
-    /// <summary>
-    /// Reports undeclared prefixes as validation findings.
-    /// </summary>
-    /// <param name="bytes">The document's bytes.</param>
-    /// <param name="entryName">The container entry name, reported as the location.</param>
-    /// <returns>One finding per undeclared prefix, empty when there are none.</returns>
-    public static IEnumerable<Finding> Validate(ReadOnlySpan<byte> bytes, string entryName = "content.opf")
-    {
-        XmlEncodingInfo encoding = XmlEncodingDetector.Detect(bytes);
-        string text = XmlEncodingDetector.Decode(bytes, encoding);
-
-        var findings = new List<Finding>();
-
-        foreach (Undeclared use in FindUndeclared(text, out _, out _))
-        {
-            bool known = IsKnownPrefix(use.Prefix);
-
-            findings.Add(new Finding
-            {
-                RuleId = RuleId,
-                Severity = Severity.Warning,
-                Message = $"Namespace prefix '{use.Prefix}' is used but never declared.",
-                Location = entryName,
-                Line = use.Line,
-                Column = use.Column,
-                HasAutofix = known,
-                Detail = known
-                    ? $"{use.OnName}; can be declared as {KnownNamespaces[use.Prefix]}"
-                    : $"{use.OnName}; no known namespace URI for this prefix, so it cannot be repaired automatically",
-            });
-        }
-
-        return findings;
-    }
-
     /// <summary>One prefix used without a declaration, and where it was first seen.</summary>
-    private readonly record struct Undeclared(string Prefix, int Line, int Column, string OnName);
+    private readonly record struct Undeclared(string Prefix, int Line, int Column);
 
     /// <summary>
     /// Finds prefixes used on an element or attribute name that no
@@ -278,7 +280,7 @@ public static class NamespaceRepair
 
         if (seen.Add(prefix))
         {
-            used.Add(new Undeclared(prefix, reader.LineNumber, reader.LinePosition, qualifiedName));
+            used.Add(new Undeclared(prefix, reader.LineNumber, reader.LinePosition));
         }
     }
 

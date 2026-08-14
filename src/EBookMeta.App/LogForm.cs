@@ -46,28 +46,14 @@ internal sealed class LogForm : Form
         MinimumSize = new Size(520, 300);
         ShowInTaskbar = false;
 
-        var buttons = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Bottom,
-            FlowDirection = FlowDirection.RightToLeft,
-            Height = 40,
-            Padding = new Padding(8, 6, 8, 6),
-        };
-
-        // AutoSize with a floor rather than a fixed size: "Speichern unter…" does
-        // not fit in the 90 px that "Save as…" needed.
-        var close = Action("button.close");
-        var save = Action("log.saveAs");
-        var copy = Action("log.copy");
-
-        close.DialogResult = DialogResult.OK;
+        Button close = Dialogs.Action("button.close", DialogResult.OK);
+        Button save = Dialogs.Action("log.saveAs");
+        Button copy = Dialogs.Action("log.copy");
 
         save.Click += (_, _) => SaveAs();
         copy.Click += (_, _) => CopyAll();
 
-        buttons.Controls.Add(close);
-        buttons.Controls.Add(save);
-        buttons.Controls.Add(copy);
+        FlowLayoutPanel buttons = Dialogs.ButtonStrip(close, save, copy);
 
         var options = new TableLayoutPanel
         {
@@ -96,15 +82,6 @@ internal sealed class LogForm : Form
 
         Reload();
     }
-
-    private static Button Action(string key) => new()
-    {
-        Text = Strings.Get(key),
-        AutoSize = true,
-        AutoSizeMode = AutoSizeMode.GrowAndShrink,
-        MinimumSize = new Size(84, 27),
-        Margin = new Padding(4, 3, 4, 3),
-    };
 
     /// <inheritdoc/>
     protected override void OnFormClosed(FormClosedEventArgs e)

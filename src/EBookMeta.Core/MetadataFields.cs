@@ -34,6 +34,37 @@ public static class MetadataFields
     /// <summary>How subjects are separated in a single-line editor.</summary>
     public const string SubjectSeparator = ", ";
 
+    /// <summary>Whether a language tag is shaped like one, without asserting it exists.</summary>
+    /// <param name="tag">The tag to test, such as <c>en</c> or <c>pt-BR</c>.</param>
+    /// <returns><see langword="true"/> when it is plausibly BCP 47.</returns>
+    /// <remarks>
+    /// Shape only, deliberately: EPUB-W014 and FB2-W013 are warnings, and a
+    /// registry check would turn a tag this build has not heard of into a false
+    /// accusation. Shared because both rules ask the identical question of the
+    /// identical kind of string.
+    /// </remarks>
+    public static bool IsPlausibleLanguageTag(string tag)
+    {
+        Throw.IfNull(tag);
+
+        string[] parts = tag.Split('-');
+
+        if (parts.Length == 0 || parts[0].Length is < 2 or > 3)
+        {
+            return false;
+        }
+
+        foreach (string part in parts)
+        {
+            if (part.Length == 0 || !part.All(char.IsLetterOrDigit))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     /// <summary>Returns a field as the text an editor should show.</summary>
     /// <param name="metadata">The metadata to read.</param>
     /// <param name="field">The field to read. Exactly one flag.</param>

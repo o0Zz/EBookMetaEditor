@@ -63,7 +63,7 @@ public sealed partial class Fb2Format
                 Location = location,
             });
         }
-        else if (!IsPlausibleLanguageTag(language))
+        else if (!MetadataFields.IsPlausibleLanguageTag(language))
         {
             findings.Add(new Finding
             {
@@ -187,26 +187,4 @@ public sealed partial class Fb2Format
         }
     }
 
-    /// <summary>
-    /// Whether a language code is shaped like one, without asserting it exists.
-    /// </summary>
-    private static bool IsPlausibleLanguageTag(string tag)
-    {
-        string[] parts = tag.Split('-');
-
-        if (parts.Length == 0 || parts[0].Length is < 2 or > 3)
-        {
-            return false;
-        }
-
-        foreach (string part in parts)
-        {
-            if (part.Length == 0 || !part.All(char.IsLetterOrDigit))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
 }

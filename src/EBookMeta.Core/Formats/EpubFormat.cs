@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using EBookMeta.Containers;
 using EBookMeta.Documents;
 using EBookMeta.Model;
@@ -53,24 +53,8 @@ public sealed partial class EpubFormat : IBookFormat
     {
         Throw.IfNull(container);
 
-        ContainerXml containerXml = ContainerXml.Read(container);
-        string? opfPath = containerXml.PrimaryRootfilePath;
-
-        if (opfPath is null)
-        {
-            throw new BookFormatException(
-                $"'{ContainerXml.EntryName}' declares no rootfile.", ContainerXml.EntryName);
-        }
-
-        ContainerEntry? entry = FindEntry(container, opfPath);
-        if (entry is null)
-        {
-            throw new BookFormatException(
-                $"'{ContainerXml.EntryName}' points at '{opfPath}', which is not in the archive.",
-                ContainerXml.EntryName);
-        }
-
-        byte[] bytes = ReadAllBytes(container, entry);
+        ContainerEntry entry = LocatePackageDocument(container);
+        byte[] bytes = container.ReadAllBytes(entry);
 
         try
         {
@@ -88,7 +72,7 @@ public sealed partial class EpubFormat : IBookFormat
             // Only a repair that fully succeeds is used. A partial fix would
             // hand back a document that still does not parse, so the original
             // error is the more useful answer.
-            NamespaceRepairResult? repair = NamespaceRepair.Repair(bytes, entry.Name);
+            NamespaceRepairResult? repair = RepairNamespaces(bytes);
 
             if (repair is not { IsComplete: true, HasChanges: true })
             {
@@ -108,13 +92,15 @@ public sealed partial class EpubFormat : IBookFormat
             // warning, which invariant 14 requires of every repair.
             findings?.Add(new Finding
             {
-                RuleId = NamespaceRepair.RuleId,
+                RuleId = "EPUB-W070",
                 Severity = Severity.Warning,
                 Message =
                     $"'{entry.Name}' was missing namespace declarations and has been repaired "
                     + $"in memory: added xmlns for {string.Join(", ", repair.Added)}. "
                     + "Save to keep the correction.",
                 Location = entry.Name,
+                Line = repair.Line,
+                Column = repair.Column,
                 HasAutofix = true,
             });
 
@@ -142,8 +128,25 @@ public sealed partial class EpubFormat : IBookFormat
     {
         Throw.IfNull(container);
 
-        ContainerXml containerXml = ContainerXml.Read(container);
-        string? opfPath = containerXml.PrimaryRootfilePath;
+        ContainerEntry entry = LocatePackageDocument(container);
+
+        return new RawPackageDocument
+        {
+            EntryName = entry.Name,
+            Bytes = container.ReadAllBytes(entry),
+        };
+    }
+
+    /// <summary>
+    /// Resolves <c>container.xml</c>'s rootfile to the entry holding it.
+    /// </summary>
+    /// <exception cref="BookFormatException">
+    /// <c>container.xml</c> is missing, declares no rootfile, or points at an
+    /// entry that is not in the archive.
+    /// </exception>
+    private static ContainerEntry LocatePackageDocument(IContainer container)
+    {
+        string? opfPath = ContainerXml.Read(container).PrimaryRootfilePath;
 
         if (opfPath is null)
         {
@@ -151,19 +154,10 @@ public sealed partial class EpubFormat : IBookFormat
                 $"'{ContainerXml.EntryName}' declares no rootfile.", ContainerXml.EntryName);
         }
 
-        ContainerEntry? entry = FindEntry(container, opfPath);
-        if (entry is null)
-        {
-            throw new BookFormatException(
+        return FindEntry(container, opfPath)
+            ?? throw new BookFormatException(
                 $"'{ContainerXml.EntryName}' points at '{opfPath}', which is not in the archive.",
                 ContainerXml.EntryName);
-        }
-
-        return new RawPackageDocument
-        {
-            EntryName = entry.Name,
-            Bytes = ReadAllBytes(container, entry),
-        };
     }
 
     /// <inheritdoc />
@@ -193,14 +187,11 @@ public sealed partial class EpubFormat : IBookFormat
 
         Log.Info(
             $"Read EPUB {opf.Version ?? "(unversioned)"} metadata from '{opf.EntryName}': "
-            + $"title={Describe(metadata.Title)}, creators={metadata.Creators.Count}, "
+            + $"title={Log.Describe(metadata.Title)}, creators={metadata.Creators.Count}, "
             + $"cover={(metadata.Cover is null ? "none" : metadata.Cover.MediaType)}.");
 
         return metadata;
     }
-
-    private static string Describe(string? value) =>
-        value is null ? "(none)" : $"\"{value}\"";
 
     /// <inheritdoc />
     public void Write(
@@ -368,7 +359,7 @@ public sealed partial class EpubFormat : IBookFormat
 
         metadata.Cover = new CoverImage
         {
-            Data = ReadAllBytes(container, entry),
+            Data = container.ReadAllBytes(entry),
             MediaType = item.MediaType ?? GuessMediaType(entry.Name),
             SourceEntryName = entry.Name,
             SourceManifestId = item.Id,
@@ -428,17 +419,6 @@ public sealed partial class EpubFormat : IBookFormat
         }
 
         return null;
-    }
-
-    private static byte[] ReadAllBytes(IContainer container, ContainerEntry entry)
-    {
-        using Stream stream = container.OpenRead(entry);
-        using var buffer = new MemoryStream(entry.Length > 0 && entry.Length < int.MaxValue
-            ? (int)entry.Length
-            : 0);
-
-        stream.CopyTo(buffer);
-        return buffer.ToArray();
     }
 
     private static string GuessMediaType(string name)

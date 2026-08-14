@@ -101,13 +101,11 @@ public sealed partial class MobiFormat : IBookFormat
 
         Log.Info(
             $"Read MOBI metadata from {headers.Count} header record"
-            + $"{(headers.Count == 1 ? "" : "s")}: title={Describe(metadata.Title)}, "
+            + $"{(headers.Count == 1 ? "" : "s")}: title={Log.Describe(metadata.Title)}, "
             + $"creators={metadata.Creators.Count}, encoding={preferred.TextEncoding.WebName}.");
 
         return metadata;
     }
-
-    private static string Describe(string? value) => value is null ? "(none)" : $"\"{value}\"";
 
     /// <inheritdoc />
     /// <exception cref="BookFormatException">
@@ -301,7 +299,7 @@ public sealed partial class MobiFormat : IBookFormat
 
         try
         {
-            return MobiDocument.Parse(ReadAllBytes(container, entry), entry.Name);
+            return MobiDocument.Parse(container.ReadAllBytes(entry), entry.Name);
         }
         catch (BookFormatException ex)
         {
@@ -347,7 +345,7 @@ public sealed partial class MobiFormat : IBookFormat
             return;
         }
 
-        byte[] data = ReadAllBytes(container, container.Entries[index]);
+        byte[] data = container.ReadAllBytes(container.Entries[index]);
 
         if (MediaTypeOf(data) is not { } mediaType)
         {
@@ -404,11 +402,4 @@ public sealed partial class MobiFormat : IBookFormat
         return null;
     }
 
-    private static byte[] ReadAllBytes(IContainer container, ContainerEntry entry)
-    {
-        using Stream stream = container.OpenRead(entry);
-        using var buffer = new MemoryStream(entry.Length > 0 ? (int)entry.Length : 4096);
-        stream.CopyTo(buffer);
-        return buffer.ToArray();
-    }
 }

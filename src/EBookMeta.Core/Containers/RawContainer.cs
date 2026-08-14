@@ -99,7 +99,6 @@ public sealed class RawContainer : IContainer
             Name = path is null ? "(document)" : System.IO.Path.GetFileName(path),
             Index = 0,
             Length = stream.Length,
-            CompressedLength = stream.Length,
             CompressionMethod = ZipCompressionMethods.Stored,
             LastModified = LastWriteTimeOf(path),
         };

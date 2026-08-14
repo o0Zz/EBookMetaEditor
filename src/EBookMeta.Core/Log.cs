@@ -137,6 +137,18 @@ public static class Log
         Write(level, finding.ToString());
     }
 
+    /// <summary>Renders an optional field's value for a log line.</summary>
+    /// <param name="value">The value, which may be absent.</param>
+    /// <returns>The value in quotes, or <c>(none)</c>.</returns>
+    /// <remarks>
+    /// Quoted rather than bare so an empty string and a missing one read
+    /// differently in the log, which is the distinction most metadata bug reports
+    /// turn on. Shared by all four formats so their "Read ..." lines stay
+    /// comparable to each other.
+    /// </remarks>
+    public static string Describe(string? value) =>
+        value is null ? "(none)" : $"\"{value}\"";
+
     /// <summary>Formats the whole session as text.</summary>
     /// <returns>One line per entry, separated by <see cref="Environment.NewLine"/>.</returns>
     public static string Format()
@@ -149,18 +161,6 @@ public static class Log
         }
 
         return builder.ToString();
-    }
-
-    /// <summary>Writes the whole session to <see cref="FilePath"/> now.</summary>
-    /// <returns>An error message, or <see langword="null"/> on success.</returns>
-    public static string? FlushToFile()
-    {
-        lock (Gate)
-        {
-            _flushed = 0;
-            _fileFailed = false;
-            return AppendPending();
-        }
     }
 
     /// <summary>Discards every entry. For tests, and for a "clear" command.</summary>

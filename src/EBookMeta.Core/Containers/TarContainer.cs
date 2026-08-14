@@ -85,31 +85,7 @@ public sealed class TarContainer : IContainer
     {
         Throw.IfNullOrEmpty(path);
 
-        FileStream stream;
-        try
-        {
-            stream = new FileStream(
-                path,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.ReadWrite | FileShare.Delete,
-                bufferSize: 4096,
-                FileOptions.RandomAccess);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
-        {
-            throw new BookIoException($"Could not open '{path}' for reading.", path, ex);
-        }
-
-        try
-        {
-            return Open(stream, path, leaveOpen: false);
-        }
-        catch
-        {
-            stream.Dispose();
-            throw;
-        }
+        return BookContainers.OpenFile(path, stream => Open(stream, path, leaveOpen: false));
     }
 
     /// <summary>Opens a TAR container over an existing seekable stream.</summary>
@@ -251,7 +227,6 @@ public sealed class TarContainer : IContainer
                 Name = name,
                 Index = entries.Count,
                 Length = size,
-                CompressedLength = size,
 
                 // TAR does not compress. Reported as stored so the entry counts as
                 // reproducible and the format layer, which speaks ZIP method codes,
@@ -328,22 +303,8 @@ public sealed class TarContainer : IContainer
 
         // Its own handle, so two entries can be read at once. The rebuild reads
         // entries one at a time, but nothing in the interface promises that.
-        FileStream own;
-        try
-        {
-            own = new FileStream(
-                Path,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.ReadWrite | FileShare.Delete,
-                bufferSize: 4096,
-                FileOptions.SequentialScan);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            throw new BookFormatException(
-                $"Entry '{entry.Name}' could not be read.", entry.Name, ex);
-        }
+        FileStream own = BookContainers.ReopenForEntry(
+            Path, entry.Name, $"Entry '{entry.Name}'");
 
         return new SectionStream(own, layout.DataOffset, length, ownsStream: true);
     }

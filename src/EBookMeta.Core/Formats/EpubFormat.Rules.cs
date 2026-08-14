@@ -98,7 +98,7 @@ public sealed partial class EpubFormat
                 Location = location,
             });
         }
-        else if (!IsPlausibleLanguageTag(language!))
+        else if (!MetadataFields.IsPlausibleLanguageTag(language!))
         {
             findings.Add(new Finding
             {
@@ -378,7 +378,7 @@ public sealed partial class EpubFormat
             });
         }
 
-        string content = Encoding.ASCII.GetString(ReadAllBytes(container, first));
+        string content = Encoding.ASCII.GetString(container.ReadAllBytes(first));
 
         if (!content.Equals(EpubMediaType, StringComparison.Ordinal))
         {
@@ -414,27 +414,4 @@ public sealed partial class EpubFormat
 
     private static bool ElementIdExists(OpfDocument opf, string id) =>
         opf.Package?.Descendants().Any(e => (string?)e.Attribute("id") == id) == true;
-
-    /// <summary>
-    /// Whether a language tag is shaped like BCP 47.
-    /// </summary>
-    private static bool IsPlausibleLanguageTag(string tag)
-    {
-        string[] parts = tag.Split('-');
-
-        if (parts.Length == 0 || parts[0].Length is < 2 or > 3)
-        {
-            return false;
-        }
-
-        foreach (string part in parts)
-        {
-            if (part.Length == 0 || !part.All(char.IsLetterOrDigit))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
 }

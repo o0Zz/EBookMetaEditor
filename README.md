@@ -35,20 +35,6 @@ for:
 
 **Not supported:** CBR, CB7, PDF, KFX, AZW4, LIT, PDB, RB, DjVu, audiobooks.
 
-CBR and CB7 are the ones people ask about. Both can be *read* — but neither can be
-written: RAR compression is proprietary and its licence forbids building a
-compatible compressor, and no 7z writer ships here either. That would mean an
-editor that opens your comics and then cannot save them, which is not what this
-tool is for. The rest each need a different container, a different metadata
-document, or both.
-
-**DRM-protected files are refused, not worked around.** An encrypted AZW or AZW3
-is detected on open and reported; nothing is written. Removing DRM is not something
-this tool does.
-
-Files are identified by their **content, not their extension**. A `.cbz` that is
-really a RAR archive is extremely common, and the tool tells you so by name instead
-of mangling it.
 
 ## What you can edit, per format
 

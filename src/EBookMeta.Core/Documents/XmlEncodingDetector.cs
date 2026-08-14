@@ -140,6 +140,36 @@ public static class XmlEncodingDetector
         return info.Encoding.GetString(bytes.Slice(info.ByteOrderMarkLength));
     }
 
+    /// <summary>Encodes document text back to bytes in the encoding it arrived in.</summary>
+    /// <param name="text">The document text, without a byte order mark.</param>
+    /// <param name="info">The result of <see cref="Detect"/>.</param>
+    /// <returns>The document's bytes.</returns>
+    /// <remarks>
+    /// The exact inverse of <see cref="Decode"/>, and here beside it so the pair
+    /// cannot drift. A BOM is restored when the original had one and not added
+    /// when it did not: removing one is a change to the file that no edit asked
+    /// for and that some readers depend on, and adding one to a file that lacked
+    /// it is the same mistake in reverse.
+    /// </remarks>
+    public static byte[] Encode(string text, XmlEncodingInfo info)
+    {
+        Throw.IfNull(text);
+        Throw.IfNull(info);
+
+        byte[] content = info.Encoding.GetBytes(text);
+
+        if (!info.HasByteOrderMark)
+        {
+            return content;
+        }
+
+        byte[] preamble = info.Encoding.GetPreamble();
+        byte[] result = new byte[preamble.Length + content.Length];
+        preamble.CopyTo(result, 0);
+        content.CopyTo(result, preamble.Length);
+        return result;
+    }
+
     private static (Encoding?, int) DetectByteOrderMark(ReadOnlySpan<byte> bytes)
     {
         // UTF-32 LE must be tested before UTF-16 LE: both start FF FE, and

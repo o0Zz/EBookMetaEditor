@@ -59,4 +59,83 @@ public static class BookContainers
     public static bool IsSupported(ContainerKind kind) =>
         kind is ContainerKind.Zip or ContainerKind.Tar or ContainerKind.Raw
             or ContainerKind.PalmDb;
+
+    /// <summary>
+    /// Opens a container file and hands the stream to the implementation, closing
+    /// it again if the implementation rejects the file.
+    /// </summary>
+    /// <typeparam name="T">The container type being constructed.</typeparam>
+    /// <param name="path">The file to open.</param>
+    /// <param name="open">Builds the container over the open stream.</param>
+    /// <returns>Whatever <paramref name="open"/> returned.</returns>
+    /// <exception cref="BookIoException">The file could not be opened.</exception>
+    /// <remarks>
+    /// <see cref="FileShare.ReadWrite"/> plus <see cref="FileShare.Delete"/> is
+    /// what lets a user open a book that another program is holding, and
+    /// <see cref="FileOptions.RandomAccess"/> is right for all three: a ZIP's
+    /// central directory is at the end, a TAR's headers are interleaved with its
+    /// data, and a PalmDB's record table is at the front. The dispose-on-throw is
+    /// the part that is easy to omit and leaks a handle onto the user's file when
+    /// it is.
+    /// </remarks>
+    internal static T OpenFile<T>(string path, Func<FileStream, T> open)
+    {
+        FileStream stream;
+        try
+        {
+            stream = new FileStream(
+                path,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete,
+                bufferSize: 4096,
+                FileOptions.RandomAccess);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            throw new BookIoException($"Could not open '{path}' for reading.", path, ex);
+        }
+
+        try
+        {
+            return open(stream);
+        }
+        catch
+        {
+            stream.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Opens a second handle on a container file so one entry can be read while
+    /// another is open.
+    /// </summary>
+    /// <param name="path">The container file.</param>
+    /// <param name="entryName">The entry being read, for the error message.</param>
+    /// <param name="what">How to name the entry in that message — "Entry 'x'".</param>
+    /// <returns>A stream positioned at the start of the file; the caller owns it.</returns>
+    /// <exception cref="BookFormatException">The file could not be reopened.</exception>
+    /// <remarks>
+    /// Nothing in <see cref="IContainer.OpenRead"/> promises entries are read one
+    /// at a time, so the containers that slice a single file cannot hand out views
+    /// over one shared handle.
+    /// </remarks>
+    internal static FileStream ReopenForEntry(string path, string entryName, string what)
+    {
+        try
+        {
+            return new FileStream(
+                path,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete,
+                bufferSize: 4096,
+                FileOptions.SequentialScan);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new BookFormatException($"{what} could not be read.", entryName, ex);
+        }
+    }
 }

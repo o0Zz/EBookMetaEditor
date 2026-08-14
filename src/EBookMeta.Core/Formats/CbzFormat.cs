@@ -27,8 +27,6 @@ public sealed partial class CbzFormat : IBookFormat
     /// <summary>The CoMet metadata document, read for cross-checking only.</summary>
     private const string CometEntryName = "comet.xml";
 
-    private static readonly string[] ImageExtensions =
-        [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".avif", ".jxl", ".tif", ".tiff"];
 
     /// <summary>Creates the format for one flavour of comic archive.</summary>
     /// <param name="id">
@@ -115,13 +113,11 @@ public sealed partial class CbzFormat : IBookFormat
                 ? $"Read comic archive metadata: no '{ComicInfoDocument.DefaultEntryName}', "
                     + $"{CountImages(container)} images."
                 : $"Read comic archive metadata from '{entry.Name}': "
-                    + $"series={Describe(metadata.Series?.Name)}, title={Describe(metadata.Title)}, "
+                    + $"series={Log.Describe(metadata.Series?.Name)}, title={Log.Describe(metadata.Title)}, "
                     + $"creators={metadata.Creators.Count}.");
 
         return metadata;
     }
-
-    private static string Describe(string? value) => value is null ? "(none)" : $"\"{value}\"";
 
     /// <inheritdoc />
     /// <exception cref="BookFormatException">
@@ -247,7 +243,7 @@ public sealed partial class CbzFormat : IBookFormat
     {
         try
         {
-            return ComicInfoDocument.Parse(ReadAllBytes(container, entry), entry.Name);
+            return ComicInfoDocument.Parse(container.ReadAllBytes(entry), entry.Name);
         }
         catch (BookFormatException ex)
         {
@@ -279,7 +275,7 @@ public sealed partial class CbzFormat : IBookFormat
 
         metadata.Cover = new CoverImage
         {
-            Data = ReadAllBytes(container, first),
+            Data = container.ReadAllBytes(first),
             MediaType = MediaTypeOf(first.Name),
             SourceEntryName = first.Name,
         };
@@ -339,7 +335,7 @@ public sealed partial class CbzFormat : IBookFormat
     private static int CountImages(IContainer container) => Images(container).Count();
 
     private static bool IsImage(ContainerEntry entry) =>
-        ImageExtensions.Contains(Path.GetExtension(entry.Name).ToLowerInvariant());
+        FormatDetector.ImageExtensions.Contains(Path.GetExtension(entry.Name).ToLowerInvariant());
 
     private static bool IsMetadata(ContainerEntry entry)
     {
@@ -349,11 +345,4 @@ public sealed partial class CbzFormat : IBookFormat
             || name.Equals(CometEntryName, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static byte[] ReadAllBytes(IContainer container, ContainerEntry entry)
-    {
-        using Stream stream = container.OpenRead(entry);
-        using var buffer = new MemoryStream(entry.Length > 0 ? (int)entry.Length : 4096);
-        stream.CopyTo(buffer);
-        return buffer.ToArray();
-    }
 }

@@ -93,13 +93,11 @@ public sealed partial class Fb2Format : IBookFormat
 
         Log.Info(
             $"Read FictionBook metadata from '{entry.Name}': "
-            + $"title={Describe(metadata.Title)}, creators={metadata.Creators.Count}, "
-            + $"series={Describe(metadata.Series?.Name)}.");
+            + $"title={Log.Describe(metadata.Title)}, creators={metadata.Creators.Count}, "
+            + $"series={Log.Describe(metadata.Series?.Name)}.");
 
         return metadata;
     }
-
-    private static string Describe(string? value) => value is null ? "(none)" : $"\"{value}\"";
 
     /// <inheritdoc />
     public void Write(
@@ -184,7 +182,7 @@ public sealed partial class Fb2Format : IBookFormat
     {
         try
         {
-            return Fb2Document.Parse(ReadAllBytes(container, entry), entry.Name);
+            return Fb2Document.Parse(container.ReadAllBytes(entry), entry.Name);
         }
         catch (BookFormatException ex)
         {
@@ -274,11 +272,4 @@ public sealed partial class Fb2Format : IBookFormat
         }
     }
 
-    private static byte[] ReadAllBytes(IContainer container, ContainerEntry entry)
-    {
-        using Stream stream = container.OpenRead(entry);
-        using var buffer = new MemoryStream(entry.Length > 0 ? (int)entry.Length : 4096);
-        stream.CopyTo(buffer);
-        return buffer.ToArray();
-    }
 }

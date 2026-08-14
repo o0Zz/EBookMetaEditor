@@ -34,12 +34,6 @@ public sealed record ContainerEntry
     public required long Length { get; init; }
 
     /// <summary>
-    /// The stored size in bytes, or the same as <see cref="Length"/> for
-    /// containers that do not compress.
-    /// </summary>
-    public long CompressedLength { get; init; }
-
-    /// <summary>
     /// The compression method as read, using ZIP method codes: 0 for stored,
     /// 8 for deflate.
     /// </summary>
