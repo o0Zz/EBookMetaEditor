@@ -21,6 +21,9 @@ menu.file.addFolder = Añadir &carpeta…
 menu.file.saveAll = &Guardar todo
 menu.file.validateAll = &Validar todo
 menu.file.close = C&errar
+menu.edit = &Edición
+menu.edit.copy = &Copiar
+menu.edit.paste = &Pegar
 menu.help = ?
 menu.help.log = &Registro…
 menu.help.about = &Acerca de EBookMetaEditor…
@@ -92,9 +95,6 @@ log.save.title = Guardar el registro
 log.saveFailed = No se pudo guardar el registro: {0}
 
 batch.title = Edición por lotes — EBookMetaEditor
-batch.bulk.set = Establecer
-batch.bulk.apply = Aplicar a la selección
-batch.bulk.hint = …en cada fila seleccionada.  Ctrl+D copia la celda actual hacia abajo.
 batch.button.saveAll = &Guardar todo
 batch.button.validateAll = &Validar todo
 
@@ -117,15 +117,21 @@ batch.progress = {0} {1} de {2} — {3}
 batch.cancelled = {0} cancelada.
 batch.failed = {0} fallida: {1}
 
-batch.applied.one = {0} en 1 fila.
-batch.applied.many = {0} en {1} filas.
-batch.appliedSkipped.one = {0} en 1 fila; {2} no pudo almacenarlo.
-batch.appliedSkipped.many = {0} en {1} filas; {2} no pudieron almacenarlo.
-batch.what.copied = {0} copiado
-batch.what.set = {0} establecido
-
-batch.selectRows = Seleccione primero las filas que desea cambiar.
 batch.nothingEdited = No se ha editado nada.
+
+# Copiar y pegar. Un solo valor va a cada celda seleccionada; un bloque copiado se
+# rellena hacia la derecha y hacia abajo desde la esquina superior izquierda.
+batch.copied.one = 1 celda copiada.
+batch.copied.many = {0} celdas copiadas.
+batch.nothingToCopy = Seleccione primero las celdas que desea copiar.
+batch.clipboardBusy = Otra aplicación está ocupando el portapapeles. Vuelva a intentarlo.
+batch.paste.empty = No hay nada que pegar.
+batch.paste.selectCell = Seleccione primero una celda que se pueda editar.
+batch.pasted.one = Pegado en 1 celda.
+batch.pasted.many = Pegado en {0} celdas.
+batch.pastedSkipped.one = Pegado en 1 celda; {1} no puede guardarlo.
+batch.pastedSkipped.many = Pegado en {0} celdas; {1} no pueden guardarlo.
+
 batch.rowDirty = Guarde esta fila antes de abrirla por separado: contiene cambios sin guardar.
 batch.findings.one = 1 resultado — consulte el registro.
 batch.findings.many = {0} resultados — consulte el registro.

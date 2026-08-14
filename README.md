@@ -39,8 +39,11 @@ Select several files in Explorer and pick **Edit metadata**, drop a folder on th
 window, or use **File ▸ Batch edit folder…** — any of them opens one window with a
 row per file and a column per field.
 
-- Type straight into the cells, or set a value once and **apply it to every
-  selected row**. `Ctrl+D` copies the current cell down the selection.
+- Type straight into the cells, or **copy and paste** them: `Ctrl+C` and `Ctrl+V`
+  work as they do in a spreadsheet. One copied value pastes into every selected
+  cell — copy a publisher once, select the column down thirty rows, paste — and a
+  copied block fills right and down, including a block pasted in from Excel. Both
+  are under **Edit** and under right-click.
 - **Save all** writes every file you changed, and nothing else: a file you did not
   edit is not rewritten, it is not even opened. Each one keeps a `.bak`.
 - Every row says what happened to it. A file that cannot be edited — a `.cbz` that

@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using EBookMeta.Formats;
@@ -33,22 +34,17 @@ internal sealed class BatchForm : Form, IPathReceiver
     /// Everything else <see cref="MetadataFields"/> can project as text is here, and
     /// each cell is enabled per row according to what that row's format can store.
     /// </remarks>
-    /// <remarks>
-    /// Two keys per column because a grid header and a picker entry want
-    /// different lengths of the same name: the series index is "#" over a 45 px
-    /// column and "Series index" in a list where there is room to read it.
-    /// </remarks>
-    private static readonly (MetadataField Field, string HeaderKey, string NameKey, int Width)[] FieldColumns =
+    private static readonly (MetadataField Field, string HeaderKey, int Width)[] FieldColumns =
     [
-        (MetadataField.Title, "field.title", "field.title", 200),
-        (MetadataField.Creators, "field.authors", "field.authors", 150),
-        (MetadataField.Series, "field.series", "field.series", 140),
-        (MetadataField.SeriesIndex, "field.seriesIndexShort", "field.seriesIndex", 45),
-        (MetadataField.Publisher, "field.publisher", "field.publisher", 120),
-        (MetadataField.PublicationDate, "field.published", "field.published", 90),
-        (MetadataField.Language, "field.language", "field.language", 70),
-        (MetadataField.Subjects, "field.subjects", "field.subjects", 160),
-        (MetadataField.SortTitle, "field.sortTitle", "field.sortTitle", 150),
+        (MetadataField.Title, "field.title", 200),
+        (MetadataField.Creators, "field.authors", 150),
+        (MetadataField.Series, "field.series", 140),
+        (MetadataField.SeriesIndex, "field.seriesIndexShort", 45),
+        (MetadataField.Publisher, "field.publisher", 120),
+        (MetadataField.PublicationDate, "field.published", 90),
+        (MetadataField.Language, "field.language", 70),
+        (MetadataField.Subjects, "field.subjects", 160),
+        (MetadataField.SortTitle, "field.sortTitle", 150),
     ];
 
     private const int StatusColumn = 0;
@@ -74,16 +70,8 @@ internal sealed class BatchForm : Form, IPathReceiver
         ClipboardCopyMode = DataGridViewClipboardCopyMode.EnableWithoutHeaderText,
     };
 
-    private readonly ComboBox _bulkField = new()
-    {
-        DropDownStyle = ComboBoxStyle.DropDownList,
-        Width = 110,
-    };
-
-    // AutoSize throughout rather than fixed widths: "Apply to selection" is "Auf
-    // Auswahl anwenden" in German, which does not fit in 130 px.
-    private readonly TextBox _bulkValue = new() { Width = 220 };
-    private readonly Button _bulkApply = Action("batch.bulk.apply", 132);
+    // AutoSize throughout rather than fixed widths: "Validate all" is "Alle prüfen"
+    // in German, which does not fit in a width measured against English.
     private readonly Button _saveAll = Action("batch.button.saveAll", 96);
     private readonly Button _validateAll = Action("batch.button.validateAll", 96);
     private readonly Button _cancel = Action("button.cancel", 84);
@@ -126,7 +114,6 @@ internal sealed class BatchForm : Form, IPathReceiver
         ClientSize = new Size(1100, 560);
         MinimumSize = new Size(760, 400);
         AllowDrop = true;
-        KeyPreview = true;
 
         BuildLayout(BuildMenu());
         BuildColumns();
@@ -139,9 +126,9 @@ internal sealed class BatchForm : Form, IPathReceiver
         _grid.CellValueChanged += OnCellValueChanged;
         _grid.CellFormatting += OnCellFormatting;
         _grid.CellDoubleClick += OnCellDoubleClick;
-        _grid.KeyDown += OnGridKeyDown;
+        _grid.CellMouseDown += OnCellMouseDown;
+        _grid.ContextMenuStrip = BuildCellMenu();
 
-        _bulkApply.Click += (_, _) => ApplyToSelection();
         _saveAll.Click += (_, _) => SaveAll();
         _validateAll.Click += (_, _) => ValidateAll();
         _cancel.Click += (_, _) => _work?.Cancel();
@@ -254,61 +241,58 @@ internal sealed class BatchForm : Form, IPathReceiver
         file.DropDownItems.Add(new ToolStripSeparator());
         file.DropDownItems.Add(Item("menu.file.close", Close));
 
+        ToolStripMenuItem edit = Item("menu.edit");
+        edit.DropDownItems.Add(WithShortcut(Item("menu.edit.copy", CopySelection), "Ctrl+C"));
+        edit.DropDownItems.Add(WithShortcut(Item("menu.edit.paste", PasteIntoSelection), "Ctrl+V"));
+
         ToolStripMenuItem help = Item("menu.help");
         help.DropDownItems.Add(Item("menu.help.log", ShowLog, Keys.Control | Keys.L));
         help.DropDownItems.Add(new ToolStripSeparator());
         help.DropDownItems.Add(Item("menu.help.about", ShowAbout));
 
-        // Named explicitly: a bare MenuStrip inherits its accessible name from the
-        // nearest label, which here is the hint about Ctrl+D — so a screen reader
-        // would announce the menu bar as a sentence about filling cells down.
+        // Named explicitly: a bare MenuStrip takes its accessible name from the
+        // nearest label, which is whatever text happens to sit next to it — so a
+        // screen reader announces the menu bar as something that is not a menu bar.
         var menu = new MenuStrip { AccessibleName = Strings.Get("menu.accessible") };
         menu.Items.Add(file);
+        menu.Items.Add(edit);
         menu.Items.Add(help);
+        return menu;
+    }
+
+    /// <summary>
+    /// Shows a shortcut beside a menu item without registering it.
+    /// </summary>
+    /// <remarks>
+    /// <c>ShortcutKeys</c> would make the menu answer the key everywhere in the
+    /// window, including inside a cell being edited and inside the value box, where
+    /// Ctrl+C has to keep meaning "copy this text". The keys are handled in
+    /// <see cref="ProcessCmdKey"/>, which can tell those cases apart; this only puts
+    /// the label where someone looking for the feature will find it.
+    /// </remarks>
+    private static ToolStripMenuItem WithShortcut(ToolStripMenuItem item, string shortcut)
+    {
+        item.ShortcutKeyDisplayString = shortcut;
+        return item;
+    }
+
+    /// <summary>The right-click menu on a cell.</summary>
+    /// <remarks>
+    /// The same two commands as the Edit menu. Right-click is where people look for
+    /// copy and paste first, and a feature nobody can find is not delivered.
+    /// </remarks>
+    private ContextMenuStrip BuildCellMenu()
+    {
+        var menu = new ContextMenuStrip();
+
+        menu.Items.Add(WithShortcut(Item("menu.edit.copy", CopySelection), "Ctrl+C"));
+        menu.Items.Add(WithShortcut(Item("menu.edit.paste", PasteIntoSelection), "Ctrl+V"));
+
         return menu;
     }
 
     private void BuildLayout(MenuStrip menu)
     {
-        foreach ((MetadataField field, _, string nameKey, _) in FieldColumns)
-        {
-            _bulkField.Items.Add(new FieldChoice(field, Strings.Get(nameKey)));
-        }
-
-        _bulkField.SelectedIndex = 0;
-
-        // A flow rather than coordinates: every control on this bar is as wide as
-        // its own translation, so placing the next one means measuring the last.
-        var bulk = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Top,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-            Padding = new Padding(8, 6, 8, 6),
-        };
-
-        var label = new Label
-        {
-            Text = Strings.Get("batch.bulk.set"),
-            AutoSize = true,
-            Margin = new Padding(3, 8, 6, 3),
-        };
-
-        _bulkValue.Margin = new Padding(6, 5, 6, 3);
-        _bulkField.Margin = new Padding(3, 4, 3, 3);
-
-        var hint = new Label
-        {
-            Text = Strings.Get("batch.bulk.hint"),
-            AutoSize = true,
-            ForeColor = SystemColors.GrayText,
-            Margin = new Padding(14, 8, 3, 3),
-        };
-
-        bulk.Controls.AddRange([label, _bulkField, _bulkValue, _bulkApply, hint]);
-
         var buttons = new FlowLayoutPanel
         {
             Dock = DockStyle.Bottom,
@@ -327,7 +311,6 @@ internal sealed class BatchForm : Form, IPathReceiver
         Controls.Add(_grid);
         Controls.Add(buttons);
         Controls.Add(_status);
-        Controls.Add(bulk);
         Controls.Add(menu);
         MainMenuStrip = menu;
     }
@@ -339,7 +322,7 @@ internal sealed class BatchForm : Form, IPathReceiver
         _grid.Columns.Add(ReadOnlyColumn(Strings.Get("column.format"), 70));
         _grid.Columns.Add(ReadOnlyColumn(Strings.Get("column.findings"), 70));
 
-        foreach ((MetadataField field, string headerKey, _, int width) in FieldColumns)
+        foreach ((MetadataField field, string headerKey, int width) in FieldColumns)
         {
             _grid.Columns.Add(new DataGridViewTextBoxColumn
             {
@@ -534,61 +517,135 @@ internal sealed class BatchForm : Form, IPathReceiver
         editor.Show(this);
     }
 
-    private void OnGridKeyDown(object? sender, KeyEventArgs e)
+    /// <summary>
+    /// Handles the grid's own shortcuts before anything else sees them.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// In <c>ProcessCmdKey</c> rather than a <c>KeyDown</c> handler because the grid
+    /// answers Ctrl+C itself and would otherwise consume it before the form ever
+    /// heard about it — leaving copy and paste implemented in two different places
+    /// with two different ideas of what a selection is.
+    /// </para>
+    /// <para>
+    /// Both guards are load-bearing. Inside a cell being edited, Ctrl+C and Ctrl+V
+    /// mean the ordinary text-editing thing, and taking them over there would make
+    /// it impossible to copy part of a title. The focus check keeps them out of
+    /// anything else that might one day hold text on this window.
+    /// </para>
+    /// </remarks>
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
-        if (e.Control && e.KeyCode == Keys.D)
+        if (!_busy && _grid.Focused && !_grid.IsCurrentCellInEditMode)
         {
-            FillDown();
-            e.Handled = true;
+            switch (keyData)
+            {
+                case Keys.Control | Keys.C:
+                    CopySelection();
+                    return true;
+
+                case Keys.Control | Keys.V:
+                    PasteIntoSelection();
+                    return true;
+            }
+        }
+
+        return base.ProcessCmdKey(ref msg, keyData);
+    }
+
+    /// <summary>Puts the selected cells on the clipboard.</summary>
+    /// <remarks>
+    /// Through the grid's own <c>GetClipboardContent</c>, which writes text and HTML
+    /// flavours of the same selection — so a block copied out of here pastes into
+    /// Excel as a table rather than as one run-on line.
+    /// </remarks>
+    private void CopySelection()
+    {
+        // Commit first, so copy and paste both see the value the model holds rather
+        // than whatever is half-typed in an open cell editor. Reachable from the
+        // menu while a cell is being edited, which is where this matters.
+        _grid.EndEdit();
+
+        if (_grid.GetClipboardContent() is not { } content)
+        {
+            SetStatus(Strings.Get("batch.nothingToCopy"));
+            return;
+        }
+
+        int count = _grid.SelectedCells.Count;
+
+        try
+        {
+            Clipboard.SetDataObject(content, copy: true);
+            SetStatus(Strings.Plural("batch.copied", count, count));
+        }
+        catch (ExternalException ex)
+        {
+            // Another application holds the clipboard open. Nothing is wrong with
+            // the grid, and saying so is more use than a stack trace.
+            Log.Warning($"The clipboard could not be written: {ex.Message}");
+            SetStatus(Strings.Get("batch.clipboardBusy"));
         }
     }
 
-    /// <summary>
-    /// Copies the current cell's value into that column on every selected row.
-    /// </summary>
+    /// <summary>Writes the clipboard into the grid.</summary>
     /// <remarks>
-    /// The keyboard half of bulk editing, and the reason a batch grid beats thirty
-    /// windows: get one row right, select the rest, Ctrl+D.
+    /// <para>
+    /// Two shapes, because both are things people actually do. <b>One value</b> goes
+    /// into every selected cell that can hold it — copy a publisher once, select the
+    /// column down thirty rows, paste. <b>A block</b> — several values, from another
+    /// row here or from a spreadsheet — lands anchored at the top-left of the
+    /// selection and fills right and down from there, which is what every grid does
+    /// and therefore what people expect.
+    /// </para>
+    /// <para>
+    /// Cells whose format cannot store the field are counted and reported, never
+    /// written — the same rule every other edit here follows, and why pasting a
+    /// column of sort titles across a mixed selection of books and comics does the
+    /// right thing for the books and says so for the comics.
+    /// </para>
     /// </remarks>
-    private void FillDown()
+    private void PasteIntoSelection()
     {
-        if (_busy || _grid.CurrentCell is not { } current || current.ColumnIndex < FirstFieldColumn)
+        if (_busy)
         {
             return;
         }
 
-        var field = (MetadataField)_grid.Columns[current.ColumnIndex].Tag;
-        string what = Strings.Format("batch.what.copied", _grid.Columns[current.ColumnIndex].HeaderText);
+        _grid.EndEdit();
 
-        Apply(field, current.Value?.ToString() ?? string.Empty, what);
-    }
+        string[][] block = ClipboardBlock();
 
-    private void ApplyToSelection()
-    {
-        if (_busy || _bulkField.SelectedItem is not FieldChoice choice)
+        if (block.Length == 0)
         {
+            SetStatus(Strings.Get("batch.paste.empty"));
             return;
         }
 
-        Apply(choice.Field, _bulkValue.Text, Strings.Format("batch.what.set", choice.Header));
-    }
+        List<DataGridViewCell> targets = block.Length == 1 && block[0].Length == 1
+            ? EditableSelection()
+            : BlockTargets(block);
 
-    /// <summary>
-    /// Writes one value onto every selected row that can hold it.
-    /// </summary>
-    /// <remarks>
-    /// Rows whose format cannot store the field are counted and reported rather than
-    /// silently skipped. "Publisher set on 27 rows" when the user selected thirty is
-    /// a question they deserve an answer to.
-    /// </remarks>
-    private void Apply(MetadataField field, string value, string what)
-    {
-        int applied = 0;
+        if (targets.Count == 0)
+        {
+            SetStatus(Strings.Get("batch.paste.selectCell"));
+            return;
+        }
+
+        int pasted = 0;
         int skipped = 0;
+        var touched = new HashSet<DataGridViewRow>();
 
-        foreach (DataGridViewRow row in SelectedRows())
+        foreach (DataGridViewCell cell in targets)
         {
-            var entry = (BatchEntry)row.Tag;
+            DataGridViewRow row = _grid.Rows[cell.RowIndex];
+
+            if (row.Tag is not BatchEntry entry)
+            {
+                continue;
+            }
+
+            var field = (MetadataField)_grid.Columns[cell.ColumnIndex].Tag;
 
             if (entry.Capabilities?.CanWriteAll(field) != true)
             {
@@ -596,35 +653,149 @@ internal sealed class BatchForm : Form, IPathReceiver
                 continue;
             }
 
-            entry.Apply(field, value);
-            RefreshRow(row);
-            applied++;
+            entry.Apply(field, ValueFor(block, cell, targets[0]));
+            touched.Add(row);
+            pasted++;
         }
 
-        if (applied == 0 && skipped == 0)
+        foreach (DataGridViewRow row in touched)
         {
-            SetStatus(Strings.Get("batch.selectRows"));
-            return;
+            RefreshRow(row);
         }
 
         SetStatus(skipped == 0
-            ? Strings.Plural("batch.applied", applied, what, applied)
-            : Strings.Plural("batch.appliedSkipped", applied, what, applied, skipped));
+            ? Strings.Plural("batch.pasted", pasted, pasted)
+            : Strings.Plural("batch.pastedSkipped", pasted, pasted, skipped));
 
         UpdateStatus(keepMessage: true);
     }
 
-    /// <summary>The rows the selection touches, each once, in grid order.</summary>
-    private IEnumerable<DataGridViewRow> SelectedRows()
+    /// <summary>
+    /// The value a target cell takes: the only one there is, or the one at its
+    /// offset from the anchor.
+    /// </summary>
+    private static string ValueFor(string[][] block, DataGridViewCell cell, DataGridViewCell anchor)
     {
-        var seen = new HashSet<int>();
-
-        foreach (DataGridViewCell cell in _grid.SelectedCells)
+        if (block.Length == 1 && block[0].Length == 1)
         {
-            if (seen.Add(cell.RowIndex) && _grid.Rows[cell.RowIndex].Tag is BatchEntry)
+            return block[0][0];
+        }
+
+        int row = cell.RowIndex - anchor.RowIndex;
+        int column = cell.ColumnIndex - anchor.ColumnIndex;
+
+        return row >= 0 && row < block.Length && column >= 0 && column < block[row].Length
+            ? block[row][column]
+            : string.Empty;
+    }
+
+    /// <summary>The selected cells that belong to an editable column, in grid order.</summary>
+    private List<DataGridViewCell> EditableSelection()
+    {
+        List<DataGridViewCell> cells = [.. _grid.SelectedCells
+            .Cast<DataGridViewCell>()
+            .Where(c => c.ColumnIndex >= FirstFieldColumn)
+            .OrderBy(c => c.RowIndex)
+            .ThenBy(c => c.ColumnIndex)];
+
+        // Nothing selected in a field column, but the cursor is sitting in one:
+        // treat that as the target rather than making the user select it again.
+        if (cells.Count == 0 && _grid.CurrentCell is { } current && current.ColumnIndex >= FirstFieldColumn)
+        {
+            cells.Add(current);
+        }
+
+        return cells;
+    }
+
+    /// <summary>
+    /// The cells a block covers, anchored at the top-left of the selection.
+    /// </summary>
+    /// <remarks>
+    /// Clipped to the grid rather than extended: a block that runs off the right or
+    /// the bottom pastes what fits. Growing the grid is not an option — a row is a
+    /// file on disk.
+    /// </remarks>
+    private List<DataGridViewCell> BlockTargets(string[][] block)
+    {
+        List<DataGridViewCell> selection = EditableSelection();
+
+        if (selection.Count == 0)
+        {
+            return [];
+        }
+
+        int firstRow = selection.Min(c => c.RowIndex);
+        int firstColumn = selection.Min(c => c.ColumnIndex);
+        int width = block.Max(line => line.Length);
+
+        var cells = new List<DataGridViewCell>();
+
+        for (int row = 0; row < block.Length && firstRow + row < _grid.Rows.Count; row++)
+        {
+            for (int column = 0; column < width && firstColumn + column < _grid.Columns.Count; column++)
             {
-                yield return _grid.Rows[cell.RowIndex];
+                cells.Add(_grid.Rows[firstRow + row].Cells[firstColumn + column]);
             }
+        }
+
+        return cells;
+    }
+
+    /// <summary>
+    /// Reads the clipboard as a grid of values.
+    /// </summary>
+    /// <remarks>
+    /// Tab-separated rows, which is what this grid, Excel and every other
+    /// spreadsheet put on the clipboard, so copying from any of them works without
+    /// asking the user which format they meant. Trailing newlines are dropped
+    /// because a copied selection ends with one and would otherwise paste an empty
+    /// row over real metadata.
+    /// </remarks>
+    private static string[][] ClipboardBlock()
+    {
+        string text;
+
+        try
+        {
+            text = Clipboard.ContainsText() ? Clipboard.GetText() : string.Empty;
+        }
+        catch (ExternalException ex)
+        {
+            Log.Warning($"The clipboard could not be read: {ex.Message}");
+            return [];
+        }
+
+        text = text.TrimEnd('\r', '\n');
+
+        return text.Length == 0
+            ? []
+            : [.. text
+                .Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.None)
+                .Select(line => line.Split('\t'))];
+    }
+
+    /// <summary>
+    /// Moves the cursor to a right-clicked cell, unless it is already selected.
+    /// </summary>
+    /// <remarks>
+    /// Without this the context menu acts on wherever the cursor happened to be,
+    /// which is not where the user just clicked. Right-clicking inside an existing
+    /// selection leaves it alone, because collapsing a selection of thirty rows the
+    /// moment somebody reaches for the menu that acts on them would be perverse.
+    /// </remarks>
+    private void OnCellMouseDown(object? sender, DataGridViewCellMouseEventArgs e)
+    {
+        if (e.Button != MouseButtons.Right || e.RowIndex < 0 || e.ColumnIndex < 0)
+        {
+            return;
+        }
+
+        DataGridViewCell cell = _grid.Rows[e.RowIndex].Cells[e.ColumnIndex];
+
+        if (!cell.Selected)
+        {
+            _grid.CurrentCell = cell;
         }
     }
 
@@ -804,7 +975,6 @@ internal sealed class BatchForm : Form, IPathReceiver
         _busy = busy;
 
         _grid.Enabled = !busy;
-        _bulkApply.Enabled = !busy;
         _validateAll.Enabled = !busy;
         _saveAll.Enabled = !busy && _session.DirtyCount > 0;
         _cancel.Visible = busy;
@@ -984,19 +1154,4 @@ internal sealed class BatchForm : Form, IPathReceiver
         base.Dispose(disposing);
     }
 
-    /// <summary>A field as it appears in the bulk-apply picker.</summary>
-    /// <remarks>
-    /// A class rather than a record: <c>init</c> accessors need a support type that
-    /// only Core polyfills, and the UI project has no business declaring compiler
-    /// plumbing of its own.
-    /// </remarks>
-    private sealed class FieldChoice(MetadataField field, string header)
-    {
-        internal MetadataField Field { get; } = field;
-
-        internal string Header { get; } = header;
-
-        /// <summary>The label the combo box shows.</summary>
-        public override string ToString() => Header;
-    }
 }

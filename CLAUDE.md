@@ -250,8 +250,10 @@ codebase needs.
 - **Capabilities gate per cell, not per window.** A row's format decides which of
   its cells are editable, so `Sort title` is dead on a comic and live on a book
   in the same column. `BatchEntry.Apply` refuses a field the format cannot store
-  even if a caller asks, which is what stops a bulk "apply to every selected row"
-  from writing into files that would discard it.
+  even if a caller asks, which is what stops a paste across a mixed selection from
+  writing into files that would discard it. Every such refusal is counted and
+  reported — "pasted into 27 cells; 3 could not store it" — because a user who
+  selected thirty deserves to know.
 - `Load` reads only `Pending` entries, so adding files later is cheap and calling
   it twice cannot discard unsaved edits by re-reading the files they were made
   against. There is deliberately no reload.

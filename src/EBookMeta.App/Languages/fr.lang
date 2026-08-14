@@ -21,6 +21,9 @@ menu.file.addFolder = Ajouter un d&ossier…
 menu.file.saveAll = &Enregistrer tout
 menu.file.validateAll = &Valider tout
 menu.file.close = Fe&rmer
+menu.edit = &Édition
+menu.edit.copy = &Copier
+menu.edit.paste = Co&ller
 menu.help = ?
 menu.help.log = &Journal…
 menu.help.about = À &propos d'EBookMetaEditor…
@@ -92,9 +95,6 @@ log.save.title = Enregistrer le journal
 log.saveFailed = Impossible d'enregistrer le journal : {0}
 
 batch.title = Édition par lot — EBookMetaEditor
-batch.bulk.set = Définir
-batch.bulk.apply = Appliquer à la sélection
-batch.bulk.hint = …sur chaque ligne sélectionnée.  Ctrl+D recopie la cellule courante vers le bas.
 batch.button.saveAll = &Enregistrer tout
 batch.button.validateAll = &Valider tout
 
@@ -117,15 +117,21 @@ batch.progress = {0} {1} sur {2} — {3}
 batch.cancelled = {0} annulée.
 batch.failed = {0} échouée : {1}
 
-batch.applied.one = {0} sur 1 ligne.
-batch.applied.many = {0} sur {1} lignes.
-batch.appliedSkipped.one = {0} sur 1 ligne ; {2} n'a pas pu le stocker.
-batch.appliedSkipped.many = {0} sur {1} lignes ; {2} n'ont pas pu le stocker.
-batch.what.copied = {0} recopié
-batch.what.set = {0} défini
-
-batch.selectRows = Sélectionnez d'abord les lignes à modifier.
 batch.nothingEdited = Aucune modification.
+
+# Copier-coller. Une valeur collée va dans chaque cellule sélectionnée ; un bloc
+# copié se remplit vers la droite et vers le bas depuis le coin haut-gauche.
+batch.copied.one = 1 cellule copiée.
+batch.copied.many = {0} cellules copiées.
+batch.nothingToCopy = Sélectionnez d'abord les cellules à copier.
+batch.clipboardBusy = Une autre application occupe le presse-papiers. Réessayez.
+batch.paste.empty = Il n'y a rien à coller.
+batch.paste.selectCell = Sélectionnez d'abord une cellule modifiable.
+batch.pasted.one = Collé dans 1 cellule.
+batch.pasted.many = Collé dans {0} cellules.
+batch.pastedSkipped.one = Collé dans 1 cellule ; {1} ne peut pas l'enregistrer.
+batch.pastedSkipped.many = Collé dans {0} cellules ; {1} ne peuvent pas l'enregistrer.
+
 batch.rowDirty = Enregistrez cette ligne avant de l'ouvrir séparément : elle contient des modifications non enregistrées.
 batch.findings.one = 1 résultat — voir le journal.
 batch.findings.many = {0} résultats — voir le journal.

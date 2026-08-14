@@ -28,6 +28,9 @@ menu.file.addFolder = Add f&older…
 menu.file.saveAll = &Save all
 menu.file.validateAll = &Validate all
 menu.file.close = &Close
+menu.edit = &Edit
+menu.edit.copy = &Copy
+menu.edit.paste = &Paste
 menu.help = ?
 menu.help.log = &Log…
 menu.help.about = &About EBookMetaEditor…
@@ -105,9 +108,6 @@ log.save.title = Save the log
 log.saveFailed = The log could not be saved: {0}
 
 batch.title = Batch edit — EBookMetaEditor
-batch.bulk.set = Set
-batch.bulk.apply = Apply to selection
-batch.bulk.hint = …on every selected row.  Ctrl+D copies the current cell down the selection.
 batch.button.saveAll = &Save all
 batch.button.validateAll = &Validate all
 
@@ -131,16 +131,21 @@ batch.progress = {0} {1} of {2} — {3}
 batch.cancelled = {0} cancelled.
 batch.failed = {0} failed: {1}
 
-# {0} is a phrase built from batch.what.*, so it arrives already translated.
-batch.applied.one = {0} on 1 row.
-batch.applied.many = {0} on {1} rows.
-batch.appliedSkipped.one = {0} on 1 row; {2} could not store it.
-batch.appliedSkipped.many = {0} on {1} rows; {2} could not store it.
-batch.what.copied = {0} copied
-batch.what.set = {0} set
-
-batch.selectRows = Select the rows to change first.
 batch.nothingEdited = Nothing has been edited.
+
+# Copy and paste. A pasted value goes into every selected cell, or a copied block
+# fills right and down from the top-left of the selection.
+batch.copied.one = 1 cell copied.
+batch.copied.many = {0} cells copied.
+batch.nothingToCopy = Select the cells to copy first.
+batch.clipboardBusy = Another application is holding the clipboard. Try again.
+batch.paste.empty = There is nothing to paste.
+batch.paste.selectCell = Select a cell you can edit first.
+batch.pasted.one = Pasted into 1 cell.
+batch.pasted.many = Pasted into {0} cells.
+batch.pastedSkipped.one = Pasted into 1 cell; {1} could not store it.
+batch.pastedSkipped.many = Pasted into {0} cells; {1} could not store it.
+
 batch.rowDirty = Save this row before opening it on its own — it has unsaved edits here.
 batch.findings.one = 1 finding — see the log.
 batch.findings.many = {0} findings — see the log.

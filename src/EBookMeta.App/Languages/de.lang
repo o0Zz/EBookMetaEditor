@@ -21,6 +21,9 @@ menu.file.addFolder = &Ordner hinzufügen…
 menu.file.saveAll = &Alle speichern
 menu.file.validateAll = Alle &prüfen
 menu.file.close = S&chließen
+menu.edit = &Bearbeiten
+menu.edit.copy = &Kopieren
+menu.edit.paste = &Einfügen
 menu.help = ?
 menu.help.log = &Protokoll…
 menu.help.about = &Über EBookMetaEditor…
@@ -92,9 +95,6 @@ log.save.title = Protokoll speichern
 log.saveFailed = Das Protokoll konnte nicht gespeichert werden: {0}
 
 batch.title = Stapelverarbeitung — EBookMetaEditor
-batch.bulk.set = Setze
-batch.bulk.apply = Auf Auswahl anwenden
-batch.bulk.hint = …in jeder ausgewählten Zeile.  Strg+D kopiert die aktuelle Zelle nach unten.
 batch.button.saveAll = &Alle speichern
 batch.button.validateAll = Alle &prüfen
 
@@ -117,15 +117,21 @@ batch.progress = {0} {1} von {2} — {3}
 batch.cancelled = {0} abgebrochen.
 batch.failed = {0} fehlgeschlagen: {1}
 
-batch.applied.one = {0} in 1 Zeile.
-batch.applied.many = {0} in {1} Zeilen.
-batch.appliedSkipped.one = {0} in 1 Zeile; {2} konnte es nicht speichern.
-batch.appliedSkipped.many = {0} in {1} Zeilen; {2} konnten es nicht speichern.
-batch.what.copied = {0} kopiert
-batch.what.set = {0} gesetzt
-
-batch.selectRows = Wählen Sie zuerst die zu ändernden Zeilen aus.
 batch.nothingEdited = Es wurde nichts bearbeitet.
+
+# Kopieren und Einfügen. Ein einzelner Wert geht in jede ausgewählte Zelle; ein
+# kopierter Block füllt von der linken obereren Ecke nach rechts und nach unten.
+batch.copied.one = 1 Zelle kopiert.
+batch.copied.many = {0} Zellen kopiert.
+batch.nothingToCopy = Wählen Sie zuerst die zu kopierenden Zellen aus.
+batch.clipboardBusy = Eine andere Anwendung belegt die Zwischenablage. Versuchen Sie es erneut.
+batch.paste.empty = Es gibt nichts zum Einfügen.
+batch.paste.selectCell = Wählen Sie zuerst eine bearbeitbare Zelle aus.
+batch.pasted.one = In 1 Zelle eingefügt.
+batch.pasted.many = In {0} Zellen eingefügt.
+batch.pastedSkipped.one = In 1 Zelle eingefügt; {1} kann das nicht speichern.
+batch.pastedSkipped.many = In {0} Zellen eingefügt; {1} können das nicht speichern.
+
 batch.rowDirty = Speichern Sie diese Zeile, bevor Sie sie einzeln öffnen — sie enthält ungespeicherte Änderungen.
 batch.findings.one = 1 Befund — siehe Protokoll.
 batch.findings.many = {0} Befunde — siehe Protokoll.

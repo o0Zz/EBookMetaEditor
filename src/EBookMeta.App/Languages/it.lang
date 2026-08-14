@@ -21,6 +21,9 @@ menu.file.addFolder = Aggiungi &cartella…
 menu.file.saveAll = &Salva tutto
 menu.file.validateAll = &Verifica tutto
 menu.file.close = Chi&udi
+menu.edit = &Modifica
+menu.edit.copy = &Copia
+menu.edit.paste = &Incolla
 menu.help = ?
 menu.help.log = &Registro…
 menu.help.about = &Informazioni su EBookMetaEditor…
@@ -92,9 +95,6 @@ log.save.title = Salva il registro
 log.saveFailed = Impossibile salvare il registro: {0}
 
 batch.title = Modifica in blocco — EBookMetaEditor
-batch.bulk.set = Imposta
-batch.bulk.apply = Applica alla selezione
-batch.bulk.hint = …su ogni riga selezionata.  Ctrl+D copia la cella corrente verso il basso.
 batch.button.saveAll = &Salva tutto
 batch.button.validateAll = &Verifica tutto
 
@@ -117,15 +117,21 @@ batch.progress = {0} {1} di {2} — {3}
 batch.cancelled = {0} annullata.
 batch.failed = {0} non riuscita: {1}
 
-batch.applied.one = {0} su 1 riga.
-batch.applied.many = {0} su {1} righe.
-batch.appliedSkipped.one = {0} su 1 riga; {2} non ha potuto memorizzarlo.
-batch.appliedSkipped.many = {0} su {1} righe; {2} non hanno potuto memorizzarlo.
-batch.what.copied = {0} copiato
-batch.what.set = {0} impostato
-
-batch.selectRows = Seleziona prima le righe da modificare.
 batch.nothingEdited = Non è stato modificato nulla.
+
+# Copia e incolla. Un singolo valore va in ogni cella selezionata; un blocco
+# copiato si riempie verso destra e verso il basso dall'angolo in alto a sinistra.
+batch.copied.one = 1 cella copiata.
+batch.copied.many = {0} celle copiate.
+batch.nothingToCopy = Seleziona prima le celle da copiare.
+batch.clipboardBusy = Un'altra applicazione sta occupando gli appunti. Riprova.
+batch.paste.empty = Non c'è nulla da incollare.
+batch.paste.selectCell = Seleziona prima una cella modificabile.
+batch.pasted.one = Incollato in 1 cella.
+batch.pasted.many = Incollato in {0} celle.
+batch.pastedSkipped.one = Incollato in 1 cella; {1} non può memorizzarlo.
+batch.pastedSkipped.many = Incollato in {0} celle; {1} non possono memorizzarlo.
+
 batch.rowDirty = Salva questa riga prima di aprirla da sola: contiene modifiche non salvate.
 batch.findings.one = 1 risultato — vedi il registro.
 batch.findings.many = {0} risultati — vedi il registro.
