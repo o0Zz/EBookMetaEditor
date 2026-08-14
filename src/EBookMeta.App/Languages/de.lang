@@ -63,7 +63,6 @@ settings.title = Einstellungen
 settings.language = Sprache
 settings.language.auto = Automatisch (Systemsprache)
 settings.keepBackup = Nach dem Speichern eine .bak-Sicherung neben der Datei behalten
-settings.rememberGeometry = Fenstergröße und -position merken
 settings.extensions = „Metadaten bearbeiten“ im Kontextmenü anzeigen für:
 settings.contextMenu.add = Zum Kontextmenü hinzufügen
 settings.contextMenu.remove = Aus dem Kontextmenü entfernen

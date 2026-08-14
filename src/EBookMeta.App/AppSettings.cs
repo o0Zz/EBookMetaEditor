@@ -1,5 +1,4 @@
-﻿using System.Globalization;
-using System.Text;
+﻿using System.Text;
 
 namespace EBookMeta.App;
 
@@ -17,21 +16,6 @@ internal sealed class AppSettings
 
     /// <summary>Whether a <c>.bak</c> is left beside a file after saving.</summary>
     internal bool KeepBackupOnSave { get; set; } = true;
-
-    /// <summary>Whether the window's size and position are restored between launches.</summary>
-    internal bool RememberWindowGeometry { get; set; } = true;
-
-    /// <summary>The last window bounds, when <see cref="RememberWindowGeometry"/> is on.</summary>
-    internal Rectangle WindowBounds { get; set; } = Rectangle.Empty;
-
-    /// <summary>Whether the window was last maximised.</summary>
-    internal bool WindowMaximised { get; set; }
-
-    /// <summary>The last bounds of the batch window, which is sized separately.</summary>
-    internal Rectangle BatchWindowBounds { get; set; } = Rectangle.Empty;
-
-    /// <summary>Whether the batch window was last maximised.</summary>
-    internal bool BatchWindowMaximised { get; set; }
 
     /// <summary>
     /// The extensions the context-menu button registers.
@@ -76,11 +60,6 @@ internal sealed class AppSettings
         json.Append("{\n");
         Append(json, "language", Language, quote: true);
         Append(json, "keepBackupOnSave", KeepBackupOnSave ? "true" : "false", quote: false);
-        Append(json, "rememberWindowGeometry", RememberWindowGeometry ? "true" : "false", quote: false);
-        Append(json, "windowMaximised", WindowMaximised ? "true" : "false", quote: false);
-        Append(json, "windowBounds", FormatBounds(WindowBounds), quote: true);
-        Append(json, "batchWindowMaximised", BatchWindowMaximised ? "true" : "false", quote: false);
-        Append(json, "batchWindowBounds", FormatBounds(BatchWindowBounds), quote: true);
         Append(json, "registeredExtensions", string.Join(";", RegisteredExtensions), quote: true);
         json.Length -= 2; // trailing ",\n"
         json.Append("\n}\n");
@@ -105,21 +84,6 @@ internal sealed class AppSettings
                 break;
             case "keepBackupOnSave":
                 settings.KeepBackupOnSave = value == "true";
-                break;
-            case "rememberWindowGeometry":
-                settings.RememberWindowGeometry = value == "true";
-                break;
-            case "windowMaximised":
-                settings.WindowMaximised = value == "true";
-                break;
-            case "windowBounds":
-                settings.WindowBounds = ParseBounds(value);
-                break;
-            case "batchWindowMaximised":
-                settings.BatchWindowMaximised = value == "true";
-                break;
-            case "batchWindowBounds":
-                settings.BatchWindowBounds = ParseBounds(value);
                 break;
             case "registeredExtensions":
                 settings.RegisteredExtensions = value
@@ -169,28 +133,6 @@ internal sealed class AppSettings
         json.Append("  \"").Append(key).Append("\": ");
         json.Append(quote ? "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"" : value);
         json.Append(",\n");
-    }
-
-    private static string FormatBounds(Rectangle r) => string.Join(",",
-        r.X.ToString(CultureInfo.InvariantCulture),
-        r.Y.ToString(CultureInfo.InvariantCulture),
-        r.Width.ToString(CultureInfo.InvariantCulture),
-        r.Height.ToString(CultureInfo.InvariantCulture));
-
-    private static Rectangle ParseBounds(string value)
-    {
-        string[] parts = value.Split(',');
-
-        if (parts.Length != 4 ||
-            !int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int x) ||
-            !int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int y) ||
-            !int.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out int w) ||
-            !int.TryParse(parts[3], NumberStyles.Integer, CultureInfo.InvariantCulture, out int h))
-        {
-            return Rectangle.Empty;
-        }
-
-        return new Rectangle(x, y, w, h);
     }
 
     /// <summary>

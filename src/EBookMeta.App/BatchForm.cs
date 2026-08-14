@@ -86,11 +86,11 @@ internal sealed class BatchForm : Form, IPathReceiver
         AppIcon.Apply(this);
         ClientSize = new Size(1100, 560);
         MinimumSize = new Size(760, 400);
+        StartPosition = FormStartPosition.CenterScreen;
         AllowDrop = true;
 
         BuildLayout(BuildMenu());
         BuildColumns();
-        RestoreGeometry();
 
         // CellValueChanged rather than CellEndEdit: it fires for a value that
         // arrives any way at all, including from an accessibility tool driving the
@@ -923,31 +923,6 @@ internal sealed class BatchForm : Form, IPathReceiver
         form.ShowDialog(this);
     }
 
-    private void RestoreGeometry()
-    {
-        if (!_settings.RememberWindowGeometry || _settings.BatchWindowBounds == Rectangle.Empty)
-        {
-            StartPosition = FormStartPosition.CenterScreen;
-            return;
-        }
-
-        // Only restore a position still visible on some screen: a window remembered
-        // on a monitor that is no longer attached would open off-screen and look
-        // like a failure to launch.
-        Rectangle bounds = _settings.BatchWindowBounds;
-
-        if (Screen.AllScreens.Any(s => s.WorkingArea.IntersectsWith(bounds)))
-        {
-            StartPosition = FormStartPosition.Manual;
-            Bounds = bounds;
-        }
-
-        if (_settings.BatchWindowMaximised)
-        {
-            WindowState = FormWindowState.Maximized;
-        }
-    }
-
     /// <inheritdoc />
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
@@ -987,13 +962,6 @@ internal sealed class BatchForm : Form, IPathReceiver
             }
 
             Log.Warning($"Batch closed with {_session.DirtyCount} unsaved file(s).");
-        }
-
-        if (_settings.RememberWindowGeometry)
-        {
-            _settings.BatchWindowMaximised = WindowState == FormWindowState.Maximized;
-            _settings.BatchWindowBounds = WindowState == FormWindowState.Normal ? Bounds : RestoreBounds;
-            _settings.TrySave();
         }
 
         base.OnFormClosing(e);

@@ -74,7 +74,6 @@ settings.title = Settings
 settings.language = Language
 settings.language.auto = Automatic (system language)
 settings.keepBackup = Keep a .bak backup beside the file after saving
-settings.rememberGeometry = Remember the window size and position
 settings.extensions = Show "Edit metadata" in the right-click menu for:
 settings.contextMenu.add = Add to context menu
 settings.contextMenu.remove = Remove from context menu

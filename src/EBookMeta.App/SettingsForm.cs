@@ -8,7 +8,6 @@ internal sealed class SettingsForm : Form
     private readonly AppSettings _settings;
     private readonly ComboBox _language;
     private readonly CheckBox _keepBackup;
-    private readonly CheckBox _rememberGeometry;
     private readonly CheckedListBox _extensions;
     private readonly Button _contextMenu;
 
@@ -26,7 +25,7 @@ internal sealed class SettingsForm : Form
         MaximizeBox = false;
         ShowInTaskbar = false;
         AutoScaleMode = AutoScaleMode.Font;
-        ClientSize = new Size(460, 440);
+        ClientSize = new Size(460, 405);
 
         _language = new ComboBox
         {
@@ -42,14 +41,7 @@ internal sealed class SettingsForm : Form
             Text = Strings.Get("settings.keepBackup"),
             Checked = settings.KeepBackupOnSave,
             AutoSize = true,
-        };
-
-        _rememberGeometry = new CheckBox
-        {
-            Text = Strings.Get("settings.rememberGeometry"),
-            Checked = settings.RememberWindowGeometry,
-            AutoSize = true,
-            Margin = new Padding(3, 8, 3, 10),
+            Margin = new Padding(3, 3, 3, 10),
         };
 
         var extensionsLabel = new Label
@@ -122,7 +114,7 @@ internal sealed class SettingsForm : Form
 
         Control[] rows =
         [
-            languageRow, _keepBackup, _rememberGeometry,
+            languageRow, _keepBackup,
             extensionsLabel, _extensions, _contextMenu, registrationNote,
         ];
 
@@ -261,7 +253,6 @@ internal sealed class SettingsForm : Form
         Strings.Use(_settings.Language);
 
         _settings.KeepBackupOnSave = _keepBackup.Checked;
-        _settings.RememberWindowGeometry = _rememberGeometry.Checked;
         _settings.RegisteredExtensions = CheckedExtensions();
 
         // Keep the registry in step with the tick boxes, but only where the verb

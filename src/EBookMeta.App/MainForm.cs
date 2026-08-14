@@ -82,6 +82,7 @@ internal sealed class MainForm : Form, IPathReceiver
         AppIcon.Apply(this);
         ClientSize = new Size(880, 560);
         MinimumSize = new Size(700, 480);
+        StartPosition = FormStartPosition.CenterScreen;
         AllowDrop = true;
 
         DragEnter += (_, e) => e.Effect = e.Data?.GetDataPresent(DataFormats.FileDrop) == true
@@ -129,7 +130,6 @@ internal sealed class MainForm : Form, IPathReceiver
         _status.Items.Add(_statusText);
 
         BuildLayout(menu);
-        RestoreGeometry();
 
         // Opened from OnShown rather than here. The window must exist before a
         // message box or the repair dialog can be parented to it, and a
@@ -546,41 +546,4 @@ internal sealed class MainForm : Form, IPathReceiver
     }
 
     private void SetStatus(string text) => _statusText.Text = text;
-
-    private void RestoreGeometry()
-    {
-        if (!_settings.RememberWindowGeometry || _settings.WindowBounds == Rectangle.Empty)
-        {
-            StartPosition = FormStartPosition.CenterScreen;
-            return;
-        }
-
-        // Only restore a position still visible on some screen: a window
-        // remembered on a monitor that is no longer attached would open
-        // off-screen and look like a failure to launch.
-        Rectangle bounds = _settings.WindowBounds;
-        if (Screen.AllScreens.Any(s => s.WorkingArea.IntersectsWith(bounds)))
-        {
-            StartPosition = FormStartPosition.Manual;
-            Bounds = bounds;
-        }
-
-        if (_settings.WindowMaximised)
-        {
-            WindowState = FormWindowState.Maximized;
-        }
-    }
-
-    /// <inheritdoc />
-    protected override void OnFormClosing(FormClosingEventArgs e)
-    {
-        if (_settings.RememberWindowGeometry)
-        {
-            _settings.WindowMaximised = WindowState == FormWindowState.Maximized;
-            _settings.WindowBounds = WindowState == FormWindowState.Normal ? Bounds : RestoreBounds;
-            _settings.TrySave();
-        }
-
-        base.OnFormClosing(e);
-    }
 }
