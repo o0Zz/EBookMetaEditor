@@ -287,9 +287,9 @@ internal sealed class MainForm : Form, IPathReceiver
     /// The file-dialog filter, assembled rather than translated whole.
     /// </summary>
     internal static string BookFilter() =>
-        $"{Strings.Get("filter.supported")}|*.epub;*.cbz"
+        $"{Strings.Get("filter.supported")}|*.epub;*.cbz;*.cbt"
         + $"|{Strings.Get("filter.epub")}|*.epub"
-        + $"|{Strings.Get("filter.cbz")}|*.cbz"
+        + $"|{Strings.Get("filter.cbz")}|*.cbz;*.cbt"
         + $"|{Strings.Get("filter.all")}|*.*";
 
     private void OpenFolder()

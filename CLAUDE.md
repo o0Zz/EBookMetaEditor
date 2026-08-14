@@ -30,23 +30,35 @@ separate; conflating them is the main design risk in this codebase.
 |---|---|---|---|
 | EPUB 2 / 3 | ZIP | OPF | yes |
 | CBZ | ZIP | `ComicInfo.xml` | yes |
+| CBT | TAR | `ComicInfo.xml` | yes |
 
-That is the whole list, and it is deliberately short. Both formats are ZIP, so
-there is exactly one container implementation and one write path to get right.
-Scope was cut to these two on purpose: everything else costs a new container, a
-new metadata document, or both.
+That is the whole list, and it is deliberately short. Everything else costs a new
+container, a new metadata document, or both.
 
-**Explicitly out of scope**, say so rather than attempting: CBR, CB7, CBT,
+CBT is the illustration of what "cheap" means here, and why the two axes are kept
+apart: it reuses `ComicInfo.xml` and every comic rule unchanged, so it cost one
+`IContainer` and three lines of registration. `CbzFormat` is registered twice, once
+per `FormatId`, and names no container. **A format that reuses an existing metadata
+document is a container; a format that needs a new one is a project.**
+
+**Explicitly out of scope**, say so rather than attempting: CBR, CB7,
 MOBI, PRC, AZW, AZW3, KF8, KFX, AZW4, FB2, PDF, LIT, PDB, RB, DjVu, audiobook
 formats.
 
-Do not add one of these because it "looks close to CBZ". CBR needs a RAR
-reader, CB7 needs 7z, CBT needs TAR, MOBI and AZW3 need PalmDB record surgery
-with offset arithmetic, PDF needs incremental update. Each is a project of its
-own, and none is in scope.
+Do not add one of these because it "looks close to CBZ". MOBI and AZW3 need PalmDB
+record surgery with offset arithmetic, PDF needs incremental update, KFX and LIT
+have no implementation outside GPL projects. Each is a project of its own, and none
+is in scope.
+
+**CBR and CB7 are the ones to keep saying no to**, because they look like the CBT
+change and are not. SharpCompress reads RAR and 7z and writes neither: RAR
+compression is proprietary and the UnRAR licence forbids building a compatible
+compressor, and no 7z writer ships here. Either one would open into an editor that
+cannot save, which is not this product. Their fixtures could not be generated
+either, so the corpus rule would break with them.
 
 **Detection is not support, and the difference matters.** `FormatDetector` still
-recognises RAR, 7z, TAR, PalmDB and PDF by content, and must keep doing so. A
+recognises RAR, 7z, PalmDB and PDF by content, and must keep doing so. A
 `.cbz` that is really a RAR archive is extremely common, and telling the user
 that (`GEN-W002`) is one of this tool's headline features. Recognising a format
 well enough to name it costs a few magic-number comparisons; supporting it costs
@@ -103,8 +115,10 @@ src/
     Log.cs                 the session log: Info / Warning / Error / Finding
     Compat.cs              everything net48 lacks, in one file
     Containers/        implementations of IContainer: ZipContainer,
-                       ZipCentralDirectory, ContainerEntry, PendingEntry
-    Formats/           implementations of IBookFormat: EpubFormat, CbzFormat,
+                       ZipCentralDirectory, TarContainer, TarHeader,
+                       ContainerEntry, PendingEntry
+    Formats/           implementations of IBookFormat: EpubFormat, CbzFormat
+                       (registered twice, for CBZ and CBT),
                        each split X.cs (Read/Write) + X.Rules.cs (the rules);
                        FormatDetector, FormatCapabilities, FormatId, ReadOptions
     Documents/         OpfDocument (+ .Write), ComicInfoDocument, ContainerXml,
@@ -193,9 +207,26 @@ entry as found, the other instructs a rebuild to produce one, and
 content as a `Func<Stream>` so a rebuild streams entries through rather than
 holding a 300-page comic in memory.
 
-Only ZIP is implemented, and `BookContainers.Open` is where that is decided.
+ZIP and TAR are implemented, and `BookContainers.Open` is where that is decided.
 `IsWritable` stays on the interface because a read-only container is a real
 concept the callers should keep handling.
+
+`PendingEntry.Source` points back at the entry a rebuild is reproducing, and is
+how a container preserves what `ContainerEntry` does not model. Use
+`PendingEntry.Replacing` rather than `FromBytes` whenever new content stands in
+for an existing entry — `FromBytes` is for content that has no original, and
+choosing it by mistake silently discards whatever the source container was
+holding on to.
+
+`TarContainer` retains each entry's raw 512-byte header blocks and re-emits them
+byte for byte, patching only the length and checksum of the entry whose content
+changed. That is what preserves the mode, uid, gid, uname and gname a real
+`tar` records and this build has no field for. **Do not replace it with
+SharpCompress's `TarWriter`**: it takes a name, a size and a timestamp and
+nothing else, and finalises with two zero blocks where `tar` pads to ten
+kilobytes, so every save would rewrite every header in the archive. Reading TAR
+is hand-rolled for the same reason — the retained headers have to come from
+somewhere.
 
 ### Formats
 
@@ -230,7 +261,7 @@ extensions lie constantly — a `.cbz` that is really RAR is common.
   `application/epub+zip` → EPUB; `ComicInfo.xml` or only image files → comic
 - `Rar!\x1a\x07` (v4) or `Rar!\x1a\x07\x01\x00` (v5) → RAR — recognised, not supported
 - `7z\xBC\xAF\x27\x1C` → 7z — recognised, not supported
-- `ustar` at offset 257 → TAR — recognised, not supported
+- `ustar` at offset 257 → TAR → CBT
 - PDB type+creator at offset 60: `BOOKMOBI` or `TEXtREAd` → MOBI family — recognised, not supported
 - `%PDF-` → PDF — recognised, not supported
 
@@ -333,11 +364,18 @@ Not style preferences. Violating these corrupts users' libraries.
    protect is "saving does not gratuitously rewrite", not "saving never changes
    anything". A change with no finding behind it is the bug.
 
-Accepted limitation: `System.IO.Compression` does not preserve ZIP extra fields,
-original timestamps, or the archive comment. Round-trip byte-identity therefore
-holds for archives whose structure can be reproduced — including every
+Accepted limitation, ZIP only: `System.IO.Compression` does not preserve ZIP extra
+fields, original timestamps, or the archive comment. Round-trip byte-identity
+therefore holds for archives whose structure can be reproduced — including every
 builder-generated fixture — and may not for third-party files carrying extra
 fields. Document it; do not hand-roll a ZIP writer.
+
+TAR carries no such caveat, and the difference is worth understanding before
+reaching for the same excuse twice. A ZIP writer has to reproduce compression,
+CRCs and a central directory, so hand-rolling one is a project. A TAR header is
+512 bytes of octal ASCII with no index to keep consistent, which is why
+`TarContainer` reproduces a `tar`-written archive exactly — verified against GNU
+tar 1.34 — while `ZipContainer` can only promise to reproduce its own.
 
 ### EPUB specifics
 
@@ -462,8 +500,11 @@ answer (`CheckRequiredMetadata`, `CheckReferences`, `CheckArchive`, `CheckLayout
 shape when adding one; a rule engine would be its own change and is not needed to
 add a rule.
 
-IDs are namespaced by format. `F` = fatal (cannot edit — reported *and* thrown, so
-the ID reaches the log before the open fails), `E` = error, `W` = warning.
+IDs are namespaced by metadata document, not by container, so the `CBZ-` rules
+below cover CBT unchanged — it is the same `ComicInfo.xml` being checked. A second
+table under a `CBT-` prefix would be one more thing to keep in step for no gain.
+`F` = fatal (cannot edit — reported *and* thrown, so the ID reaches the log before
+the open fails), `E` = error, `W` = warning.
 
 ### General
 
@@ -555,9 +596,17 @@ are stable by definition.
 Broken fixtures are named after the rule they trigger:
 `broken-epub-e020-dangling-idref.epub`, `broken-cbz-e020-pagecount.cbz`.
 
+`CbzBuilder.WriteTo` takes a `ContainerKind`, so one set of comic fixtures serves
+CBZ and CBT — do not fork it into a second builder. `RawTarBuilder` is the
+exception and deliberately does *not* use `TarContainer`: it assembles headers the
+way `tar` does, with a mode, an owner and a ten-kilobyte tail, so that preserving
+them is provable. A fixture generated by the code under test could not prove it.
+
 Required coverage:
 
-- valid + byte-identical round-trip for both formats
+- valid + byte-identical round-trip for every format
+- a CBT whose headers carry a real archive's mode, uid, gid, uname and gname, and
+  a blocking factor above the minimum — the test that keeps `TarContainer` honest
 - one fixture per validation rule
 - `broken-unclosed-tag.epub`, `broken-bare-ampersand.epub` — repair path
 - `broken-mimetype-compressed.epub`
@@ -586,6 +635,12 @@ policy.
   the identical code emits method 0 on .NET 5+ — and it is why
   `ZipContainer.Create` exists and why the guidance below permits one archive
   dependency rather than none. Reading stays on `ZipArchive`.
+
+  **ZIP writing only** is the whole scope of it, and the package supporting a
+  format is not a reason to route that format through it. SharpCompress also
+  reads RAR, 7z and TAR and writes TAR — none of which is used. TAR is
+  hand-rolled because its writer cannot be faithful (see **Containers**); RAR and
+  7z stay unsupported because it has no writer for them at all.
 - **AngleSharp.Xml** (MIT) — second-stage tolerant XML parse. Load lazily,
   only when strict parsing has already failed, so it stays off the hot path.
 - **xunit** — tests only.
@@ -614,7 +669,9 @@ HKCU\Software\Classes\SystemFileAssociations\<.ext>\shell\EBookMetaEditorEdit\co
 Use `SystemFileAssociations`, not `HKCU\Software\Classes\<.ext>` — the latter
 hijacks the user's default association. Registration is opt-in per format group
 (ebooks / comics) so a user can tag comics without touching EPUB. Register only
-`.epub` and `.cbz`; do not register formats the app cannot open.
+`.epub`, `.cbz` and `.cbt`; do not register formats the app cannot open. The
+Settings form builds its list from `ShellRegistration.SupportedExtensions`, so
+adding a format there is the whole change.
 
 `MultiSelectModel = "Player"` asks Explorer to invoke the verb **once** with the
 whole selection rather than once per file, which is what makes right-clicking
@@ -675,8 +732,8 @@ This is a product requirement — the whole point is right-click, fix, close.
 
 ## Working style for Claude
 
-- Both formats are implemented. Never touch a serialisation path while the
-  round-trip or golden-byte tests for either one are red — they are the only thing
+- All three formats are implemented. Never touch a serialisation path while the
+  round-trip or golden-byte tests for any of them are red — they are the only thing
   standing between a bug and a corrupted library.
 - Prefer Core changes + tests over touching the UI. UI is the last step of a
   feature, not the first.

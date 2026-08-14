@@ -30,11 +30,16 @@ public sealed class PendingEntry
     /// The ZIP method code to store the entry with — 0 stored, 8 deflate.
     /// </param>
     /// <param name="lastModified">The timestamp to record for the entry.</param>
+    /// <param name="source">
+    /// The entry this one reproduces, when it is a copy of one already in a
+    /// container. <see langword="null"/> for content that has no original.
+    /// </param>
     public PendingEntry(
         string name,
         Func<Stream> openContent,
         ushort compressionMethod = ZipCompressionMethods.Deflate,
-        DateTimeOffset lastModified = default)
+        DateTimeOffset lastModified = default,
+        ContainerEntry? source = null)
     {
         Throw.IfNullOrEmpty(name);
         Throw.IfNull(openContent);
@@ -43,6 +48,7 @@ public sealed class PendingEntry
         _openContent = openContent;
         CompressionMethod = compressionMethod;
         LastModified = lastModified;
+        Source = source;
     }
 
     /// <summary>The entry name, with forward slashes.</summary>
@@ -60,6 +66,20 @@ public sealed class PendingEntry
     /// choose, which for ZIP means the current time.
     /// </summary>
     public DateTimeOffset LastModified { get; }
+
+    /// <summary>
+    /// The entry this one reproduces, or <see langword="null"/> when the content
+    /// is new — a rewritten <c>ComicInfo.xml</c>, or one being added.
+    /// </summary>
+    /// <remarks>
+    /// A rebuild needs a way back to the original to reproduce what
+    /// <see cref="ContainerEntry"/> does not model. <c>TarContainer</c> uses it to
+    /// re-emit an entry's 512-byte header byte for byte, preserving the mode, uid,
+    /// gid, uname and gname that tar records and this build has no other reason to
+    /// understand. Only the container that produced the entry may interpret this;
+    /// to anyone else it is opaque.
+    /// </remarks>
+    public ContainerEntry? Source { get; }
 
     /// <summary>Opens the content stream. Called once per rebuild.</summary>
     /// <returns>A readable stream the caller is responsible for disposing.</returns>
@@ -87,12 +107,41 @@ public sealed class PendingEntry
             entry.Name,
             () => source.OpenRead(entry),
             entry.CompressionMethod,
-            entry.LastModified);
+            entry.LastModified,
+            entry);
     }
 
     /// <summary>
-    /// Creates an entry from bytes already in memory — a rewritten OPF or
-    /// <c>ComicInfo.xml</c>.
+    /// Creates an entry that takes an existing one's place with new content,
+    /// keeping its name, compression method and timestamp.
+    /// </summary>
+    /// <param name="source">The entry being replaced.</param>
+    /// <param name="content">The new content bytes.</param>
+    /// <returns>A pending entry that stands in for <paramref name="source"/>.</returns>
+    /// <remarks>
+    /// The path a rewritten OPF or <c>ComicInfo.xml</c> takes. Distinct from
+    /// <see cref="FromBytes"/> because the entry is not new: a container that
+    /// retains more about an entry than <see cref="ContainerEntry"/> models can
+    /// reach it through <see cref="Source"/> and keep it. <c>TarContainer</c>
+    /// preserves the original header this way, changing only the length field and
+    /// the checksum over it.
+    /// </remarks>
+    public static PendingEntry Replacing(ContainerEntry source, byte[] content)
+    {
+        Throw.IfNull(source);
+        Throw.IfNull(content);
+
+        return new PendingEntry(
+            source.Name,
+            () => new MemoryStream(content, writable: false),
+            source.CompressionMethod,
+            source.LastModified,
+            source);
+    }
+
+    /// <summary>
+    /// Creates an entry from bytes already in memory, for content that has no
+    /// original — a metadata document being added to a file that had none.
     /// </summary>
     /// <param name="name">The entry name, with forward slashes.</param>
     /// <param name="content">The content bytes.</param>

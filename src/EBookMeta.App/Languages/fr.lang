@@ -52,9 +52,9 @@ dialog.addFiles.title = Ajouter des livres ou des bandes dessinées
 dialog.folder.batch = Modifier les métadonnées de tous les livres et bandes dessinées d'un dossier
 dialog.folder.add = Ajouter tous les livres et bandes dessinées d'un dossier
 
-filter.supported = Fichiers pris en charge (*.epub;*.cbz)
+filter.supported = Fichiers pris en charge (*.epub;*.cbz;*.cbt)
 filter.epub = EPUB (*.epub)
-filter.cbz = Archive de bande dessinée (*.cbz)
+filter.cbz = Archive de bande dessinée (*.cbz;*.cbt)
 filter.all = Tous les fichiers (*.*)
 filter.log = Fichier journal (*.log)
 filter.text = Fichier texte (*.txt)

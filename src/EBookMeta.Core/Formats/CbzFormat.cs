@@ -5,13 +5,22 @@ using EBookMeta.Model;
 namespace EBookMeta.Formats;
 
 /// <summary>
-/// Reads and writes comic archive metadata: ZIP plus <c>ComicInfo.xml</c>.
+/// Reads and writes comic archive metadata: an archive of page images plus
+/// <c>ComicInfo.xml</c>.
 /// </summary>
 /// <remarks>
 /// This file is the <see cref="IBookFormat"/> implementation — reading, writing,
 /// and the corrections a write can prove, such as a <c>PageCount</c> recomputed
 /// from the images actually present. The validation rules live beside it in
 /// <c>CbzFormat.Rules.cs</c>, which is the same class.
+/// <para>
+/// One instance serves CBZ and another serves CBT, because the two differ only in
+/// the container they are stored in: the metadata document, the rules and the
+/// corrections are identical, and nothing here names <c>ZipContainer</c>. The
+/// rule IDs stay <c>CBZ-</c> prefixed for both — they are namespaced by metadata
+/// convention rather than by container, and a second copy of the table under a
+/// <c>CBT-</c> prefix would be one more thing to keep in step for no gain.
+/// </para>
 /// </remarks>
 public sealed partial class CbzFormat : IBookFormat
 {
@@ -21,33 +30,45 @@ public sealed partial class CbzFormat : IBookFormat
     private static readonly string[] ImageExtensions =
         [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".avif", ".jxl", ".tif", ".tiff"];
 
-    /// <inheritdoc />
-    public FormatId Id => FormatId.Cbz;
-
-    /// <inheritdoc />
-    public FormatCapabilities Capabilities { get; } = new()
+    /// <summary>Creates the format for one flavour of comic archive.</summary>
+    /// <param name="id">
+    /// Which one — <see cref="FormatId.Cbz"/> or <see cref="FormatId.Cbt"/>. The
+    /// default is what every caller outside <see cref="BookFormats"/> wants.
+    /// </param>
+    public CbzFormat(FormatId id = FormatId.Cbz)
     {
-        Format = FormatId.Cbz,
+        Id = id;
 
-        // ComicInfo has no sort forms, no identifiers and no rights statement, so
-        // those fields stay off. That is the point of declaring capabilities: a
-        // user must not type a sort title into a comic and have it silently
-        // discarded on save.
-        ReadableFields =
-            MetadataField.Title | MetadataField.Creators | MetadataField.CreatorRoles |
-            MetadataField.Series | MetadataField.SeriesIndex | MetadataField.Description |
-            MetadataField.Publisher | MetadataField.PublicationDate | MetadataField.Language |
-            MetadataField.Subjects | MetadataField.Cover,
+        Capabilities = new FormatCapabilities
+        {
+            Format = id,
 
-        // Everything readable except the cover. A comic's cover is its first page
-        // image, so replacing it means replacing a page — and page-image
-        // processing is deliberately out of scope.
-        WritableFields =
-            MetadataField.Title | MetadataField.Creators | MetadataField.CreatorRoles |
-            MetadataField.Series | MetadataField.SeriesIndex | MetadataField.Description |
-            MetadataField.Publisher | MetadataField.PublicationDate | MetadataField.Language |
-            MetadataField.Subjects,
-    };
+            // ComicInfo has no sort forms, no identifiers and no rights statement,
+            // so those fields stay off. That is the point of declaring
+            // capabilities: a user must not type a sort title into a comic and
+            // have it silently discarded on save.
+            ReadableFields =
+                MetadataField.Title | MetadataField.Creators | MetadataField.CreatorRoles |
+                MetadataField.Series | MetadataField.SeriesIndex | MetadataField.Description |
+                MetadataField.Publisher | MetadataField.PublicationDate | MetadataField.Language |
+                MetadataField.Subjects | MetadataField.Cover,
+
+            // Everything readable except the cover. A comic's cover is its first
+            // page image, so replacing it means replacing a page — and page-image
+            // processing is deliberately out of scope.
+            WritableFields =
+                MetadataField.Title | MetadataField.Creators | MetadataField.CreatorRoles |
+                MetadataField.Series | MetadataField.SeriesIndex | MetadataField.Description |
+                MetadataField.Publisher | MetadataField.PublicationDate | MetadataField.Language |
+                MetadataField.Subjects,
+        };
+    }
+
+    /// <inheritdoc />
+    public FormatId Id { get; }
+
+    /// <inheritdoc />
+    public FormatCapabilities Capabilities { get; }
 
     /// <inheritdoc />
     /// <exception cref="BookFormatException">
@@ -189,8 +210,7 @@ public sealed partial class CbzFormat : IBookFormat
             }
 
             entries.Add(replaceInPlace && existing.Index == entry!.Index
-                ? PendingEntry.FromBytes(
-                    existing.Name, bytes, existing.CompressionMethod, existing.LastModified)
+                ? PendingEntry.Replacing(existing, bytes)
                 : PendingEntry.CopyOf(container, existing));
         }
 

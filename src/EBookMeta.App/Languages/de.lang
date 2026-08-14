@@ -52,9 +52,9 @@ dialog.addFiles.title = Bücher oder Comics hinzufügen
 dialog.folder.batch = Die Metadaten aller Bücher und Comics in einem Ordner bearbeiten
 dialog.folder.add = Alle Bücher und Comics eines Ordners hinzufügen
 
-filter.supported = Unterstützte Dateien (*.epub;*.cbz)
+filter.supported = Unterstützte Dateien (*.epub;*.cbz;*.cbt)
 filter.epub = EPUB (*.epub)
-filter.cbz = Comic-Archiv (*.cbz)
+filter.cbz = Comic-Archiv (*.cbz;*.cbt)
 filter.all = Alle Dateien (*.*)
 filter.log = Protokolldatei (*.log)
 filter.text = Textdatei (*.txt)

@@ -10,12 +10,18 @@ namespace EBookMeta;
 /// <remarks>
 /// One place decides which <see cref="IContainer"/> implementation a file gets,
 /// so <see cref="Book"/> depends on the interface rather than naming a concrete
-/// container. Only ZIP is implemented, which is not an accident: EPUB and CBZ
-/// are both ZIPs, so there is exactly one container implementation and one write
-/// path to get right. A kind arriving here that has no implementation is a
-/// programming error rather than a bad file — <c>FormatDetector</c> has already
-/// named the format and <see cref="BookFormats.Resolve"/> has already refused
-/// the ones no format can edit.
+/// container. ZIP carries EPUB and CBZ; TAR carries CBT and shares the comic
+/// metadata document with CBZ, so it cost a container and nothing else. A kind
+/// arriving here that has no implementation is a programming error rather than a
+/// bad file — <c>FormatDetector</c> has already named the format and
+/// <see cref="BookFormats.Resolve"/> has already refused the ones no format can
+/// edit.
+/// <para>
+/// RAR and 7z are deliberately absent. Both can be read, and neither can be
+/// written: RAR compression is proprietary and no writer for either ships in this
+/// build's dependencies, so a CBR or CB7 would open into an editor that cannot
+/// save. See <see cref="IContainer.IsWritable"/>.
+/// </para>
 /// </remarks>
 /// <seealso cref="BookFormats" />
 public static class BookContainers
@@ -39,6 +45,7 @@ public static class BookContainers
         return kind switch
         {
             ContainerKind.Zip => ZipContainer.Open(path),
+            ContainerKind.Tar => TarContainer.Open(path),
             _ => throw new NotSupportedException(
                 $"{kind} containers cannot be opened by this build."),
         };
@@ -47,5 +54,6 @@ public static class BookContainers
     /// <summary>Whether this build has an implementation for a container.</summary>
     /// <param name="kind">The container to test.</param>
     /// <returns><see langword="true"/> when the container can be opened.</returns>
-    public static bool IsSupported(ContainerKind kind) => kind is ContainerKind.Zip;
+    public static bool IsSupported(ContainerKind kind) =>
+        kind is ContainerKind.Zip or ContainerKind.Tar;
 }

@@ -21,7 +21,12 @@ public static class BookFormats
     static BookFormats()
     {
         Register(new EpubFormat());
-        Register(new CbzFormat());
+        Register(new CbzFormat(FormatId.Cbz));
+
+        // The same implementation twice: a CBT is a CBZ in a TAR, with the same
+        // ComicInfo.xml and the same rules. All that differs is the container,
+        // which BookContainers picks.
+        Register(new CbzFormat(FormatId.Cbt));
     }
 
     /// <summary>Every registered format.</summary>

@@ -10,7 +10,7 @@ internal static class ShellRegistration
     private const string VerbKeyName = "EBookMetaEditorEdit";
 
     /// <summary>The extensions EBookMetaEditor can actually open.</summary>
-    internal static IReadOnlyList<string> SupportedExtensions { get; } = [".epub", ".cbz"];
+    internal static IReadOnlyList<string> SupportedExtensions { get; } = [".epub", ".cbz", ".cbt"];
 
     /// <summary>Registers the verb for the given extensions and removes it from the rest.</summary>
     /// <param name="extensions">The extensions to register, each with a leading dot.</param>

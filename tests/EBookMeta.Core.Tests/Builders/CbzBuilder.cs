@@ -1,5 +1,6 @@
 using System.Text;
 using EBookMeta.Containers;
+using EBookMeta.Formats;
 
 namespace EBookMeta.Tests.Builders;
 
@@ -80,9 +81,36 @@ internal sealed class CbzBuilder
         WithEntry(name, Encoding.UTF8.GetBytes(content));
 
     /// <summary>Builds the archive and writes it to a file.</summary>
-    internal string WriteTo(string path)
+    internal string WriteTo(string path) => WriteTo(path, ContainerKind.Zip);
+
+    /// <summary>
+    /// Builds the archive into the given container, so one set of fixtures serves
+    /// both comic formats.
+    /// </summary>
+    /// <remarks>
+    /// A CBT differs from a CBZ only in the container, so every <c>With*</c>
+    /// method here means the same thing for both. Splitting this into a second
+    /// builder would have duplicated the fixture documents and left the two free
+    /// to drift.
+    /// </remarks>
+    internal string WriteTo(string path, ContainerKind kind)
     {
-        ZipContainer.Create(BuildEntries(), path);
+        List<PendingEntry> entries = BuildEntries();
+
+        switch (kind)
+        {
+            case ContainerKind.Zip:
+                ZipContainer.Create(entries, path);
+                break;
+
+            case ContainerKind.Tar:
+                TarContainer.Create(entries, path);
+                break;
+
+            default:
+                throw new NotSupportedException($"No builder for {kind} containers.");
+        }
+
         return path;
     }
 

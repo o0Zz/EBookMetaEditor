@@ -229,14 +229,12 @@ public sealed partial class EpubFormat : IBookFormat
         {
             if (entry.Name.Equals(opf.EntryName, StringComparison.Ordinal))
             {
-                entries.Add(PendingEntry.FromBytes(
-                    entry.Name, opfBytes, entry.CompressionMethod, entry.LastModified));
+                entries.Add(PendingEntry.Replacing(entry, opfBytes));
             }
             else if (coverBytes is not null &&
                      entry.Name.Equals(coverEntryName, StringComparison.Ordinal))
             {
-                entries.Add(PendingEntry.FromBytes(
-                    entry.Name, coverBytes, entry.CompressionMethod, entry.LastModified));
+                entries.Add(PendingEntry.Replacing(entry, coverBytes));
             }
             else
             {
