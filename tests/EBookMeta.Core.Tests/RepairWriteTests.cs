@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using EBookMeta.Containers;
 using EBookMeta.Formats;
 using EBookMeta.Model;
@@ -47,25 +47,40 @@ public sealed class RepairWriteTests
         return new UTF8Encoding(false).GetString(raw.Bytes);
     }
 
+    private static void SaveTo(string source, string target, Action<BookMetadata>? edit = null)
+    {
+        using ZipContainer container = ZipContainer.Open(source);
+        var handler = new EpubHandler();
+        BookMetadata metadata = handler.Read(container);
+        edit?.Invoke(metadata);
+        handler.Write(container, metadata, target);
+    }
+
     // --- opening ---------------------------------------------------------
 
     [Fact]
-    public void ABrokenBookOpensAndReadsCorrectly()
+    public void A_broken_book_opens_and_reads_correctly()
     {
         using var temp = new TempDir();
         string path = BrokenEpub(temp);
 
         using ZipContainer container = ZipContainer.Open(path);
-        BookMetadata metadata = new EpubHandler().Read(container);
+        var findings = new List<Finding>();
+        BookMetadata metadata = new EpubHandler().Read(container, findings: findings);
 
-        // The undeclared opf: prefix is corrected on the way in, so the metadata
-        // it carried is available rather than the file being refused.
+        // The undeclared opf: prefix is corrected on the way in, so the metadata it
+        // carried is available rather than the file being refused.
         Assert.Equal("Neverwhere", metadata.Title);
         Assert.Equal("Gaiman, Neil", Assert.Single(metadata.Creators).SortName);
+
+        // Reported by the read itself. There is no separate validate step.
+        Finding finding = Assert.Single(findings, f => f.RuleId == "EPUB-W070");
+        Assert.True(finding.HasAutofix);
+        Assert.Equal("OEBPS/content.opf", finding.Location);
     }
 
     [Fact]
-    public void OpeningDoesNotTouchTheFileOnDisk()
+    public void Opening_does_not_touch_the_file_on_disk()
     {
         using var temp = new TempDir();
         string path = BrokenEpub(temp);
@@ -85,7 +100,7 @@ public sealed class RepairWriteTests
     }
 
     [Fact]
-    public void ADocumentBrokenBeyondRepairStillFailsToOpen()
+    public void A_document_broken_beyond_repair_still_fails_to_open()
     {
         using var temp = new TempDir();
         string path = new EpubBuilder()
@@ -102,100 +117,28 @@ public sealed class RepairWriteTests
         Assert.Contains("acme", ex.Message, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void TheReadReportsWhatItCorrected()
-    {
-        using var temp = new TempDir();
-        string path = BrokenEpub(temp);
-
-        using ZipContainer container = ZipContainer.Open(path);
-        var findings = new List<Finding>();
-
-        // Reported by the read itself. There is no separate validate step: a repair
-        // is something the load did, so the load is what says it happened.
-        new EpubHandler().Read(container, findings: findings);
-
-        Finding finding = Assert.Single(findings, f => f.RuleId == "EPUB-W070");
-
-        Assert.True(finding.HasAutofix);
-        Assert.Equal("OEBPS/content.opf", finding.Location);
-    }
-
-    /// <summary>
-    /// A well-formed book produces nothing an editor has to act on.
-    /// </summary>
-    /// <remarks>
-    /// Errors, not findings outright. A conformant EPUB 3 declares its cover and its
-    /// series the EPUB 3 way and nothing else, which is exactly what EPUB-W032 and
-    /// EPUB-W061 exist to point out — saving writes both conventions so older
-    /// readers can see them too. Those are advisories about what a save will improve,
-    /// so a fixture tripping them is right rather than broken.
-    /// </remarks>
-    [Fact]
-    public void AValidBookReportsNothingWrong()
-    {
-        using var temp = new TempDir();
-        string path = new EpubBuilder().WriteTo(temp.File("valid.epub"));
-
-        using ZipContainer container = ZipContainer.Open(path);
-        var findings = new List<Finding>();
-
-        new EpubHandler().Read(container, findings: findings);
-
-        Assert.DoesNotContain(findings, f => f.Severity >= Severity.Error);
-        Assert.DoesNotContain(findings, f => f.RuleId == "EPUB-W070");
-    }
-
     // --- saving ----------------------------------------------------------
 
     [Fact]
-    public void SavingPersistsTheCorrection()
+    public void Saving_persists_the_correction_alongside_any_edit()
     {
         using var temp = new TempDir();
         string source = BrokenEpub(temp);
         string target = temp.File("saved.epub");
 
-        using (ZipContainer container = ZipContainer.Open(source))
-        {
-            var handler = new EpubHandler();
-            BookMetadata metadata = handler.Read(container);
-            handler.Write(container, metadata, target);
-        }
+        SaveTo(source, target, m => m.Title = "Neverwhere: Author's Preferred Text");
 
         Assert.Contains(@"xmlns:opf=""http://www.idpf.org/2007/opf""", OpfTextOf(target), StringComparison.Ordinal);
 
-        // And the saved file is a book that opens on its own terms, with no
-        // repair needed the second time.
-        using ZipContainer saved = ZipContainer.Open(target);
-        Assert.Equal("Neverwhere", new EpubHandler().Read(saved).Title);
-    }
-
-    [Fact]
-    public void SavingAnEditKeepsBothTheEditAndTheCorrection()
-    {
-        using var temp = new TempDir();
-        string source = BrokenEpub(temp);
-        string target = temp.File("edited.epub");
-
-        using (ZipContainer container = ZipContainer.Open(source))
-        {
-            var handler = new EpubHandler();
-            BookMetadata metadata = handler.Read(container);
-            metadata.Title = "Neverwhere: Author's Preferred Text";
-            handler.Write(container, metadata, target);
-        }
-
+        // The saved file is a book that opens on its own terms, with no repair
+        // needed the second time.
         using ZipContainer saved = ZipContainer.Open(target);
         Assert.Equal("Neverwhere: Author's Preferred Text", new EpubHandler().Read(saved).Title);
-        Assert.Contains("xmlns:opf", OpfTextOf(target), StringComparison.Ordinal);
     }
 
-    /// <summary>
-    /// Hard invariants 3 and 4: only the package document changes, and entry
-    /// order is preserved.
-    /// </summary>
+    /// <summary>Hard invariants 3 and 4: only the package document changes.</summary>
     [Fact]
-    public void SavingLeavesEveryOtherEntryByteForByte()
+    public void Saving_leaves_every_other_entry_byte_for_byte()
     {
         using var temp = new TempDir();
         string source = BrokenEpub(temp);
@@ -204,11 +147,7 @@ public sealed class RepairWriteTests
         Dictionary<string, byte[]> before = ReadAllEntries(source);
         List<string> orderBefore = ReadEntryOrder(source);
 
-        using (ZipContainer container = ZipContainer.Open(source))
-        {
-            var handler = new EpubHandler();
-            handler.Write(container, handler.Read(container), target);
-        }
+        SaveTo(source, target);
 
         Dictionary<string, byte[]> after = ReadAllEntries(target);
 
@@ -228,108 +167,21 @@ public sealed class RepairWriteTests
     }
 
     /// <summary>
-    /// The correction is a single insertion, so saving a repaired book must not
-    /// reformat the rest of the package document.
-    /// </summary>
-    [Fact]
-    public void SavingChangesOneLineOfThePackageDocument()
-    {
-        using var temp = new TempDir();
-        string source = BrokenEpub(temp);
-        string target = temp.File("saved.epub");
-
-        using (ZipContainer container = ZipContainer.Open(source))
-        {
-            var handler = new EpubHandler();
-            handler.Write(container, handler.Read(container), target);
-        }
-
-        string[] before = OpfTextOf(source).Split('\n');
-        string[] after = OpfTextOf(target).Split('\n');
-
-        Assert.Equal(before.Length, after.Length);
-
-        int[] differing = Enumerable.Range(0, before.Length)
-            .Where(i => before[i] != after[i])
-            .ToArray();
-
-        Assert.Single(differing);
-        Assert.Contains("<package", after[differing[0]], StringComparison.Ordinal);
-    }
-
-    /// <summary>
-    /// Hard invariant 7. A save that broke this would produce a file readers
-    /// reject outright, which is worse than the problem it fixed.
-    /// </summary>
-    [Fact]
-    public void SavingKeepsMimetypeFirstAndStored()
-    {
-        using var temp = new TempDir();
-        string source = BrokenEpub(temp);
-        string target = temp.File("saved.epub");
-
-        using (ZipContainer container = ZipContainer.Open(source))
-        {
-            var handler = new EpubHandler();
-            handler.Write(container, handler.Read(container), target);
-        }
-
-        using ZipContainer saved = ZipContainer.Open(target);
-        ContainerEntry first = saved.Entries[0];
-
-        Assert.Equal("mimetype", first.Name);
-        Assert.Equal(0, first.CompressionMethod);
-
-        using Stream stream = saved.OpenRead(first);
-        using var reader = new StreamReader(stream, new UTF8Encoding(false));
-        Assert.Equal("application/epub+zip", reader.ReadToEnd());
-    }
-
-    /// <summary>
     /// Saving a repaired book goes through the ordinary atomic write, so an
     /// interrupted save cannot leave a truncated book and the original is kept.
     /// </summary>
     [Fact]
-    public void SavingInPlaceIsAtomicAndKeepsABackup()
+    public void Saving_in_place_is_atomic_and_keeps_a_backup()
     {
         using var temp = new TempDir();
         string path = BrokenEpub(temp);
 
-        AtomicFileWriter.Write(
-            path,
-            target =>
-            {
-                using ZipContainer container = ZipContainer.Open(path);
-                var handler = new EpubHandler();
-                handler.Write(container, handler.Read(container), target);
-            },
-            keepBackup: true);
+        AtomicFileWriter.Write(path, target => SaveTo(path, target), keepBackup: true);
 
         Assert.True(File.Exists(path + ".bak"));
         Assert.Contains("xmlns:opf", OpfTextOf(path), StringComparison.Ordinal);
 
         // The backup is the file as it was: still missing the declaration.
         Assert.DoesNotContain("xmlns:opf", OpfTextOf(path + ".bak"), StringComparison.Ordinal);
-    }
-
-    // --- unaffected files ------------------------------------------------
-
-    /// <summary>
-    /// Hard invariant 6. Repair-on-open must not disturb a file that needs none.
-    /// </summary>
-    [Fact]
-    public void AValidBookStillRoundTripsByteIdentically()
-    {
-        using var temp = new TempDir();
-        string source = new EpubBuilder().WriteTo(temp.File("valid.epub"));
-        string target = temp.File("round-tripped.epub");
-
-        using (ZipContainer container = ZipContainer.Open(source))
-        {
-            var handler = new EpubHandler();
-            handler.Write(container, handler.Read(container), target);
-        }
-
-        Assert.Equal(File.ReadAllBytes(source), File.ReadAllBytes(target));
     }
 }

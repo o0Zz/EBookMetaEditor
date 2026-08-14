@@ -5,39 +5,11 @@ namespace EBookMeta.App;
 /// <summary>
 /// Adds and removes the "Edit metadata" entry in Explorer's right-click menu.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Per-user only. Everything here is written under <c>HKCU</c>, so registering
-/// needs no administrator rights and no installer — which is the point of a tool
-/// you unzip and run.
-/// </para>
-/// <para>
-/// Three rules that are easy to get wrong and unkind to the user when you do:
-/// </para>
-/// <para>
-/// <b>Use <c>SystemFileAssociations</c>, not <c>HKCU\Software\Classes\.ext</c>.</b>
-/// The latter hijacks the file's default association, so double-clicking a book
-/// would open EBookMetaEditor instead of the user's reader. This adds a verb to the
-/// menu and changes nothing else.
-/// </para>
-/// <para>
-/// <b>Never touch <c>HKCU\...\Explorer\FileExts</c>.</b> That key records the
-/// user's explicit choice of default application. It is theirs.
-/// </para>
-/// <para>
-/// <b>Never write to <c>HKLM</c>.</b> It would require elevation and affect
-/// every account on the machine.
-/// </para>
-/// </remarks>
 internal static class ShellRegistration
 {
     private const string VerbKeyName = "EBookMetaEditorEdit";
 
     /// <summary>The extensions EBookMetaEditor can actually open.</summary>
-    /// <remarks>
-    /// Only these two. Registering a verb for a format the app would refuse to
-    /// open is a worse experience than not offering it.
-    /// </remarks>
     internal static IReadOnlyList<string> SupportedExtensions { get; } = [".epub", ".cbz"];
 
     /// <summary>Registers the verb for the given extensions and removes it from the rest.</summary>

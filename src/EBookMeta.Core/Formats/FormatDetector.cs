@@ -27,11 +27,6 @@ public sealed record DetectedFormat
     /// <summary>
     /// Whether the extension is consistent with the content.
     /// </summary>
-    /// <remarks>
-    /// <see langword="false"/> drives rule GEN-W002. An unrecognised extension
-    /// is not a disagreement — there is nothing to disagree with — so this stays
-    /// <see langword="true"/> in that case.
-    /// </remarks>
     public bool ExtensionAgrees =>
         ClaimedByExtension == FormatId.Unknown ||
         FormatIds.IsAcceptableSubstitute(ClaimedByExtension, Format);
@@ -46,27 +41,6 @@ public sealed record DetectedFormat
 /// <summary>
 /// Decides what a file actually is, by content.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Never by extension. In collections extensions lie constantly — a
-/// <c>.cbz</c> that is really a RAR archive is one of the most common things
-/// in a comic library — so the extension is read only to be compared against
-/// the truth, and a disagreement is reported as GEN-W002 because the user
-/// usually wants to know.
-/// </para>
-/// <para>
-/// <b>On the 8 KB budget.</b> Every magic-number test reads only the first
-/// 8 KB. ZIP needs one further step, because EPUB, CBZ and FB2.ZIP are all
-/// ZIPs and are distinguished by what is inside. The first local file header
-/// sits at offset 0 and names the first entry, which settles the question for
-/// effectively every real file: a conformant EPUB must have <c>mimetype</c>
-/// first, comics start with <c>ComicInfo.xml</c> or a page image. Only when
-/// that is inconclusive does <see cref="Detect(Stream, string?)"/> fall back to
-/// reading the central directory — entry names only, no decompression, and no
-/// walk of entry contents. That fallback is the one place this exceeds 8 KB,
-/// and it costs a seek plus a few KB on files that are already unusual.
-/// </para>
-/// </remarks>
 public static class FormatDetector
 {
     /// <summary>How many bytes the magic-number pass reads.</summary>

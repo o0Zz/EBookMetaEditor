@@ -9,40 +9,11 @@ namespace EBookMeta;
 /// Reads and writes <see cref="BookMetadata"/> one field at a time, as the text an
 /// editor shows.
 /// </summary>
-/// <remarks>
-/// <para>
-/// The single definition of what a field looks like in a box and what typing in
-/// that box does to the model: authors separated by semicolons, subjects by
-/// commas, a date kept as the characters the file used, an index parsed as an
-/// invariant decimal.
-/// </para>
-/// <para>
-/// In Core rather than in the window because there is more than one editor now. A
-/// grid over three hundred files and a form over one must agree exactly, and the
-/// agreement has to include the parts that are easy to get subtly wrong: rebuilding
-/// the primary creators without deleting the contributors the editor never showed,
-/// carrying a sort name forward only when the name it belongs to did not change,
-/// and reparsing a date only when its text actually differs. Those are what keep
-/// "open a file and save it without editing" byte-identical, and a second
-/// implementation of them would keep it for one editor and quietly lose it for the
-/// other.
-/// </para>
-/// <para>
-/// Every <see cref="Apply"/> returns whether it changed anything, so a caller can
-/// tell an edited file from an untouched one without comparing whole documents.
-/// </para>
-/// </remarks>
 public static class MetadataFields
 {
     /// <summary>
     /// Every field this class projects as text, in the order an editor shows them.
     /// </summary>
-    /// <remarks>
-    /// The order is not cosmetic: <see cref="MetadataField.Series"/> precedes
-    /// <see cref="MetadataField.SeriesIndex"/> because the name carries the index,
-    /// so a caller applying the whole set in sequence gets the right answer without
-    /// having to know that.
-    /// </remarks>
     public static IReadOnlyList<MetadataField> All { get; } =
     [
         MetadataField.Title,
@@ -100,12 +71,6 @@ public static class MetadataFields
     /// <exception cref="ArgumentOutOfRangeException">
     /// <paramref name="field"/> is not a field this class projects as text.
     /// </exception>
-    /// <remarks>
-    /// <see cref="MetadataField.Series"/> and <see cref="MetadataField.SeriesIndex"/>
-    /// have an order between them: the name carries the index, so apply the name
-    /// first. An index applied while there is no series name is dropped, because
-    /// <see cref="SeriesInfo"/> has nowhere to put it.
-    /// </remarks>
     public static bool Apply(BookMetadata metadata, MetadataField field, string value)
     {
         Throw.IfNull(metadata);
@@ -158,12 +123,6 @@ public static class MetadataFields
     /// <summary>
     /// Rebuilds the primary creators from a separated list of names.
     /// </summary>
-    /// <remarks>
-    /// Contributors are left untouched: an editor that shows only authors must not
-    /// delete the illustrator it never showed. Sort name, role and source id are
-    /// carried forward only where the name at that position is unchanged — moving
-    /// "Gaiman, Neil" onto a different author would be worse than leaving it empty.
-    /// </remarks>
     private static bool ApplyCreators(BookMetadata metadata, string value)
     {
         string[] names = Split(value, ';');
@@ -270,11 +229,6 @@ public static class MetadataFields
     /// <summary>
     /// Reparses a date only when its text changed.
     /// </summary>
-    /// <remarks>
-    /// The raw text is authoritative. A file that said "2013" must not come back
-    /// as "2013-01-01", which would assert a day it never claimed, so an untouched
-    /// date keeps the exact characters it arrived as.
-    /// </remarks>
     private static bool ApplyDate(BookMetadata metadata, string? raw)
     {
         if (string.Equals(metadata.PublicationDate?.Raw, raw, StringComparison.Ordinal))

@@ -67,27 +67,6 @@ public sealed record MetaRefinement
 /// <summary>
 /// An EPUB package document (the OPF), parsed in a way that survives editing.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Three things about how this is loaded are deliberate and load-bearing.
-/// </para>
-/// <para>
-/// <b>Whitespace is preserved and formatting disabled on save.</b> Changing a
-/// title must change one line, not reformat the whole file. A user who opened a
-/// book to fix a typo should get a file back in which a typo is all that moved.
-/// </para>
-/// <para>
-/// <b>Line info is retained</b> so findings can carry line and column, which is
-/// most of what makes a validator usable rather than merely correct.
-/// </para>
-/// <para>
-/// <b>The original bytes and the original XML declaration are kept verbatim.</b>
-/// The declaration is re-emitted as the exact characters it arrived as, because
-/// serialising it through <c>XDeclaration</c> can change quoting or drop
-/// <c>standalone</c>. The bytes are retained for the session so a repair works
-/// against what was actually on disk rather than against a re-serialisation of it.
-/// </para>
-/// </remarks>
 public sealed partial class OpfDocument
 {
     /// <summary>The OPF namespace.</summary>
@@ -280,12 +259,6 @@ public sealed partial class OpfDocument
     /// Reads the metadata, honouring both EPUB 2 and EPUB 3 conventions.
     /// </summary>
     /// <returns>The metadata found.</returns>
-    /// <remarks>
-    /// Both conventions are read regardless of the declared version, because
-    /// files in the wild routinely mix them: an EPUB 3 produced by a converter
-    /// often carries <c>calibre:series</c> and nothing else, and an EPUB 2 may
-    /// carry EPUB 3 refinements a later tool added.
-    /// </remarks>
     public BookMetadata ReadMetadata()
     {
         var metadata = new BookMetadata();
@@ -490,11 +463,6 @@ public sealed partial class OpfDocument
     /// <summary>
     /// Records <c>&lt;meta&gt;</c> elements that map onto no model field.
     /// </summary>
-    /// <remarks>
-    /// Informational only. Preservation for XML happens by leaving the tree
-    /// alone on write — nothing here is re-serialised back into the document,
-    /// which is why an unrecognised element cannot be reformatted by a save.
-    /// </remarks>
     private void ReadUnmappedMeta(BookMetadata metadata)
     {
         if (Metadata is null)

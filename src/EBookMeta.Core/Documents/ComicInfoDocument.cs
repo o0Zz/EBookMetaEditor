@@ -10,26 +10,6 @@ namespace EBookMeta.Documents;
 /// <c>ComicInfo.xml</c> — the ComicRack metadata document, parsed in a way that
 /// survives editing.
 /// </summary>
-/// <remarks>
-/// <para>
-/// The de facto standard for comic archives, and the only one this build writes:
-/// ComicTagger produces it, Komga and Kavita read it. CoMet and the ComicBookLover
-/// blob are read elsewhere for cross-checking and otherwise left alone.
-/// </para>
-/// <para>
-/// Loaded and saved on the same terms as <see cref="OpfDocument"/> — whitespace
-/// preserved, formatting disabled, declaration verbatim, original bytes retained
-/// for the session — because the reasons are the same and a comic tagged by
-/// somebody else's tool deserves the same "one edit, one line of diff" treatment
-/// as a book.
-/// </para>
-/// <para>
-/// Unlike an OPF there are no namespaces to negotiate and no dual conventions to
-/// write: the schema is a flat sequence of elements. The one thing that sequence
-/// costs is insertion order — an element added at the end would be schema-invalid,
-/// so a new element goes where the XSD says it goes.
-/// </para>
-/// </remarks>
 public sealed class ComicInfoDocument
 {
     /// <summary>The entry name the convention fixes, at the archive root.</summary>
@@ -38,13 +18,6 @@ public sealed class ComicInfoDocument
     /// <summary>
     /// The element order the ComicInfo schema requires.
     /// </summary>
-    /// <remarks>
-    /// <c>ComicInfo.xsd</c> declares an <c>xsd:sequence</c>, not an
-    /// <c>xsd:all</c>, so order is part of validity. Most readers are lenient
-    /// about it and validators are not, and a file this tool wrote should pass
-    /// both. Anything absent from this list keeps its position relative to its
-    /// neighbours and is never moved.
-    /// </remarks>
     private static readonly string[] SchemaOrder =
     [
         "Title", "Series", "Number", "Count", "Volume",
@@ -62,13 +35,6 @@ public sealed class ComicInfoDocument
     /// The creator elements, in schema order, paired with the MARC relator each
     /// maps onto.
     /// </summary>
-    /// <remarks>
-    /// The mapping is lossy in one direction and that is accepted: several
-    /// ComicInfo roles share a relator (a penciller and an inker are both
-    /// <c>ill</c>), so the native element name is kept alongside the relator and
-    /// preferred when writing back to a comic archive. Round-tripping through
-    /// MARC alone would turn every inker into a penciller.
-    /// </remarks>
     private static readonly (string Element, string Relator)[] CreatorElements =
     [
         ("Writer", "aut"),
@@ -126,7 +92,6 @@ public sealed class ComicInfoDocument
     private string Indent { get; }
 
     /// <summary>The declared <c>PageCount</c>, or null when absent or unparseable.</summary>
-    /// <remarks>Compared against the archive's actual image count by rule CBZ-E020.</remarks>
     public int? PageCount =>
         int.TryParse(Value("PageCount"), NumberStyles.Integer, CultureInfo.InvariantCulture, out int count)
             ? count
@@ -136,7 +101,6 @@ public sealed class ComicInfoDocument
     /// The <c>Image</c> index of every <c>&lt;Page&gt;</c> element, in document
     /// order; null for one whose index is missing or unparseable.
     /// </summary>
-    /// <remarks>Compared against the archive's images by rule CBZ-W021.</remarks>
     public IReadOnlyList<int?> PageImageIndexes =>
         FindChild("Pages") is not { } pages
             ? []
@@ -152,11 +116,6 @@ public sealed class ComicInfoDocument
     /// <summary>Returns the text of a top-level element, trimmed.</summary>
     /// <param name="elementName">The element's local name.</param>
     /// <returns>The value, or <see langword="null"/> when the element is absent.</returns>
-    /// <remarks>
-    /// Exposed so validation rules can read fields the model does not carry —
-    /// <c>Year</c> and <c>Month</c> separately for CBZ-W031, for instance — without
-    /// this class growing a property per rule.
-    /// </remarks>
     public string? Value(string elementName)
     {
         Throw.IfNullOrEmpty(elementName);
@@ -212,12 +171,6 @@ public sealed class ComicInfoDocument
     /// </summary>
     /// <param name="entryName">The entry name it will be written as.</param>
     /// <returns>A document with a bare <c>ComicInfo</c> root.</returns>
-    /// <remarks>
-    /// Most comics in a collection have no <c>ComicInfo.xml</c> at all — that is
-    /// CBZ-W010 and the ordinary case, not a defect. The two schema-instance
-    /// namespace declarations are what ComicTagger writes, so a file this build
-    /// creates is shaped like the ones everything else produces.
-    /// </remarks>
     public static ComicInfoDocument CreateEmpty(string entryName = DefaultEntryName)
     {
         Throw.IfNullOrEmpty(entryName);
@@ -301,12 +254,6 @@ public sealed class ComicInfoDocument
     /// <summary>
     /// Reads the creator elements, keeping each one's native role.
     /// </summary>
-    /// <remarks>
-    /// ComicRack stores several names in one element, comma-separated, which is
-    /// what every tool that writes these files does. The writer is the primary
-    /// creator and the rest are contributors, mirroring <c>dc:creator</c> against
-    /// <c>dc:contributor</c>, so "authors" means the same thing in both formats.
-    /// </remarks>
     private void ReadCreators(BookMetadata metadata)
     {
         foreach ((string element, string relator) in CreatorElements)
@@ -332,13 +279,6 @@ public sealed class ComicInfoDocument
     /// <summary>
     /// Reads <c>Genre</c> as the subject list.
     /// </summary>
-    /// <remarks>
-    /// <c>Genre</c> only, deliberately, even though ComicInfo 2.0 also has
-    /// <c>Tags</c>. Reading both would merge two fields into one list that cannot
-    /// be split back apart on save, so editing subjects would quietly move a tag
-    /// into the genres. <c>Tags</c> is left untouched instead, and reported as an
-    /// unmapped field.
-    /// </remarks>
     private void ReadSubjects(BookMetadata metadata)
     {
         if (Value("Genre") is not { } genre)
@@ -387,12 +327,6 @@ public sealed class ComicInfoDocument
     /// <summary>
     /// Records elements that map onto no model field.
     /// </summary>
-    /// <remarks>
-    /// Informational only, exactly as for an OPF: preservation happens by leaving
-    /// the element alone on write, not by writing anything here back. That is what
-    /// lets a <c>Notes</c> or a whole <c>&lt;Pages&gt;</c> block survive a save
-    /// without being reformatted.
-    /// </remarks>
     private void ReadUnmapped(BookMetadata metadata)
     {
         foreach (XElement element in Root!.Elements())
@@ -470,23 +404,6 @@ public sealed class ComicInfoDocument
     /// <see langword="true"/> when the document changed, so the caller can report
     /// the correction.
     /// </returns>
-    /// <remarks>
-    /// <para>
-    /// An earlier version of this only ever filled a gap, on the reasoning that
-    /// silently overwriting a disagreeing count would hide an archive with missing
-    /// pages. That reasoning had the mechanism backwards. The count is not evidence
-    /// of anything — the images are, and they are right here to be counted — so a
-    /// <c>PageCount</c> that disagrees with them is simply wrong, and leaving it
-    /// wrong is what hides the problem from every reader that trusts it. The
-    /// disagreement is still reported, as CBZ-E020, so it appears in the log
-    /// alongside the correction rather than instead of it.
-    /// </para>
-    /// <para>
-    /// Returns without touching the tree when the value already agrees. That
-    /// early return is what keeps saving an unedited, correct archive
-    /// byte-identical.
-    /// </para>
-    /// </remarks>
     public bool SetPageCount(int pageCount)
     {
         string wanted = pageCount.ToString(CultureInfo.InvariantCulture);
@@ -581,13 +498,6 @@ public sealed class ComicInfoDocument
     /// <summary>
     /// Writes the creator elements, grouping names by the role they carry.
     /// </summary>
-    /// <remarks>
-    /// The native role wins over the mapped relator, so a name read out of
-    /// <c>Inker</c> goes back into <c>Inker</c> rather than into <c>Penciller</c>
-    /// merely because both mean <c>ill</c>. A creator carrying neither a role this
-    /// schema has nor one the relator table maps is reported rather than filed
-    /// under a guess.
-    /// </remarks>
     private void ApplyCreators(XElement root, BookMetadata current, BookMetadata metadata)
     {
         if (SameCreators(current.Creators, metadata.Creators))
@@ -716,12 +626,6 @@ public sealed class ComicInfoDocument
     /// <summary>
     /// Inserts a new element at the position the schema sequence gives it.
     /// </summary>
-    /// <remarks>
-    /// Appending would be simpler and would produce a file that fails schema
-    /// validation, since <c>ComicInfo.xsd</c> is a sequence. Elements this build
-    /// does not know are treated as anchors and never moved, so an unrecognised
-    /// element keeps its neighbours.
-    /// </remarks>
     private void InsertInSchemaOrder(XElement root, XElement element)
     {
         int position = SchemaPosition(element.Name.LocalName);

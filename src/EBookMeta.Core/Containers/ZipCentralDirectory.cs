@@ -27,21 +27,13 @@ internal sealed record ZipCentralDirectoryRecord
 /// directory records.
 /// </summary>
 /// <remarks>
-/// <para>
-/// This exists for one reason: <c>ZipArchiveEntry</c> does not expose the
-/// compression method, and preserving it per entry is a hard invariant.
-/// Comparing <c>CompressedLength</c> to <c>Length</c> is not a sound substitute
-/// — a deflate stream can equal or exceed its input for small or
-/// already-compressed content, so that heuristic misreports exactly the case
-/// rule EPUB-E040 cares most about, a <c>mimetype</c> entry that only looks
-/// stored.
-/// </para>
-/// <para>
-/// It reads structure only, never content. Decompression stays with
-/// <c>ZipArchive</c>, which is well tested and not worth reimplementing.
-/// The two views are paired by index rather than by name, because ZIP does not
-/// guarantee unique names and malformed archives in the wild do repeat them.
-/// </para>
+/// This exists because <c>ZipArchiveEntry</c> does not expose the compression
+/// method, and preserving it per entry is a hard invariant. Comparing
+/// <c>CompressedLength</c> to <c>Length</c> is not a sound substitute — a deflate
+/// stream can equal or exceed its input, so that heuristic misreports exactly the
+/// case rule EPUB-E040 cares most about. Structure only, never content: the two
+/// views are paired by index rather than by name, because ZIP does not guarantee
+/// unique names and malformed archives in the wild do repeat them.
 /// </remarks>
 internal sealed class ZipCentralDirectory
 {
@@ -71,17 +63,6 @@ internal sealed class ZipCentralDirectory
     /// <summary>
     /// The archive-level comment, or <see langword="null"/> when there is none.
     /// </summary>
-    /// <remarks>
-    /// Read because comic archives sometimes carry a ComicBookLover JSON blob
-    /// here, which is one of the three metadata conventions EBookMetaEditor reads.
-    /// <para>
-    /// Note for phase 2: <c>System.IO.Compression</c> cannot write an archive
-    /// comment, so a CBZ carrying one cannot currently be rebuilt with it
-    /// intact. That is a real conflict with "preserve the others untouched" and
-    /// needs a decision before CBZ writing ships — it is recorded here rather
-    /// than discovered later.
-    /// </para>
-    /// </remarks>
     internal string? ArchiveComment { get; }
 
     /// <summary>

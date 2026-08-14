@@ -5,20 +5,6 @@ namespace EBookMeta.App;
 /// <summary>
 /// Shows what the application has done this session.
 /// </summary>
-/// <remarks>
-/// <para>
-/// An edit box rather than a list view, on purpose: a log is something you select
-/// and paste into a bug report, and a read-only multiline text box supports
-/// Ctrl+A and Ctrl+C for free. A grid looks tidier and fights you the moment you
-/// want to hand the contents to somebody.
-/// </para>
-/// <para>
-/// It reads <see cref="Log.Entries"/> directly and appends live through
-/// <see cref="Log.Written"/>, so nothing has to be read back off disk to be
-/// displayed. The handler marshals to the UI thread because Core raises the event
-/// on whichever thread logged.
-/// </para>
-/// </remarks>
 internal sealed class LogForm : Form
 {
     private readonly TextBox _text = new()

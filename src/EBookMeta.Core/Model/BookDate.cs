@@ -25,20 +25,6 @@ public enum DatePrecision
 /// A date from a book's metadata, keeping the source text alongside the parsed
 /// value.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Book dates are routinely partial. <c>&lt;dc:date&gt;2011&lt;/dc:date&gt;</c>
-/// is valid and common, and so is <c>2011-05</c>. Storing only a
-/// <see cref="DateTimeOffset"/> would silently promote both to
-/// <c>2011-01-01T00:00:00Z</c>, and writing that back would assert a
-/// publication day the publisher never claimed.
-/// </para>
-/// <para>
-/// So <see cref="Raw"/> is authoritative for writing and <see cref="Value"/> is
-/// a convenience for sorting and display. If the user has not edited the date,
-/// write <see cref="Raw"/> back unchanged.
-/// </para>
-/// </remarks>
 public sealed record BookDate
 {
     /// <summary>The date text exactly as the source stored it.</summary>

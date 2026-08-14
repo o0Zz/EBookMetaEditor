@@ -6,23 +6,6 @@ namespace EBookMeta.Documents;
 /// Everything about how an XML document was written that its parsed tree does not
 /// record, captured so a save can put it all back.
 /// </summary>
-/// <remarks>
-/// <para>
-/// <c>XDocument</c> models elements, attributes and whitespace between them, and
-/// nothing else: not the literal characters of the declaration, not the gap
-/// between the declaration and the root, not what followed the root, not whether
-/// empty elements were written <c>&lt;x/&gt;</c> or <c>&lt;x /&gt;</c>, and not
-/// which line ending the file used — XML parsing is required by spec to normalise
-/// CRLF to LF. Each of those, left to the serialiser's own preference, turns a
-/// one-word edit into a whole-file diff.
-/// </para>
-/// <para>
-/// Shared by every metadata document rather than reimplemented per format. The
-/// rules are identical for an OPF and a <c>ComicInfo.xml</c>, and two copies of
-/// this would eventually disagree about one of them — at which point one format
-/// silently loses the round-trip invariant the other keeps.
-/// </para>
-/// </remarks>
 internal sealed class XmlSourceFormat
 {
     private XmlSourceFormat(
@@ -99,11 +82,6 @@ internal sealed class XmlSourceFormat
     /// <param name="declarationText">The declaration to emit.</param>
     /// <param name="newLine">The line ending to use.</param>
     /// <returns>Formatting for a new document.</returns>
-    /// <remarks>
-    /// There is no source to copy, so this is the one place a house style is
-    /// chosen rather than reproduced: the compact empty-element form, and a
-    /// trailing newline, which is what a text file should end with.
-    /// </remarks>
     internal static XmlSourceFormat ForNewDocument(
         XmlEncodingInfo encoding, string declarationText, string newLine)
     {
@@ -118,12 +96,6 @@ internal sealed class XmlSourceFormat
     /// <summary>Serialises a document back to bytes in its original shape.</summary>
     /// <param name="root">The root element, or null for an empty document.</param>
     /// <returns>The complete document bytes.</returns>
-    /// <remarks>
-    /// Formatting is disabled and whitespace was preserved on load, so an
-    /// untouched document serialises to exactly the characters it arrived as, and
-    /// a one-field edit produces a one-line diff. Reformatting a file the user did
-    /// not ask to reformat would bury their actual change.
-    /// </remarks>
     internal byte[] Compose(XElement? root)
     {
         string body = root is null ? string.Empty : XmlExactWriter.Write(root, SelfClosingHasSpace);
@@ -148,13 +120,6 @@ internal sealed class XmlSourceFormat
     /// <summary>
     /// Captures the XML declaration as literal text.
     /// </summary>
-    /// <remarks>
-    /// Taken from the source characters rather than from
-    /// <see cref="XDocument.Declaration"/>, whose round trip is not
-    /// character-exact: it can change attribute quoting and normalise or drop
-    /// <c>standalone</c>. Preserving the declaration verbatim is an invariant,
-    /// so the only safe copy is the original text.
-    /// </remarks>
     private static string? ExtractDeclaration(string text)
     {
         int start = text.IndexOf("<?xml", StringComparison.Ordinal);

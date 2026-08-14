@@ -3,19 +3,6 @@
 /// <summary>
 /// The settings dialog, reached from <b>File ▸ Settings</b>.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Also the home of context-menu registration. There is no separate setup
-/// program: a tool you unzip and run should be able to hook and unhook itself
-/// from Explorer without an installer.
-/// </para>
-/// <para>
-/// Laid out by a <see cref="TableLayoutPanel"/> rather than by coordinates,
-/// because the text is translated. "Keep a .bak backup beside the file after
-/// saving" is a third longer in German, and a dialog built from fixed positions
-/// answers that by cutting the sentence in half.
-/// </para>
-/// </remarks>
 internal sealed class SettingsForm : Form
 {
     private readonly AppSettings _settings;

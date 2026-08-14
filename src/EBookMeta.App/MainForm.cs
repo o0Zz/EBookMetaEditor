@@ -7,13 +7,6 @@ namespace EBookMeta.App;
 /// <summary>
 /// The editor window: open a file, fix its metadata, save, close.
 /// </summary>
-/// <remarks>
-/// Deliberately thin. Every decision about formats, validity and bytes belongs
-/// to <c>EBookMeta.Core</c>; this is a form over it that could be replaced
-/// without touching the logic. In particular the cover arrives as bytes and a
-/// media type, and the <see cref="Bitmap"/> is constructed here — Core has no
-/// idea what an image is.
-/// </remarks>
 internal sealed class MainForm : Form, IPathReceiver
 {
     private readonly AppSettings _settings;
@@ -37,12 +30,6 @@ internal sealed class MainForm : Form, IPathReceiver
     /// <summary>
     /// Every text field paired with the model field it edits.
     /// </summary>
-    /// <remarks>
-    /// One list drives populating, capability gating and collecting, so a field
-    /// cannot be shown but not saved, or saved but never disabled for a format
-    /// that has nowhere to put it. Order matters: the series name carries the
-    /// index, so it is applied first.
-    /// </remarks>
     private readonly (MetadataField Field, TextBox Box)[] _fields;
 
     private readonly StatusStrip _status = new();
@@ -51,15 +38,6 @@ internal sealed class MainForm : Form, IPathReceiver
     /// <summary>
     /// How to re-label every piece of fixed prose in the window.
     /// </summary>
-    /// <remarks>
-    /// Closures rather than a list of controls, because a menu item and a label
-    /// have no common base type worth casting to for the sake of one property.
-    /// Collected so <see cref="Localize"/> can run twice: once while building,
-    /// and again when the settings dialog changes the language, which would
-    /// otherwise leave the window labelled in the language the user just left.
-    /// Anything computed — the status line, the title once a file is open — is
-    /// not in here, because it is rebuilt from its own state instead.
-    /// </remarks>
     private readonly List<Action> _relabel = [];
 
     private readonly ToolStripMenuItem _saveItem;
@@ -67,13 +45,6 @@ internal sealed class MainForm : Form, IPathReceiver
     /// <summary>
     /// Paths that arrived from other launches, waiting to be dealt with together.
     /// </summary>
-    /// <remarks>
-    /// Explorer starts one process per selected file, so a selection of thirty
-    /// arrives here as thirty separate deliveries within a few hundred
-    /// milliseconds. Acting on the first would open a batch of two and then fight
-    /// the next twenty-nine, so they are collected behind a timer that restarts on
-    /// each arrival and fires once the flurry stops.
-    /// </remarks>
     private readonly List<string> _handoverPaths = [];
 
     // Fully qualified: the implicit usings bring in System.Threading, where there is
@@ -186,11 +157,6 @@ internal sealed class MainForm : Form, IPathReceiver
     /// <summary>
     /// A menu item whose label follows the interface language.
     /// </summary>
-    /// <remarks>
-    /// The text is set through <see cref="_relabel"/> rather than here, so that
-    /// building the menu and re-labelling it later are the same code and cannot
-    /// drift into disagreeing about which key an item uses.
-    /// </remarks>
     private ToolStripMenuItem Item(string key, Action? action = null, Keys shortcut = Keys.None)
     {
         var item = new ToolStripMenuItem();
@@ -259,12 +225,6 @@ internal sealed class MainForm : Form, IPathReceiver
     /// <summary>
     /// Puts every fixed label into the current language.
     /// </summary>
-    /// <remarks>
-    /// Run again after the settings dialog closes, which is the only place the
-    /// language can change. The batch window is not reachable while that dialog
-    /// is open, so there is no second window to keep in step and no need for a
-    /// change notification anybody could forget to unsubscribe from.
-    /// </remarks>
     private void Localize()
     {
         foreach (Action relabel in _relabel)
@@ -326,12 +286,6 @@ internal sealed class MainForm : Form, IPathReceiver
     /// <summary>
     /// The file-dialog filter, assembled rather than translated whole.
     /// </summary>
-    /// <remarks>
-    /// A filter string is descriptions and glob patterns separated by bars, and
-    /// handing that structure to a translator invites a misplaced bar that makes
-    /// the dialog show nothing. Only the descriptions are translated; the
-    /// patterns are built here.
-    /// </remarks>
     internal static string BookFilter() =>
         $"{Strings.Get("filter.supported")}|*.epub;*.cbz"
         + $"|{Strings.Get("filter.epub")}|*.epub"
@@ -370,11 +324,6 @@ internal sealed class MainForm : Form, IPathReceiver
     /// <summary>
     /// Deals with everything that arrived while the timer was running.
     /// </summary>
-    /// <remarks>
-    /// One file with nothing already open is just an open. Anything else is a batch,
-    /// and the file this window is already showing joins it — a user who right-clicks
-    /// a second book expects both, not a window that forgot the first.
-    /// </remarks>
     private void HandOverToBatch()
     {
         _handover.Stop();
@@ -399,12 +348,6 @@ internal sealed class MainForm : Form, IPathReceiver
     /// <summary>
     /// Opens the batch grid over the given paths and steps out of its way.
     /// </summary>
-    /// <remarks>
-    /// This window hides rather than closes, because it owns the message loop: the
-    /// application ends when it does. It comes back when the grid is closed, which is
-    /// also what gives the user somewhere to land rather than the process
-    /// disappearing.
-    /// </remarks>
     private void OpenBatch(IEnumerable<string> paths)
     {
         var batch = new BatchForm(_settings, paths);
@@ -475,11 +418,6 @@ internal sealed class MainForm : Form, IPathReceiver
     }
 
     /// <summary>Fills the form from the model.</summary>
-    /// <remarks>
-    /// Field text comes from <see cref="MetadataFields"/> rather than from
-    /// per-control code here, so this window and the batch grid show a value
-    /// identically and write it back identically.
-    /// </remarks>
     private void Populate(BookMetadata m)
     {
         foreach ((MetadataField field, TextBox box) in _fields)
@@ -536,10 +474,6 @@ internal sealed class MainForm : Form, IPathReceiver
     /// <summary>
     /// Disables inputs the format cannot store.
     /// </summary>
-    /// <remarks>
-    /// The reason <c>FormatCapabilities</c> exists: a user must never type into
-    /// a box whose contents get silently discarded on save.
-    /// </remarks>
     private void ApplyCapabilities(FormatCapabilities capabilities)
     {
         foreach ((MetadataField field, TextBox box) in _fields)
@@ -581,12 +515,6 @@ internal sealed class MainForm : Form, IPathReceiver
     }
 
     /// <summary>Reads the form back into the model.</summary>
-    /// <remarks>
-    /// Every field goes through <see cref="MetadataFields.Apply"/>, which leaves
-    /// the model alone when the text has not changed. That is what makes opening a
-    /// file and saving it produce identical bytes, and it is shared with the batch
-    /// grid so both editors mean the same thing by an edit.
-    /// </remarks>
     private void CollectInto(BookMetadata m)
     {
         foreach ((MetadataField field, TextBox box) in _fields)

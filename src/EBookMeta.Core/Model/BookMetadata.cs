@@ -4,22 +4,6 @@ namespace EBookMeta.Model;
 /// The format-neutral metadata EBookMetaEditor reads, shows and writes — the common
 /// 80% that every supported format can express something close to.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Mutable by design. This is the object an editor binds to and the user types
-/// into, so <c>with</c>-expression immutability would buy nothing and cost
-/// clarity. The leaf types it holds — <see cref="Creator"/>,
-/// <see cref="Identifier"/>, <see cref="SeriesInfo"/> — are records, because
-/// those are values that get replaced rather than edited in place.
-/// </para>
-/// <para>
-/// Adding a field here means updating every <c>IFormatHandler</c>'s
-/// <c>FormatCapabilities</c>. That friction is intentional: the UI disables
-/// inputs a format cannot store, so a field with no capability declaration
-/// would be a box the user can type into whose contents are silently discarded
-/// on save.
-/// </para>
-/// </remarks>
 public sealed class BookMetadata
 {
     /// <summary>The work's title.</summary>
@@ -84,12 +68,6 @@ public sealed class BookMetadata
     /// <summary>
     /// Metadata found in the source that does not map onto any field above.
     /// </summary>
-    /// <remarks>
-    /// See <see cref="UnmappedField"/> for the important distinction: for XML
-    /// formats this is informational and preservation happens by leaving the
-    /// tree alone, while for record-based binary formats these bytes are the
-    /// only surviving copy and must be written back.
-    /// </remarks>
     public IList<UnmappedField> UnmappedFields { get; } = [];
 
     /// <summary>

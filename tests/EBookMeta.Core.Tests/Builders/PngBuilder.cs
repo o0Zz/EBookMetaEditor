@@ -3,21 +3,11 @@ namespace EBookMeta.Tests.Builders;
 /// <summary>
 /// Produces the tiny images the corpus uses for covers and comic pages.
 /// </summary>
-/// <remarks>
-/// Never commit a real copyrighted book or comic. Every fixture is synthetic,
-/// and a cover only has to be a valid image file — nothing in Core decodes it,
-/// since cover art crosses the boundary as bytes plus a media type.
-/// </remarks>
 internal static class PngBuilder
 {
     /// <summary>
     /// A valid 1×1 transparent PNG, 67 bytes.
     /// </summary>
-    /// <remarks>
-    /// Hard-coded rather than generated, because generating it would mean
-    /// referencing System.Drawing, and the whole point of the byte[] boundary is
-    /// that neither Core nor its tests need an imaging library.
-    /// </remarks>
     internal static byte[] OnePixel { get; } =
     [
         0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,

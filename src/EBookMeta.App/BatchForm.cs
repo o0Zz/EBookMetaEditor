@@ -9,34 +9,11 @@ namespace EBookMeta.App;
 /// The batch editor: one row per file, one column per field, one save for all of
 /// them.
 /// </summary>
-/// <remarks>
-/// <para>
-/// The window that makes the product's own pitch true — fixing a publisher across
-/// a series without opening thirty files. Everything about which files exist, what
-/// they hold and what happens when they are written belongs to
-/// <see cref="BatchSession"/>; this is a grid over it.
-/// </para>
-/// <para>
-/// One thing it does not do, deliberately: it does not show the description or the
-/// cover. Both need room a row does not have, and both are what the single-file
-/// editor is for.
-/// </para>
-/// <para>
-/// There is no validate button, here or anywhere. Reading a file reports what is
-/// wrong with it and saving corrects what can be corrected, so every row's problems
-/// are already in the log by the time it appears.
-/// </para>
-/// </remarks>
 internal sealed class BatchForm : Form, IPathReceiver
 {
     /// <summary>
     /// The editable columns, in order.
     /// </summary>
-    /// <remarks>
-    /// Description is absent on purpose: a paragraph does not belong in a grid cell.
-    /// Everything else <see cref="MetadataFields"/> can project as text is here, and
-    /// each cell is enabled per row according to what that row's format can store.
-    /// </remarks>
     private static readonly (MetadataField Field, string HeaderKey, int Width)[] FieldColumns =
     [
         (MetadataField.Title, "field.title", 200),
@@ -92,11 +69,6 @@ internal sealed class BatchForm : Form, IPathReceiver
     /// <summary>
     /// Whether the grid is being written to by this form rather than by the user.
     /// </summary>
-    /// <remarks>
-    /// <see cref="OnCellValueChanged"/> writes the stored value back into the cell
-    /// it just read, and filling a row writes every cell, both of which raise the
-    /// event again. Without this the commit would recurse until the stack ran out.
-    /// </remarks>
     private bool _filling;
 
     /// <summary>Creates the batch window over the given files and folders.</summary>
@@ -166,13 +138,6 @@ internal sealed class BatchForm : Form, IPathReceiver
     /// <summary>
     /// Turns whatever the shell handed over into a list of files.
     /// </summary>
-    /// <remarks>
-    /// A folder is expanded here rather than deeper down, so the batch itself only
-    /// ever deals in files and a row always corresponds to something that can be
-    /// saved. Subfolders are not walked: a user who drops a folder means that
-    /// folder, and quietly recursing into a whole library would be a surprise with
-    /// a save button attached.
-    /// </remarks>
     private static IEnumerable<string> Expand(IEnumerable<string> paths)
     {
         foreach (string path in paths)
@@ -262,13 +227,6 @@ internal sealed class BatchForm : Form, IPathReceiver
     /// <summary>
     /// Shows a shortcut beside a menu item without registering it.
     /// </summary>
-    /// <remarks>
-    /// <c>ShortcutKeys</c> would make the menu answer the key everywhere in the
-    /// window, including inside a cell being edited and inside the value box, where
-    /// Ctrl+C has to keep meaning "copy this text". The keys are handled in
-    /// <see cref="ProcessCmdKey"/>, which can tell those cases apart; this only puts
-    /// the label where someone looking for the feature will find it.
-    /// </remarks>
     private static ToolStripMenuItem WithShortcut(ToolStripMenuItem item, string shortcut)
     {
         item.ShortcutKeyDisplayString = shortcut;
@@ -276,10 +234,6 @@ internal sealed class BatchForm : Form, IPathReceiver
     }
 
     /// <summary>The right-click menu on a cell.</summary>
-    /// <remarks>
-    /// The same two commands as the Edit menu. Right-click is where people look for
-    /// copy and paste first, and a feature nobody can find is not delivered.
-    /// </remarks>
     private ContextMenuStrip BuildCellMenu()
     {
         var menu = new ContextMenuStrip();
@@ -437,10 +391,6 @@ internal sealed class BatchForm : Form, IPathReceiver
     /// <summary>
     /// Marks the cells whose value differs from the file on disk.
     /// </summary>
-    /// <remarks>
-    /// Bold rather than coloured, so it survives a high-contrast theme and does not
-    /// compete with the grey of a cell that cannot be edited at all.
-    /// </remarks>
     private void OnCellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
     {
         if (e.RowIndex < 0 || e.ColumnIndex < FirstFieldColumn ||
@@ -491,11 +441,6 @@ internal sealed class BatchForm : Form, IPathReceiver
     }
 
     /// <summary>Opens the double-clicked file in the single-file editor.</summary>
-    /// <remarks>
-    /// Read-only in the sense that matters: the grid holds this file's unsaved edits,
-    /// so opening a second editor over the same path would give two windows a claim
-    /// on it. Offered only for a row with nothing pending.
-    /// </remarks>
     private void OnCellDoubleClick(object? sender, DataGridViewCellEventArgs e)
     {
         if (e.RowIndex < 0 || e.ColumnIndex >= FirstFieldColumn ||
@@ -517,20 +462,6 @@ internal sealed class BatchForm : Form, IPathReceiver
     /// <summary>
     /// Handles the grid's own shortcuts before anything else sees them.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// In <c>ProcessCmdKey</c> rather than a <c>KeyDown</c> handler because the grid
-    /// answers Ctrl+C itself and would otherwise consume it before the form ever
-    /// heard about it — leaving copy and paste implemented in two different places
-    /// with two different ideas of what a selection is.
-    /// </para>
-    /// <para>
-    /// Both guards are load-bearing. Inside a cell being edited, Ctrl+C and Ctrl+V
-    /// mean the ordinary text-editing thing, and taking them over there would make
-    /// it impossible to copy part of a title. The focus check keeps them out of
-    /// anything else that might one day hold text on this window.
-    /// </para>
-    /// </remarks>
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
         if (!_busy && _grid.Focused && !_grid.IsCurrentCellInEditMode)
@@ -551,11 +482,6 @@ internal sealed class BatchForm : Form, IPathReceiver
     }
 
     /// <summary>Puts the selected cells on the clipboard.</summary>
-    /// <remarks>
-    /// Through the grid's own <c>GetClipboardContent</c>, which writes text and HTML
-    /// flavours of the same selection — so a block copied out of here pastes into
-    /// Excel as a table rather than as one run-on line.
-    /// </remarks>
     private void CopySelection()
     {
         // Commit first, so copy and paste both see the value the model holds rather
@@ -586,22 +512,6 @@ internal sealed class BatchForm : Form, IPathReceiver
     }
 
     /// <summary>Writes the clipboard into the grid.</summary>
-    /// <remarks>
-    /// <para>
-    /// Two shapes, because both are things people actually do. <b>One value</b> goes
-    /// into every selected cell that can hold it — copy a publisher once, select the
-    /// column down thirty rows, paste. <b>A block</b> — several values, from another
-    /// row here or from a spreadsheet — lands anchored at the top-left of the
-    /// selection and fills right and down from there, which is what every grid does
-    /// and therefore what people expect.
-    /// </para>
-    /// <para>
-    /// Cells whose format cannot store the field are counted and reported, never
-    /// written — the same rule every other edit here follows, and why pasting a
-    /// column of sort titles across a mixed selection of books and comics does the
-    /// right thing for the books and says so for the comics.
-    /// </para>
-    /// </remarks>
     private void PasteIntoSelection()
     {
         if (_busy)
@@ -708,11 +618,6 @@ internal sealed class BatchForm : Form, IPathReceiver
     /// <summary>
     /// The cells a block covers, anchored at the top-left of the selection.
     /// </summary>
-    /// <remarks>
-    /// Clipped to the grid rather than extended: a block that runs off the right or
-    /// the bottom pastes what fits. Growing the grid is not an option — a row is a
-    /// file on disk.
-    /// </remarks>
     private List<DataGridViewCell> BlockTargets(string[][] block)
     {
         List<DataGridViewCell> selection = EditableSelection();
@@ -742,13 +647,6 @@ internal sealed class BatchForm : Form, IPathReceiver
     /// <summary>
     /// Reads the clipboard as a grid of values.
     /// </summary>
-    /// <remarks>
-    /// Tab-separated rows, which is what this grid, Excel and every other
-    /// spreadsheet put on the clipboard, so copying from any of them works without
-    /// asking the user which format they meant. Trailing newlines are dropped
-    /// because a copied selection ends with one and would otherwise paste an empty
-    /// row over real metadata.
-    /// </remarks>
     private static string[][] ClipboardBlock()
     {
         string text;
@@ -775,12 +673,6 @@ internal sealed class BatchForm : Form, IPathReceiver
     /// <summary>
     /// Moves the cursor to a right-clicked cell, unless it is already selected.
     /// </summary>
-    /// <remarks>
-    /// Without this the context menu acts on wherever the cursor happened to be,
-    /// which is not where the user just clicked. Right-clicking inside an existing
-    /// selection leaves it alone, because collapsing a selection of thirty rows the
-    /// moment somebody reaches for the menu that acts on them would be perverse.
-    /// </remarks>
     private void OnCellMouseDown(object? sender, DataGridViewCellMouseEventArgs e)
     {
         if (e.Button != MouseButtons.Right || e.RowIndex < 0 || e.ColumnIndex < 0)
@@ -847,19 +739,6 @@ internal sealed class BatchForm : Form, IPathReceiver
     /// The work. Returns the message to show when it finishes, or null for the
     /// default.
     /// </param>
-    /// <remarks>
-    /// <para>
-    /// A folder of four hundred files takes seconds to read and longer to write, and
-    /// a frozen window during either is indistinguishable from a crash. So the work
-    /// runs on a task and reports back through <c>BeginInvoke</c> — the same shape as
-    /// the cover decode in the single-file editor, and no <c>async void</c> outside
-    /// an event handler.
-    /// </para>
-    /// <para>
-    /// The grid is disabled while a batch runs. Editing a row that is being written
-    /// is not a race worth having.
-    /// </para>
-    /// </remarks>
     private void RunInBackground(
         string verbKey,
         string logVerb,

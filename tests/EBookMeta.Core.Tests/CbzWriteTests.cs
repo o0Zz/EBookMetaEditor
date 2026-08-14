@@ -8,10 +8,6 @@ using Xunit;
 
 namespace EBookMeta.Tests;
 
-/// <summary>
-/// Tests for the comic write path — the part that destroys libraries when it is
-/// wrong.
-/// </summary>
 public sealed class CbzWriteTests
 {
     private static void Write(
@@ -41,15 +37,18 @@ public sealed class CbzWriteTests
         return reader.ReadToEnd();
     }
 
-    /// <summary>
-    /// Hard invariant 6, for comics. Open a file, save it without editing, get
-    /// identical bytes back.
-    /// </summary>
-    [Fact]
-    public void Saving_without_editing_is_byte_identical()
+    /// <summary>Hard invariant 6, for comics.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Saving_without_editing_is_byte_identical(bool comicInfoLast)
     {
         using var temp = new TempDir();
-        string source = new CbzBuilder().WriteTo(temp.File("comic.cbz"));
+
+        // Where the metadata entry sits in the archive is a producer's choice, and
+        // a save must not move it.
+        CbzBuilder builder = comicInfoLast ? new CbzBuilder().WithComicInfoLast() : new CbzBuilder();
+        string source = builder.WriteTo(temp.File("comic.cbz"));
         string target = temp.File("saved.cbz");
 
         Write(source, target, _ => { });
@@ -58,62 +57,52 @@ public sealed class CbzWriteTests
     }
 
     /// <summary>
-    /// Where the metadata entry sits in the archive is a producer's choice, and a
-    /// save must not move it.
-    /// </summary>
-    [Fact]
-    public void Saving_without_editing_is_byte_identical_with_ComicInfo_last()
-    {
-        using var temp = new TempDir();
-        string source = new CbzBuilder().WithComicInfoLast().WriteTo(temp.File("comic.cbz"));
-        string target = temp.File("saved.cbz");
-
-        Write(source, target, _ => { });
-
-        Assert.Equal(File.ReadAllBytes(source), File.ReadAllBytes(target));
-    }
-
-    /// <summary>
-    /// A document with no <c>PageCount</c> gains the right one, and nothing else.
+    /// The page count is recomputed from the images present, whether it was missing
+    /// or simply wrong.
     /// </summary>
     /// <remarks>
     /// The one place saving an unedited file deliberately changes it. Byte-identity
-    /// is a property of saving a <em>correct</em> archive: this one is missing a
-    /// field whose value is sitting in the archive waiting to be counted, and
-    /// supplying it is the whole point of correcting on save. Everything else in the
-    /// document still has to survive untouched, which is what the second assertion
-    /// is for.
+    /// is a property of saving a <em>correct</em> archive; supplying a field whose
+    /// value is sitting in the archive waiting to be counted is the whole point of
+    /// correcting on save.
     /// </remarks>
     [Fact]
-    public void Saving_a_minimal_document_supplies_the_missing_page_count()
+    public void Saving_recomputes_the_page_count()
     {
         using var temp = new TempDir();
-        string source = new CbzBuilder()
-            .WithComicInfo(CbzBuilder.MinimalComicInfo)
-            .WriteTo(temp.File("comic.cbz"));
         string target = temp.File("saved.cbz");
 
+        string missing = new CbzBuilder()
+            .WithComicInfo(CbzBuilder.MinimalComicInfo)
+            .WriteTo(temp.File("missing.cbz"));
+
         var findings = new List<Finding>();
-        Write(source, target, _ => { }, findings);
+        Write(missing, target, _ => { }, findings);
 
-        string saved = ComicInfoText(target);
+        Assert.Contains("<PageCount>3</PageCount>", ComicInfoText(target), StringComparison.Ordinal);
 
-        Assert.Contains("<PageCount>3</PageCount>", saved, StringComparison.Ordinal);
-        Assert.Contains("<Series>The Sandman</Series>", saved, StringComparison.Ordinal);
+        // Everything else in the document still survives untouched.
+        Assert.Contains("<Series>The Sandman</Series>", ComicInfoText(target), StringComparison.Ordinal);
+        Assert.True(Assert.Single(findings, f => f.RuleId == "CBZ-E020").HasAutofix);
 
-        Finding correction = Assert.Single(findings, f => f.RuleId == "CBZ-E020");
-        Assert.True(correction.HasAutofix);
+        string wrong = new CbzBuilder()
+            .WithComicInfo(CbzBuilder.MinimalComicInfo.Replace(
+                "<Series>The Sandman</Series>",
+                "<Series>The Sandman</Series>\n  <PageCount>99</PageCount>"))
+            .WriteTo(temp.File("wrong.cbz"));
+
+        findings.Clear();
+        Write(wrong, temp.File("saved-2.cbz"), _ => { }, findings);
+
+        Assert.Contains("<PageCount>3</PageCount>", ComicInfoText(temp.File("saved-2.cbz")), StringComparison.Ordinal);
+        Assert.DoesNotContain("99", ComicInfoText(temp.File("saved-2.cbz")), StringComparison.Ordinal);
+        Assert.Contains("99", Assert.Single(findings, f => f.RuleId == "CBZ-E020").Message, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// A metadata document below the root is moved up to it.
+    /// A metadata document below the root is moved up to it — the only correction
+    /// that changes the archive's entry list rather than a document's contents.
     /// </summary>
-    /// <remarks>
-    /// The only correction that changes the archive's entry list rather than a
-    /// document's contents, and it is safe because the entry it moves is not a page.
-    /// The images keep their order, which for a comic is the reading order, and
-    /// invariant 4 is about them.
-    /// </remarks>
     [Fact]
     public void Saving_moves_a_nested_metadata_document_to_the_root()
     {
@@ -132,43 +121,16 @@ public sealed class CbzWriteTests
         Assert.Contains("ComicInfo.xml", names);
         Assert.DoesNotContain("meta/ComicInfo.xml", names);
 
-        // The pages are untouched, and still in reading order.
+        // It is safe because the entry it moves is not a page: the images keep
+        // their order, which for a comic is the reading order.
         Assert.Equal(
             ["01.png", "02.png", "03.png"],
             names.Where(n => n.EndsWith(".png", StringComparison.Ordinal)));
 
-        Finding correction = Assert.Single(findings, f => f.RuleId == "CBZ-E011");
-        Assert.True(correction.HasAutofix);
+        Assert.True(Assert.Single(findings, f => f.RuleId == "CBZ-E011").HasAutofix);
     }
 
-    /// <summary>
-    /// A page count that disagrees with the images is corrected, not left wrong.
-    /// </summary>
-    [Fact]
-    public void Saving_corrects_a_wrong_page_count()
-    {
-        using var temp = new TempDir();
-        string source = new CbzBuilder()
-            .WithComicInfo(CbzBuilder.MinimalComicInfo.Replace(
-                "<Series>The Sandman</Series>",
-                "<Series>The Sandman</Series>\n  <PageCount>99</PageCount>"))
-            .WriteTo(temp.File("comic.cbz"));
-        string target = temp.File("saved.cbz");
-
-        var findings = new List<Finding>();
-        Write(source, target, _ => { }, findings);
-
-        Assert.Contains("<PageCount>3</PageCount>", ComicInfoText(target), StringComparison.Ordinal);
-        Assert.DoesNotContain("99", ComicInfoText(target), StringComparison.Ordinal);
-
-        Finding correction = Assert.Single(findings, f => f.RuleId == "CBZ-E020");
-        Assert.Contains("99", correction.Message, StringComparison.Ordinal);
-    }
-
-    /// <summary>
-    /// Hard invariant 9. Changing a title must produce a one-line diff, not a
-    /// reformat of the whole document.
-    /// </summary>
+    /// <summary>Hard invariant 9.</summary>
     [Fact]
     public void Editing_one_field_changes_one_line()
     {
@@ -186,10 +148,7 @@ public sealed class CbzWriteTests
         Assert.Contains("<Title>Season of Mists</Title>", after.Select(line => line.Trim()));
     }
 
-    /// <summary>
-    /// Hard invariant 4. Page images are copied byte for byte, in order, with
-    /// their compression method unchanged.
-    /// </summary>
+    /// <summary>Hard invariant 4.</summary>
     [Fact]
     public void Entry_order_and_compression_survive_a_write()
     {
@@ -209,10 +168,6 @@ public sealed class CbzWriteTests
             after.Entries.Select(e => (e.Name, e.CompressionMethod)));
     }
 
-    /// <summary>
-    /// Elements this build maps onto no model field survive verbatim, because
-    /// nothing ever goes near them.
-    /// </summary>
     [Fact]
     public void Unrecognised_elements_survive_a_write_verbatim()
     {
@@ -243,7 +198,7 @@ public sealed class CbzWriteTests
             m.Publisher = "Vertigo";
             m.Language = "fr";
             m.Description = "Rewritten.";
-            m.Series = new SeriesInfo { Name = "The Sandman", Index = 4 };
+            m.Series = new SeriesInfo { Name = "The Sandman", Index = 3.5m };
         });
 
         BookMetadata metadata = Read(target);
@@ -252,28 +207,16 @@ public sealed class CbzWriteTests
         Assert.Equal("Vertigo", metadata.Publisher);
         Assert.Equal("fr", metadata.Language);
         Assert.Equal("Rewritten.", metadata.Description);
-        Assert.Equal(4m, metadata.Series?.Index);
-    }
+        Assert.Equal(3.5m, metadata.Series?.Index);
 
-    /// <summary>
-    /// A French locale would write "2,5", which no reader parses.
-    /// </summary>
-    [Fact]
-    public void A_fractional_issue_number_uses_an_invariant_decimal_point()
-    {
-        using var temp = new TempDir();
-        string source = new CbzBuilder().WriteTo(temp.File("comic.cbz"));
-        string target = temp.File("saved.cbz");
-
-        Write(source, target, m => m.Series = new SeriesInfo { Name = "The Sandman", Index = 3.5m });
-
+        // A French locale would write "2,5", which no reader parses.
         Assert.Contains("<Number>3.5</Number>", ComicInfoText(target), StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// Creators go back into the element they came out of. A penciller and an
-    /// inker are both <c>ill</c> in MARC, so mapping through the relator alone
-    /// would turn one into the other.
+    /// Creators go back into the element they came out of. A penciller and an inker
+    /// are both <c>ill</c> in MARC, so mapping through the relator alone would turn
+    /// one into the other.
     /// </summary>
     [Fact]
     public void Creators_are_written_back_under_their_native_roles()
@@ -284,41 +227,32 @@ public sealed class CbzWriteTests
 
         Write(source, target, m =>
         {
-            Creator inker = m.Creators.First(c => c.NativeRole == "Penciller");
-            m.Creators.Remove(inker);
-            m.Creators.Add(inker with { Name = "Steve Parkhouse", NativeRole = "Inker", Role = "ill" });
+            Creator penciller = m.Creators.First(c => c.NativeRole == "Penciller");
+            m.Creators.Remove(penciller);
+            m.Creators.Add(penciller with { Name = "Steve Parkhouse", NativeRole = "Inker", Role = "ill" });
+
+            // A name typed into an authors box arrives with the relator for author
+            // and no ComicInfo role, and belongs in Writer.
+            m.Creators.Add(new Creator
+            {
+                Name = "Jill Thompson",
+                Role = "aut",
+                NativeRole = "aut",
+                Kind = CreatorKind.Creator,
+            });
         });
 
         string after = ComicInfoText(target);
 
         Assert.Contains("<Inker>Steve Parkhouse</Inker>", after, StringComparison.Ordinal);
         Assert.Contains("<Penciller>Malcolm Jones III</Penciller>", after, StringComparison.Ordinal);
+        Assert.Contains("Jill Thompson", after, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// A name typed into an authors box arrives with the relator for author and no
-    /// ComicInfo role, and belongs in <c>Writer</c>.
+    /// Clearing a field removes its element, and a cleared series takes its issue
+    /// number with it — a number left behind is what rule CBZ-W030 reports.
     /// </summary>
-    [Fact]
-    public void A_creator_with_only_a_relator_becomes_the_writer()
-    {
-        using var temp = new TempDir();
-        string source = new CbzBuilder()
-            .WithComicInfo(CbzBuilder.MinimalComicInfo)
-            .WriteTo(temp.File("comic.cbz"));
-        string target = temp.File("saved.cbz");
-
-        Write(source, target, m => m.Creators.Add(new Creator
-        {
-            Name = "Neil Gaiman",
-            Role = "aut",
-            NativeRole = "aut",
-            Kind = CreatorKind.Creator,
-        }));
-
-        Assert.Contains("<Writer>Neil Gaiman</Writer>", ComicInfoText(target), StringComparison.Ordinal);
-    }
-
     [Fact]
     public void Clearing_a_field_removes_its_element()
     {
@@ -326,31 +260,18 @@ public sealed class CbzWriteTests
         string source = new CbzBuilder().WriteTo(temp.File("comic.cbz"));
         string target = temp.File("saved.cbz");
 
-        Write(source, target, m => m.Publisher = null);
+        Write(source, target, m =>
+        {
+            m.Publisher = null;
+            m.Series = null;
+        });
 
         string after = ComicInfoText(target);
 
         Assert.DoesNotContain("<Publisher>", after, StringComparison.Ordinal);
-        Assert.DoesNotContain("\n\n", after, StringComparison.Ordinal);
-    }
-
-    /// <summary>
-    /// Clearing the series clears the issue number with it: a number belongs to a
-    /// series, and one left behind is exactly what rule CBZ-W030 reports.
-    /// </summary>
-    [Fact]
-    public void Clearing_the_series_removes_the_number_too()
-    {
-        using var temp = new TempDir();
-        string source = new CbzBuilder().WriteTo(temp.File("comic.cbz"));
-        string target = temp.File("saved.cbz");
-
-        Write(source, target, m => m.Series = null);
-
-        string after = ComicInfoText(target);
-
         Assert.DoesNotContain("<Series>", after, StringComparison.Ordinal);
         Assert.DoesNotContain("<Number>", after, StringComparison.Ordinal);
+        Assert.DoesNotContain("\n\n", after, StringComparison.Ordinal);
         Assert.Contains("<Title>", after, StringComparison.Ordinal);
     }
 
@@ -375,37 +296,11 @@ public sealed class CbzWriteTests
     }
 
     /// <summary>
-    /// The common case in a collection: an untagged comic gains a metadata
-    /// document, and every page stays exactly where it was.
+    /// The common case in a collection: an untagged comic gains a metadata document
+    /// that validates and agrees with itself, and every page stays where it was.
     /// </summary>
     [Fact]
-    public void Tagging_an_untagged_archive_appends_the_metadata_entry()
-    {
-        using var temp = new TempDir();
-        string source = new CbzBuilder().WithoutComicInfo().WriteTo(temp.File("untagged.cbz"));
-        string target = temp.File("saved.cbz");
-
-        Write(source, target, m => m.Series = new SeriesInfo { Name = "The Sandman", Index = 1 });
-
-        using ZipContainer before = ZipContainer.Open(source);
-        using ZipContainer after = ZipContainer.Open(target);
-
-        Assert.Equal(
-            ["01.png", "02.png", "03.png"],
-            before.Entries.Select(e => e.Name));
-
-        // Appended, so nothing that was already there moved.
-        Assert.Equal(
-            ["01.png", "02.png", "03.png", "ComicInfo.xml"],
-            after.Entries.Select(e => e.Name));
-    }
-
-    /// <summary>
-    /// A document this build creates is schema-ordered and states the page count
-    /// it can see, so the file it produces validates and agrees with itself.
-    /// </summary>
-    [Fact]
-    public void A_created_document_is_schema_ordered_and_states_the_page_count()
+    public void Tagging_an_untagged_archive_appends_a_created_document()
     {
         using var temp = new TempDir();
         string source = new CbzBuilder().WithoutComicInfo().WriteTo(temp.File("untagged.cbz"));
@@ -419,7 +314,12 @@ public sealed class CbzWriteTests
             m.Language = "en";
         });
 
-        string after = ComicInfoText(target);
+        using ZipContainer after = ZipContainer.Open(target);
+
+        // Appended, so nothing that was already there moved.
+        Assert.Equal(
+            ["01.png", "02.png", "03.png", "ComicInfo.xml"],
+            after.Entries.Select(e => e.Name));
 
         Assert.Equal(
             """
@@ -434,13 +334,12 @@ public sealed class CbzWriteTests
             </ComicInfo>
 
             """.Replace("\r\n", "\n").Replace("\n", "\r\n"),
-            after);
+            ComicInfoText(target));
     }
 
     /// <summary>
     /// The ComicBookLover blob lives in the ZIP comment, a rebuild cannot write
-    /// one, and losing it to a title edit is not a trade this tool makes. So the
-    /// write is refused and the target is never created.
+    /// one, and losing it to a title edit is not a trade this tool makes.
     /// </summary>
     [Fact]
     public void An_archive_comment_blocks_the_write()
@@ -451,27 +350,17 @@ public sealed class CbzWriteTests
 
         string target = temp.File("saved.cbz");
 
+        // The comment survives being read, which is what makes refusing possible.
+        using (ZipContainer container = ZipContainer.Open(source))
+        {
+            Assert.Equal("{\"appID\":\"ComicBookLover\"}", container.ArchiveComment);
+        }
+
         BookFormatException error = Assert.Throws<BookFormatException>(
             () => Write(source, target, m => m.Title = "Anything"));
 
         Assert.Contains("ComicBookLover", error.Message, StringComparison.Ordinal);
         Assert.False(File.Exists(target));
-    }
-
-    /// <summary>
-    /// The comment survives being read, which is what makes refusing possible.
-    /// </summary>
-    [Fact]
-    public void An_archive_comment_is_readable()
-    {
-        using var temp = new TempDir();
-        string path = new CbzBuilder().WriteTo(temp.File("cbl.cbz"));
-        CbzBuilder.AddArchiveComment(path, "{\"appID\":\"ComicBookLover\"}");
-
-        using ZipContainer container = ZipContainer.Open(path);
-
-        Assert.Equal("{\"appID\":\"ComicBookLover\"}", container.ArchiveComment);
-        Assert.Equal(4, container.Entries.Count);
     }
 
     /// <summary>

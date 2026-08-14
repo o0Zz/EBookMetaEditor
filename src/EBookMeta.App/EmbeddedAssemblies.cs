@@ -6,26 +6,6 @@ namespace EBookMeta.App;
 /// Serves the application's managed dependencies out of its own resources, so
 /// EBookMetaEditor.exe ships as a single file with nothing beside it.
 /// </summary>
-/// <remarks>
-/// <para>
-/// The <c>EmbedReferencedAssemblies</c> target in EBookMeta.App.csproj embeds
-/// every copy-local reference and then drops it from the output folder, so
-/// ordinary probing always fails and this handler is the only way those
-/// assemblies are ever found. That is deliberate: a debug run exercises exactly
-/// the same path as a release, rather than quietly loading DLLs from disk.
-/// </para>
-/// <para>
-/// Nothing here may touch <c>EBookMeta.Core</c> — not even to log a failure —
-/// because Core is itself one of the assemblies being resolved, and referencing
-/// it from the resolver would recurse.
-/// </para>
-/// <para>
-/// This also replaces the binding redirects that used to come from
-/// App.config. An assembly handed back from <see cref="AppDomain.AssemblyResolve"/>
-/// is accepted whatever its version, so the usual System.Memory /
-/// System.Runtime.CompilerServices.Unsafe version skew resolves itself.
-/// </para>
-/// </remarks>
 internal static class EmbeddedAssemblies
 {
     /// <summary>Matches the <c>LogicalName</c> assigned by the csproj target.</summary>
@@ -34,12 +14,6 @@ internal static class EmbeddedAssemblies
     /// <summary>
     /// Assemblies already materialised, keyed by simple name.
     /// </summary>
-    /// <remarks>
-    /// <see cref="Assembly.Load(byte[])"/> leaves its result in no load context,
-    /// so the CLR does not find it again by name and asks once more on the next
-    /// bind. Without this cache every request would load another copy, and two
-    /// copies of the same assembly have incompatible type identities.
-    /// </remarks>
     private static readonly Dictionary<string, Assembly?> Resolved =
         new Dictionary<string, Assembly?>(StringComparer.OrdinalIgnoreCase);
 

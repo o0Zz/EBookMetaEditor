@@ -22,11 +22,6 @@ namespace EBookMeta.Compat
     /// Guard-clause helpers standing in for the static throw methods added to
     /// <see cref="ArgumentNullException"/> and friends after .NET Framework 4.8.
     /// </summary>
-    /// <remarks>
-    /// These cannot be extension methods — the modern APIs are statics on
-    /// existing BCL types, and C# has no way to add those. So this is the one
-    /// shim category whose call sites differ from modern .NET.
-    /// </remarks>
     internal static class Throw
     {
         /// <summary>Throws if <paramref name="value"/> is null.</summary>
@@ -79,12 +74,6 @@ namespace EBookMeta.Compat
     /// <summary>
     /// Stand-ins for BCL methods added after .NET Framework 4.8.
     /// </summary>
-    /// <remarks>
-    /// Extension methods on purpose: an instance method always beats an extension
-    /// method in overload resolution, so a retarget to modern .NET silently hands
-    /// every call site to the real implementation. Made globally visible by a
-    /// <c>&lt;Using Include="EBookMeta.Compat" /&gt;</c> item in the csproj.
-    /// </remarks>
     internal static class BclShims
     {
         /// <summary>Reads exactly <paramref name="buffer"/>.Length bytes, or throws.</summary>

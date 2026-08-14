@@ -6,19 +6,6 @@ namespace EBookMeta.Tests.Builders;
 /// <summary>
 /// Generates synthetic EPUB files for the corpus.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Every knob here exists to make one validation rule or invariant testable in
-/// isolation: whether <c>mimetype</c> is present, first, and stored
-/// (EPUB-E040), whether <c>container.xml</c> resolves (EPUB-F002), what the OPF
-/// bytes and declared encoding are (EPUB-E050, EPUB-F001).
-/// </para>
-/// <para>
-/// Defaults produce a valid EPUB 3, so a fixture for a specific defect is one
-/// call away from correct rather than assembled from scratch — which keeps a
-/// "broken" fixture broken in exactly one way.
-/// </para>
-/// </remarks>
 internal sealed class EpubBuilder
 {
     private readonly List<Entry> _extraEntries = [];
@@ -35,8 +22,6 @@ internal sealed class EpubBuilder
     private sealed record Entry(string Name, byte[] Content, bool Stored);
 
     /// <summary>Uses the given OPF text instead of the default EPUB 3 one.</summary>
-    /// <param name="opf">The complete package document.</param>
-    /// <returns>This builder.</returns>
     internal EpubBuilder WithOpf(string opf)
     {
         _opfText = opf;
@@ -44,8 +29,6 @@ internal sealed class EpubBuilder
     }
 
     /// <summary>Uses raw OPF bytes, for encoding fixtures.</summary>
-    /// <param name="opf">The complete package document bytes.</param>
-    /// <returns>This builder.</returns>
     internal EpubBuilder WithOpfBytes(byte[] opf)
     {
         _opfBytes = opf;
@@ -53,7 +36,6 @@ internal sealed class EpubBuilder
     }
 
     /// <summary>Omits the <c>mimetype</c> entry entirely (EPUB-E040).</summary>
-    /// <returns>This builder.</returns>
     internal EpubBuilder WithoutMimetype()
     {
         _includeMimetype = false;
@@ -61,7 +43,6 @@ internal sealed class EpubBuilder
     }
 
     /// <summary>Deflates <c>mimetype</c> instead of storing it (EPUB-E040).</summary>
-    /// <returns>This builder.</returns>
     internal EpubBuilder WithCompressedMimetype()
     {
         _mimetypeStored = false;
@@ -69,7 +50,6 @@ internal sealed class EpubBuilder
     }
 
     /// <summary>Writes <c>mimetype</c> somewhere other than first (EPUB-E040).</summary>
-    /// <returns>This builder.</returns>
     internal EpubBuilder WithMimetypeNotFirst()
     {
         _mimetypeFirst = false;
@@ -77,8 +57,6 @@ internal sealed class EpubBuilder
     }
 
     /// <summary>Gives <c>mimetype</c> the wrong content (EPUB-E040).</summary>
-    /// <param name="content">The content to write.</param>
-    /// <returns>This builder.</returns>
     internal EpubBuilder WithMimetypeContent(string content)
     {
         _mimetypeContent = content;
@@ -86,8 +64,6 @@ internal sealed class EpubBuilder
     }
 
     /// <summary>Omits or replaces <c>META-INF/container.xml</c> (EPUB-F002).</summary>
-    /// <param name="xml">The document, or null to omit it.</param>
-    /// <returns>This builder.</returns>
     internal EpubBuilder WithContainerXml(string? xml)
     {
         _containerXml = xml;
@@ -95,8 +71,6 @@ internal sealed class EpubBuilder
     }
 
     /// <summary>Changes where the package document lives.</summary>
-    /// <param name="path">The entry name for the OPF.</param>
-    /// <returns>This builder.</returns>
     internal EpubBuilder WithOpfPath(string path)
     {
         _opfPath = path;
@@ -104,7 +78,6 @@ internal sealed class EpubBuilder
     }
 
     /// <summary>Omits the cover image entry, leaving the manifest pointing at nothing.</summary>
-    /// <returns>This builder.</returns>
     internal EpubBuilder WithoutCoverImage()
     {
         _includeCoverImage = false;
@@ -112,10 +85,6 @@ internal sealed class EpubBuilder
     }
 
     /// <summary>Adds an arbitrary entry.</summary>
-    /// <param name="name">The entry name.</param>
-    /// <param name="content">The content.</param>
-    /// <param name="stored">Whether to store rather than deflate it.</param>
-    /// <returns>This builder.</returns>
     internal EpubBuilder WithEntry(string name, byte[] content, bool stored = false)
     {
         _extraEntries.Add(new Entry(name, content, stored));
@@ -123,22 +92,10 @@ internal sealed class EpubBuilder
     }
 
     /// <summary>Adds a text entry.</summary>
-    /// <param name="name">The entry name.</param>
-    /// <param name="content">The content.</param>
-    /// <returns>This builder.</returns>
     internal EpubBuilder WithEntry(string name, string content) =>
         WithEntry(name, Encoding.UTF8.GetBytes(content));
 
     /// <summary>Builds the archive and writes it to a file.</summary>
-    /// <param name="path">Where to write.</param>
-    /// <returns>The path written.</returns>
-    /// <remarks>
-    /// Writes through <see cref="ZipContainer.Create"/> — the same code the
-    /// product uses to save a file. That is deliberate: if the corpus were built
-    /// by a second, independent writer, a byte-identical round-trip test would
-    /// only be asserting that two writers happen to agree. Using one writer makes
-    /// it assert what it claims to.
-    /// </remarks>
     internal string WriteTo(string path)
     {
         ZipContainer.Create(BuildEntries(), path);
@@ -146,7 +103,6 @@ internal sealed class EpubBuilder
     }
 
     /// <summary>Builds the archive in memory.</summary>
-    /// <returns>The complete EPUB bytes.</returns>
     internal byte[] Build()
     {
         string temp = System.IO.Path.Combine(
@@ -296,11 +252,6 @@ internal sealed class EpubBuilder
     /// the <c>opf:file-as</c>, <c>opf:role</c> and <c>opf:scheme</c> attributes
     /// use a prefix that is never declared (EPUB-W070).
     /// </summary>
-    /// <remarks>
-    /// The realistic shape of this defect: the attributes survive, the
-    /// declaration does not. A strict parser refuses the whole document, so this
-    /// fixture is fatal to read and repairable in one insertion.
-    /// </remarks>
     internal const string Epub2OpfUndeclaredOpfPrefix = """
         <?xml version="1.0" encoding="UTF-8"?>
         <package xmlns="http://www.idpf.org/2007/opf" version="2.0" unique-identifier="uuid">

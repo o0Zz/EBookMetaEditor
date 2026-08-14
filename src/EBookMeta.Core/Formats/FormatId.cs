@@ -3,11 +3,6 @@ namespace EBookMeta.Formats;
 /// <summary>
 /// A file format EBookMetaEditor recognises.
 /// </summary>
-/// <remarks>
-/// Identifies the format as a whole — container plus metadata convention — not
-/// the container alone. EPUB and CBZ are both ZIP; they are different entries
-/// here because what is inside them, and what EBookMetaEditor does with it, differ.
-/// </remarks>
 public enum FormatId
 {
     /// <summary>Not recognised.</summary>
@@ -54,10 +49,6 @@ public enum FormatId
 /// The physical container a format is stored in, independent of the metadata
 /// document inside it.
 /// </summary>
-/// <remarks>
-/// Container and metadata document are independent axes. Conflating them is the
-/// main design risk in this codebase, so they are separate types.
-/// </remarks>
 public enum ContainerKind
 {
     /// <summary>Not recognised.</summary>
@@ -112,12 +103,6 @@ public static class FormatIds
     /// The claimed format, or <see cref="FormatId.Unknown"/> for an extension
     /// EBookMetaEditor does not handle.
     /// </returns>
-    /// <remarks>
-    /// Only ever used to compare against what the content actually says. In
-    /// collections extensions lie constantly — a <c>.cbz</c> that is really RAR
-    /// is common — so this never decides how a file is read. That disagreement
-    /// is what rule GEN-W002 reports.
-    /// </remarks>
     public static FormatId FromExtension(string path)
     {
         Throw.IfNull(path);
@@ -154,12 +139,6 @@ public static class FormatIds
     /// <param name="claimed">The format the extension claims.</param>
     /// <param name="actual">The format the content indicates.</param>
     /// <returns><see langword="true"/> when the pairing is unremarkable.</returns>
-    /// <remarks>
-    /// <c>.mobi</c> and <c>.azw</c> are the same PalmDB container and are
-    /// routinely interchanged; flagging every one of those would train the user
-    /// to ignore GEN-W002, which is the one warning that catches a RAR wearing
-    /// a <c>.cbz</c> extension.
-    /// </remarks>
     public static bool IsAcceptableSubstitute(FormatId claimed, FormatId actual) =>
         claimed == actual ||
         (claimed is FormatId.Mobi or FormatId.Azw3 && actual is FormatId.Mobi or FormatId.Azw3);

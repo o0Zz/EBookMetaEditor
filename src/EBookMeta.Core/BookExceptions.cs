@@ -8,13 +8,6 @@ namespace EBookMeta;
 /// a truncated container, an unreadable central directory, a PDB header whose
 /// record offsets do not agree with the file length.
 /// </summary>
-/// <remarks>
-/// This is for structural failure, not for editorial problems. Anything a user
-/// could reasonably be told about and asked to fix — a missing
-/// <c>dc:title</c>, a dangling spine reference, a wrong page count — is a
-/// <see cref="Finding"/>, not an exception. Core never writes to the
-/// console; it throws these and lets the CLI or UI decide how to present them.
-/// </remarks>
 public class BookFormatException : Exception
 {
     /// <summary>Initialises a new instance with a default message.</summary>
@@ -63,13 +56,6 @@ public class BookFormatException : Exception
 /// <summary>
 /// Thrown when a file is recognised but this build cannot edit it.
 /// </summary>
-/// <remarks>
-/// Distinct from a plain <see cref="BookFormatException"/> because the file is not
-/// damaged and there is nothing to repair — it is simply a format with no handler,
-/// most often a RAR archive wearing a <c>.cbz</c> extension. Naming it precisely is
-/// the useful answer, so <see cref="Detected"/> carries the sniffer's verdict and
-/// the UI can say what the file actually is instead of "unsupported file".
-/// </remarks>
 public class UnsupportedFormatException : BookFormatException
 {
     /// <summary>Initialises a new instance for a detected but unhandled format.</summary>
@@ -93,12 +79,6 @@ public class UnsupportedFormatException : BookFormatException
 /// the path does not exist, the file is locked by a reader application, the
 /// volume is full, or an atomic replace could not complete.
 /// </summary>
-/// <remarks>
-/// Kept distinct from <see cref="BookFormatException"/> because the two call
-/// for different responses. A format problem may be repairable and is worth
-/// reporting to the user in terms of their file; an I/O problem means try again,
-/// close the other application, or free some space.
-/// </remarks>
 public class BookIoException : Exception
 {
     /// <summary>Initialises a new instance with a default message.</summary>

@@ -3,20 +3,6 @@ namespace EBookMeta;
 /// <summary>
 /// The only sanctioned way EBookMetaEditor writes over a user's file.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Nothing is ever modified in place. The new file is built beside the original
-/// as a <c>.tmp</c>, and only once it is complete and closed is it swapped in.
-/// A crash, a full disk or a pulled USB stick partway through therefore leaves
-/// the user's book exactly as it was, rather than truncated.
-/// </para>
-/// <para>
-/// The swap uses <see cref="File.Replace(string, string, string)"/>, which is
-/// atomic on NTFS and additionally preserves the destination's identity —
-/// its ACLs, its alternate data streams, and any explorer metadata attached to
-/// it. Deleting and renaming would silently drop those.
-/// </para>
-/// </remarks>
 public static class AtomicFileWriter
 {
     /// <summary>

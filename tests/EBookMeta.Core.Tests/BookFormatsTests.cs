@@ -14,7 +14,7 @@ namespace EBookMeta.Tests;
 public sealed class BookFormatsTests
 {
     [Fact]
-    public void EpubIsRegisteredOutOfTheBox()
+    public void Epub_is_registered_out_of_the_box()
     {
         IFormatHandler handler = Assert.IsType<EpubHandler>(BookFormats.For(FormatId.Epub));
 
@@ -28,7 +28,7 @@ public sealed class BookFormatsTests
     [InlineData(FormatId.Mobi)]
     [InlineData(FormatId.Pdf)]
     [InlineData(FormatId.Unknown)]
-    public void RecognisedButUnsupportedFormatsHaveNoHandler(FormatId format)
+    public void Recognised_but_unsupported_formats_have_no_handler(FormatId format)
     {
         // Recognising a format and supporting it are different things, and the
         // registry is where that difference is expressed.
@@ -37,7 +37,7 @@ public sealed class BookFormatsTests
     }
 
     [Fact]
-    public void ResolvePicksTheHandlerForTheDetectedFormat()
+    public void Resolve_picks_the_handler_for_the_detected_format()
     {
         using var temp = new TempDir();
         string path = new EpubBuilder().WriteTo(temp.File("valid.epub"));
@@ -49,19 +49,17 @@ public sealed class BookFormatsTests
         Assert.Equal(FormatId.Epub, handler!.Id);
     }
 
-    /// <summary>
-    /// The case that makes detection worth keeping out of the handlers: nothing
-    /// can open this file, but the user still gets told what it really is.
-    /// </summary>
     [Fact]
-    public void AnUnsupportedFileStillReportsWhatItIs()
+    public void An_unsupported_file_still_reports_what_it_is()
     {
         using var temp = new TempDir();
         string path = temp.File("rar-disguised-as-cbz.cbz");
         File.WriteAllBytes(
             path,
-            Encoding.ASCII.GetBytes("Rar!\x1a\x07\x00").Concat(new byte[64]).ToArray());
+            [.. Encoding.ASCII.GetBytes("Rar!\x1a\x07\x00"), .. new byte[64]]);
 
+        // The case that makes detection worth keeping out of the handlers: nothing
+        // can open this file, but the user still gets told what it really is.
         IFormatHandler? handler = BookFormats.Resolve(path, out DetectedFormat detected);
 
         Assert.Null(handler);
@@ -70,8 +68,10 @@ public sealed class BookFormatsTests
     }
 
     [Fact]
-    public void RegisteringReplacesTheHandlerForAFormat()
+    public void Registering_replaces_the_handler_for_a_format()
     {
+        Assert.Throws<ArgumentNullException>(() => BookFormats.Register(null!));
+
         IFormatHandler original = BookFormats.For(FormatId.Epub)!;
 
         try
@@ -88,10 +88,6 @@ public sealed class BookFormatsTests
 
         Assert.IsType<EpubHandler>(BookFormats.For(FormatId.Epub));
     }
-
-    [Fact]
-    public void RegisteringNullIsRejected() =>
-        Assert.Throws<ArgumentNullException>(() => BookFormats.Register(null!));
 
     private sealed class FakeHandler(FormatId id) : IFormatHandler
     {

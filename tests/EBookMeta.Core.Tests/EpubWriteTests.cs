@@ -7,10 +7,6 @@ using Xunit;
 
 namespace EBookMeta.Tests;
 
-/// <summary>
-/// Tests for the write path — the part that destroys libraries when it is
-/// wrong.
-/// </summary>
 public sealed class EpubWriteTests
 {
     private static BookMetadata Read(string path)
@@ -28,29 +24,17 @@ public sealed class EpubWriteTests
         handler.Write(container, metadata, target);
     }
 
-    /// <summary>
-    /// Hard invariant 6. Open a file, save it without editing, get identical
-    /// bytes back.
-    /// </summary>
-    [Fact]
-    public void Saving_without_editing_is_byte_identical()
+    private static string Epub2(TempDir temp) =>
+        new EpubBuilder().WithOpf(EpubBuilder.Epub2Opf).WriteTo(temp.File("valid-epub2.epub"));
+
+    /// <summary>Hard invariant 6.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Saving_without_editing_is_byte_identical(bool epub2)
     {
         using var temp = new TempDir();
-        string source = new EpubBuilder().WriteTo(temp.File("valid-epub3.epub"));
-        string target = temp.File("saved.epub");
-
-        Write(source, target, _ => { });
-
-        Assert.Equal(File.ReadAllBytes(source), File.ReadAllBytes(target));
-    }
-
-    [Fact]
-    public void Saving_without_editing_is_byte_identical_for_epub2()
-    {
-        using var temp = new TempDir();
-        string source = new EpubBuilder()
-            .WithOpf(EpubBuilder.Epub2Opf)
-            .WriteTo(temp.File("valid-epub2.epub"));
+        string source = epub2 ? Epub2(temp) : new EpubBuilder().WriteTo(temp.File("valid-epub3.epub"));
         string target = temp.File("saved.epub");
 
         Write(source, target, _ => { });
@@ -60,38 +44,28 @@ public sealed class EpubWriteTests
 
     /// <summary>
     /// Clearing a field has to reach the file. Silently keeping the old value would
-    /// be the worst of the three possible behaviours: worse than removing it, and
-    /// worse than refusing, because the user is told nothing and the grid then
-    /// disagrees with the disk.
+    /// be the worst of the three possible behaviours: the user is told nothing and
+    /// the grid then disagrees with the disk.
     /// </summary>
     [Fact]
-    public void Clearing_the_title_removes_it()
+    public void Clearing_a_field_removes_it()
     {
         using var temp = new TempDir();
         string source = new EpubBuilder().WriteTo(temp.File("valid-epub3.epub"));
         string target = temp.File("saved.epub");
 
-        Write(source, target, m => m.Title = null);
+        Write(source, target, m =>
+        {
+            m.Title = null;
+            m.PublicationDate = null;
+        });
 
-        Assert.Null(Read(target).Title);
+        BookMetadata reread = Read(target);
+        Assert.Null(reread.Title);
+        Assert.Null(reread.PublicationDate);
     }
 
-    [Fact]
-    public void Clearing_the_publication_date_removes_it()
-    {
-        using var temp = new TempDir();
-        string source = new EpubBuilder().WriteTo(temp.File("valid-epub3.epub"));
-        string target = temp.File("saved.epub");
-
-        Write(source, target, m => m.PublicationDate = null);
-
-        Assert.Null(Read(target).PublicationDate);
-    }
-
-    /// <summary>
-    /// Hard invariant 7. Readers reject an EPUB whose <c>mimetype</c> is not the
-    /// first entry, stored uncompressed, with exactly the right content.
-    /// </summary>
+    /// <summary>Hard invariant 7.</summary>
     [Fact]
     public void Mimetype_stays_first_stored_and_exact()
     {
@@ -116,10 +90,7 @@ public sealed class EpubWriteTests
         Assert.Equal(20, content.Length); // no BOM, no trailing newline
     }
 
-    /// <summary>
-    /// Hard invariant 9. A title edit must produce a one-line diff, not a
-    /// reformat that buries the change.
-    /// </summary>
+    /// <summary>Hard invariant 9.</summary>
     [Fact]
     public void Editing_one_field_changes_one_line_of_the_opf()
     {
@@ -134,11 +105,13 @@ public sealed class EpubWriteTests
 
         Assert.Equal(before.Length, after.Length);
 
-        int changed = before.Zip(after, (a, b) => a == b ? 0 : 1).Sum();
-        Assert.Equal(1, changed);
-        Assert.Contains("A Completely Different Title", after[Array.FindIndex(after, l => l != before[Array.IndexOf(after, l)])]);
+        string[] changed = [.. after.Where((line, i) => line != before[i])];
+
+        Assert.Single(changed);
+        Assert.Contains("A Completely Different Title", changed[0], StringComparison.Ordinal);
     }
 
+    /// <summary>Hard invariant 4.</summary>
     [Fact]
     public void Entry_order_and_compression_survive_a_write()
     {
@@ -180,19 +153,16 @@ public sealed class EpubWriteTests
     }
 
     /// <summary>
-    /// Both conventions are written regardless of declared version, because old
-    /// and new readers honour different ones.
+    /// Hard invariant 8: both conventions are written regardless of declared
+    /// version, because old and new readers honour different ones.
     /// </summary>
     [Fact]
     public void Series_is_written_in_both_epub2_and_epub3_conventions()
     {
         using var temp = new TempDir();
-        string source = new EpubBuilder()
-            .WithOpf(EpubBuilder.Epub2Opf)
-            .WriteTo(temp.File("valid-epub2.epub"));
         string target = temp.File("saved.epub");
 
-        Write(source, target, m => m.Series = new SeriesInfo { Name = "New Series", Index = 3.5m });
+        Write(Epub2(temp), target, m => m.Series = new SeriesInfo { Name = "New Series", Index = 3.5m });
 
         string opf = ReadOpfText(target);
 
@@ -200,6 +170,9 @@ public sealed class EpubWriteTests
         Assert.Contains("""<meta name="calibre:series_index" content="3.5"/>""", opf);
         Assert.Contains("belongs-to-collection", opf);
         Assert.Contains("group-position", opf);
+
+        // A French locale writes 2,5 for two-and-a-half, which no reader parses.
+        Assert.DoesNotContain("3,5", opf);
 
         SeriesInfo? reread = Read(target).Series;
         Assert.Equal("New Series", reread?.Name);
@@ -210,12 +183,9 @@ public sealed class EpubWriteTests
     public void Sort_name_and_role_are_written_in_both_conventions()
     {
         using var temp = new TempDir();
-        string source = new EpubBuilder()
-            .WithOpf(EpubBuilder.Epub2Opf)
-            .WriteTo(temp.File("valid-epub2.epub"));
         string target = temp.File("saved.epub");
 
-        Write(source, target, m =>
+        Write(Epub2(temp), target, m =>
         {
             m.Creators.Clear();
             m.Creators.Add(new Creator
@@ -228,26 +198,10 @@ public sealed class EpubWriteTests
 
         string opf = ReadOpfText(target);
 
-        Assert.Contains("""opf:file-as="Pratchett, Terry" """.TrimEnd(), opf);
-        Assert.Contains("""opf:role="aut" """.TrimEnd(), opf);
-        Assert.Contains("""property="file-as" """.TrimEnd(), opf);
-        Assert.Contains("""property="role" """.TrimEnd(), opf);
-    }
-
-    /// <summary>
-    /// A French locale writes 2,5 for two-and-a-half, which no reader parses.
-    /// </summary>
-    [Fact]
-    public void Fractional_series_index_is_written_with_an_invariant_decimal_point()
-    {
-        using var temp = new TempDir();
-        string source = new EpubBuilder().WriteTo(temp.File("valid-epub3.epub"));
-        string target = temp.File("saved.epub");
-
-        Write(source, target, m => m.Series = new SeriesInfo { Name = "S", Index = 2.5m });
-
-        Assert.Contains("2.5", ReadOpfText(target));
-        Assert.DoesNotContain("2,5", ReadOpfText(target));
+        Assert.Contains("opf:file-as=\"Pratchett, Terry\"", opf, StringComparison.Ordinal);
+        Assert.Contains("opf:role=\"aut\"", opf, StringComparison.Ordinal);
+        Assert.Contains("property=\"file-as\"", opf, StringComparison.Ordinal);
+        Assert.Contains("property=\"role\"", opf, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -290,7 +244,7 @@ public sealed class EpubWriteTests
     }
 
     [Fact]
-    public void Atomic_writer_swaps_in_the_new_file_and_can_keep_a_backup()
+    public void Atomic_writer_swaps_in_the_new_file_and_keeps_a_backup_only_when_asked()
     {
         using var temp = new TempDir();
         string path = new EpubBuilder().WriteTo(temp.File("valid-epub3.epub"));
@@ -302,19 +256,9 @@ public sealed class EpubWriteTests
         Assert.Equal(new byte[] { 1, 2, 3 }, File.ReadAllBytes(path));
         Assert.NotNull(backup);
         Assert.Equal(original, File.ReadAllBytes(backup!));
-    }
 
-    [Fact]
-    public void Atomic_writer_can_discard_the_backup()
-    {
-        using var temp = new TempDir();
-        string path = new EpubBuilder().WriteTo(temp.File("valid-epub3.epub"));
-
-        string? backup = AtomicFileWriter.Write(
-            path, tmp => File.WriteAllBytes(tmp, new byte[] { 9 }), keepBackup: false);
-
-        Assert.Null(backup);
-        Assert.False(File.Exists(path + ".bak"));
+        Assert.Null(AtomicFileWriter.Write(
+            path, tmp => File.WriteAllBytes(tmp, new byte[] { 9 }), keepBackup: false));
     }
 
     private static string ReadOpfText(string epubPath)

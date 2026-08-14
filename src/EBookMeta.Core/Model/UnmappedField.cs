@@ -4,31 +4,6 @@ namespace EBookMeta.Model;
 /// A piece of metadata read from the source that does not map onto any
 /// <see cref="BookMetadata"/> field.
 /// </summary>
-/// <remarks>
-/// <para>
-/// This exists to serve the invariant "never lose a field you do not
-/// understand" — unknown EXTH record types, unrecognised <c>ComicInfo</c>
-/// elements, arbitrary <c>&lt;meta&gt;</c> in an OPF, unknown XMP properties.
-/// It plays two distinct roles depending on the format, and the difference
-/// matters:
-/// </para>
-/// <para>
-/// <b>For XML formats, this list is informational only.</b> Preservation is
-/// achieved by never touching the node, not by round-tripping it through the
-/// model. <c>OpfDocument</c> retains the parsed tree and mutates only the
-/// elements a field actually changed, so an unrecognised <c>&lt;meta&gt;</c>
-/// survives because nothing went near it. Extracting and re-serialising it
-/// would be strictly worse: it would risk reformatting, re-quoting attributes,
-/// or rebinding a namespace prefix on an element the user never edited. These
-/// entries exist so the UI can show the user what is in the file.
-/// </para>
-/// <para>
-/// <b>For record-based binary formats, this list is the preservation
-/// mechanism.</b> An EXTH table is rebuilt from scratch on write, so an unknown
-/// record type survives only if its bytes were captured on read and re-emitted.
-/// There is no tree to leave alone.
-/// </para>
-/// </remarks>
 public sealed record UnmappedField
 {
     /// <summary>

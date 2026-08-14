@@ -5,34 +5,12 @@ namespace EBookMeta;
 /// <summary>
 /// The registry of format handlers: what this build can read and write.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Loading a book is two questions, and this keeps them apart because they have
-/// different answers. <b>What is this file?</b> is answered by
-/// <see cref="FormatDetector"/> from the bytes. <b>Who handles it?</b> is answered
-/// here, by looking the answer up. Adding a format is then one
-/// <see cref="Register"/> call and one <see cref="IFormatHandler"/> — nothing in
-/// the UI or the open path changes.
-/// </para>
-/// <para>
-/// Detection deliberately does <i>not</i> live in the handlers. The app has to
-/// name formats it has no handler for at all — a <c>.cbz</c> that is really a RAR
-/// archive is the common case, and telling the user that is the point — so
-/// something has to recognise RAR without being able to open it. Asking each
-/// registered handler "is this yours?" could never produce that answer.
-/// </para>
-/// <para>
-/// Register at startup, before any file is opened. There is no locking: this is a
-/// single-instance desktop app whose registrations are all made from one place.
-/// </para>
-/// </remarks>
 public static class BookFormats
 {
     private static readonly Dictionary<FormatId, IFormatHandler> Handlers = [];
 
     static BookFormats()
     {
-        // The formats this build supports, and the whole list.
         Register(new EpubHandler());
         Register(new CbzHandler());
     }

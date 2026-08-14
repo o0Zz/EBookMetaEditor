@@ -6,11 +6,6 @@ namespace EBookMeta.App;
 /// <summary>
 /// The About box: what this is, what version, and what it can open.
 /// </summary>
-/// <remarks>
-/// The format list is read from <see cref="BookFormats"/> rather than typed out,
-/// so it cannot drift from what the build actually supports. Registering a handler
-/// updates this box for free.
-/// </remarks>
 internal sealed class AboutForm : Form
 {
     /// <summary>Creates the About box.</summary>

@@ -6,11 +6,6 @@ using System.Threading;
 namespace EBookMeta.App;
 
 /// <summary>A window that can be handed more files to work on.</summary>
-/// <remarks>
-/// Implemented by both editors so <see cref="SingleInstance"/> does not care which
-/// one is running: the single-file window turns a second file into a batch, and the
-/// batch window adds a row.
-/// </remarks>
 internal interface IPathReceiver
 {
     /// <summary>Takes paths that arrived after launch, on the UI thread.</summary>
@@ -21,37 +16,9 @@ internal interface IPathReceiver
 /// <summary>
 /// Keeps one process per user and forwards later launches into it.
 /// </summary>
-/// <remarks>
-/// <para>
-/// This is what makes selecting thirty files in Explorer produce one window. A
-/// shell verb registered with <c>%1</c> is invoked once per selected file, so
-/// without forwarding the user gets thirty processes and thirty windows — which is
-/// exactly the tedium batch editing exists to remove. <c>MultiSelectModel</c> asks
-/// Explorer to pass the whole selection to one invocation instead, and forwarding
-/// covers the cases where it does not: older shells, the per-verb item limit, and
-/// files dragged onto the executable.
-/// </para>
-/// <para>
-/// A mutex decides who is first and a named pipe carries the paths. Both are named
-/// per user and per session, so two people signed into the same machine get an
-/// instance each rather than one stealing the other's files.
-/// </para>
-/// <para>
-/// Failure is never fatal here. If the pipe cannot be reached — the first instance
-/// is busy in a modal dialog, or dying — the second process opens its own window.
-/// A duplicate window is a much smaller problem than a file the user asked for that
-/// never appeared.
-/// </para>
-/// </remarks>
 internal static class SingleInstance
 {
     /// <summary>How long a later launch waits to hand its paths over.</summary>
-    /// <remarks>
-    /// Generous, because the far end may be mid-launch: Explorer starts these
-    /// processes within milliseconds of each other, and the first one has to get as
-    /// far as listening before any of the others can connect. Still bounded, because
-    /// a user waiting on a window would rather have two windows than none.
-    /// </remarks>
     private const int ConnectTimeoutMs = 3000;
 
     private static Mutex? _mutex;
@@ -64,10 +31,6 @@ internal static class SingleInstance
     /// <see langword="true"/> if this process is the first; <see langword="false"/>
     /// if another already holds the role.
     /// </returns>
-    /// <remarks>
-    /// The mutex is kept in a static field for the life of the process. Letting it
-    /// be collected would release the name and admit a second instance.
-    /// </remarks>
     internal static bool TryClaim()
     {
         try
@@ -125,12 +88,6 @@ internal static class SingleInstance
 
     /// <summary>Starts listening for paths from later launches.</summary>
     /// <param name="receiver">The window to hand arriving paths to.</param>
-    /// <remarks>
-    /// The listener runs on a background thread and marshals to the UI thread
-    /// itself, so the receiver is always called where WinForms allows it. The thread
-    /// is background: nothing has to shut it down, because it must not keep a closing
-    /// application alive.
-    /// </remarks>
     internal static void Listen(Form receiver)
     {
         if (_listening)

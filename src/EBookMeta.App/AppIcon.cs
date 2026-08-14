@@ -5,20 +5,6 @@ namespace EBookMeta.App;
 /// <summary>
 /// The application icon, embedded in the executable and shared by every window.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Loaded from a managed resource rather than a file beside the exe: the product
-/// is a single executable, so there is no loose <c>icon.ico</c> to read at run
-/// time. It is loaded once, lazily, on first window creation — a few hundred
-/// kilobytes of memcpy plus the GDI handles WinForms derives from it, which is
-/// affordable against the startup budget only because it happens once.
-/// </para>
-/// <para>
-/// A missing or unreadable icon returns <see langword="null"/> and leaves the
-/// default WinForms icon in place. Failing a launch over decoration would be
-/// absurd.
-/// </para>
-/// </remarks>
 internal static class AppIcon
 {
     private static Icon? _shared;
@@ -28,10 +14,6 @@ internal static class AppIcon
     /// The icon to assign to <see cref="Form.Icon"/>, or <see langword="null"/>
     /// if it could not be loaded.
     /// </summary>
-    /// <remarks>
-    /// The instance is shared and never disposed: it lives as long as the
-    /// process, and the forms that use it must not dispose it either.
-    /// </remarks>
     internal static Icon? Shared
     {
         get

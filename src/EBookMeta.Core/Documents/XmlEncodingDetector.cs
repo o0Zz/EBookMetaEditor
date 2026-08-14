@@ -43,18 +43,11 @@ public sealed record XmlEncodingInfo
 /// Determines an XML document's encoding from its bytes.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The order is BOM, then declaration, then UTF-8 — the order the XML spec
-/// requires, and the one that gets real files right.
-/// </para>
-/// <para>
-/// Deliberately not delegated to <c>XDocument</c>. Loading through
-/// <c>XDocument</c> hides the distinction between "the document declared UTF-8
-/// and is UTF-8" and "the document declared UTF-8, is really Windows-1252, and
-/// the parser silently substituted replacement characters". EBookMetaEditor's whole
-/// value is telling the user which of those it is looking at, so the bytes get
-/// inspected first hand.
-/// </para>
+/// BOM, then declaration, then UTF-8 — the order the XML spec requires.
+/// Deliberately not delegated to <c>XDocument</c>, which hides the distinction
+/// between "declared UTF-8 and is UTF-8" and "declared UTF-8, is really
+/// Windows-1252, and the parser substituted replacement characters". Telling the
+/// user which one they have is the point of rule EPUB-E050.
 /// </remarks>
 public static class XmlEncodingDetector
 {

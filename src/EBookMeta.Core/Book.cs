@@ -8,24 +8,6 @@ namespace EBookMeta;
 /// One book or comic, open for editing: what it is, what its metadata says, and
 /// what was noticed about it.
 /// </summary>
-/// <remarks>
-/// <para>
-/// <b>Load permissively, save correctly.</b> Opening a file recovers whatever
-/// damage is recoverable and holds the correction in memory, so a file no other
-/// tool will load becomes editable. The bytes on disk are untouched until
-/// <see cref="Save"/>, which writes the correction along with the user's edits. A
-/// user who opens a broken file and closes it without saving has changed nothing.
-/// That is why there is no validation step to invoke and no repair-specific write
-/// path: checking is what loading does, and fixing is what saving does.
-/// </para>
-/// <para>
-/// <b>No container is held.</b> <see cref="Load"/> and <see cref="Save"/> each
-/// open and dispose one. Keeping it open would lock the user's file for as long as
-/// the window is up, would stop <see cref="AtomicFileWriter"/> from swapping the
-/// file underneath it, and in a batch of two thousand comics would exhaust the
-/// process's file handles.
-/// </para>
-/// </remarks>
 public sealed class Book
 {
     private readonly IFormatHandler _handler;
@@ -73,13 +55,6 @@ public sealed class Book
     /// What the most recent <see cref="Save"/> noticed and corrected. Empty until
     /// the file has been saved.
     /// </summary>
-    /// <remarks>
-    /// Separate from <see cref="LoadFindings"/> because the two answer different
-    /// questions. Loading reports what is wrong with the file as it sits on disk;
-    /// saving reports the cross-archive checks that only a full enumeration can
-    /// make, which is affordable there because the copy-through walks every entry
-    /// anyway.
-    /// </remarks>
     public IReadOnlyList<Finding> SaveFindings => _saveFindings;
 
     /// <summary>Whether this format can be written at all.</summary>
@@ -205,11 +180,6 @@ public sealed class Book
     /// <summary>
     /// Forwards findings to the session log, which is the only place they surface.
     /// </summary>
-    /// <remarks>
-    /// Handlers report into a collection rather than logging directly, so that the
-    /// decision to log — and the order things appear in — belongs to one place
-    /// instead of being spread across every rule.
-    /// </remarks>
     private static void Report(IEnumerable<Finding> findings)
     {
         foreach (Finding finding in findings)
@@ -249,12 +219,6 @@ public sealed class Book
     /// <summary>
     /// Reports entry names that point outside the archive.
     /// </summary>
-    /// <remarks>
-    /// Names only, from the central directory, so this costs nothing against the
-    /// launch budget. Reported rather than followed: an entry called
-    /// <c>../../autorun.inf</c> is what a malicious archive looks like, and no
-    /// reader has a legitimate reason to produce one.
-    /// </remarks>
     private static void CheckEntryNames(IContainer container, List<Finding> findings)
     {
         foreach (ContainerEntry entry in container.Entries)

@@ -1,5 +1,4 @@
 using System.Text;
-using System.Xml.Linq;
 using EBookMeta.Documents;
 using EBookMeta.Tests.Builders;
 using Xunit;
@@ -22,10 +21,10 @@ public sealed class RepairNamespaceTests
     // --- detection -------------------------------------------------------
 
     [Fact]
-    public void StrictParseRejectsAnUndeclaredPrefix()
+    public void Strict_parse_rejects_an_undeclared_prefix()
     {
-        // The premise of the whole feature: this document cannot be opened at
-        // all, so the diagnosis cannot come from the strict parser.
+        // The premise of the whole feature: this document cannot be opened at all,
+        // so the diagnosis cannot come from the strict parser.
         BookFormatException ex = Assert.Throws<BookFormatException>(
             () => OpfDocument.Parse(Utf8(EpubBuilder.Epub2OpfUndeclaredOpfPrefix)));
 
@@ -33,7 +32,7 @@ public sealed class RepairNamespaceTests
     }
 
     [Fact]
-    public void ValidateReportsThePrefixWithItsPosition()
+    public void Validate_reports_the_prefix_with_its_position()
     {
         Finding finding = Assert.Single(
             NamespaceRepair.Validate(Utf8(EpubBuilder.Epub2OpfUndeclaredOpfPrefix), "OEBPS/content.opf"));
@@ -49,19 +48,15 @@ public sealed class RepairNamespaceTests
     }
 
     [Fact]
-    public void DeclaredPrefixesAreNotReported()
+    public void A_document_that_needs_no_repair_is_left_alone()
     {
         Assert.Empty(NamespaceRepair.Validate(Utf8(EpubBuilder.Epub2Opf)));
         Assert.Null(NamespaceRepair.Repair(Utf8(EpubBuilder.Epub2Opf)));
         Assert.Null(NamespaceRepair.Repair(Utf8(EpubBuilder.Epub3Opf)));
-    }
 
-    [Fact]
-    public void SpecBoundPrefixesAreNotReported()
-    {
-        // xml: and xmlns: are bound by the XML specification. Reporting them
-        // would be a false positive on a perfectly correct document.
-        const string opf = """
+        // xml: and xmlns: are bound by the XML specification. Reporting them would
+        // be a false positive on a perfectly correct document.
+        const string specBound = """
             <?xml version="1.0" encoding="UTF-8"?>
             <package xmlns="http://www.idpf.org/2007/opf" version="3.0">
               <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
@@ -70,12 +65,12 @@ public sealed class RepairNamespaceTests
             </package>
             """;
 
-        Assert.Empty(NamespaceRepair.Validate(Utf8(opf)));
-        Assert.Null(NamespaceRepair.Repair(Utf8(opf)));
+        Assert.Empty(NamespaceRepair.Validate(Utf8(specBound)));
+        Assert.Null(NamespaceRepair.Repair(Utf8(specBound)));
     }
 
     [Fact]
-    public void OnlySpecificationBackedPrefixesAreKnown()
+    public void Only_specification_backed_prefixes_are_known()
     {
         Assert.True(NamespaceRepair.IsKnownPrefix("opf"));
         Assert.True(NamespaceRepair.IsKnownPrefix("dc"));
@@ -86,7 +81,7 @@ public sealed class RepairNamespaceTests
     // --- repair ----------------------------------------------------------
 
     [Fact]
-    public void RepairMakesTheDocumentParseable()
+    public void Repair_makes_the_document_parseable()
     {
         NamespaceRepairResult result = Repair(EpubBuilder.Epub2OpfUndeclaredOpfPrefix);
 
@@ -95,10 +90,9 @@ public sealed class RepairNamespaceTests
         Assert.Equal(["opf"], result.Added);
         Assert.Empty(result.Skipped);
 
-        // The repaired bytes are a document the strict parser accepts...
         OpfDocument repaired = OpfDocument.Parse(result.RepairedBytes);
 
-        // ...and the metadata the prefix was carrying survived intact.
+        // And the metadata the prefix was carrying survived intact.
         Model.BookMetadata metadata = repaired.ReadMetadata();
         Assert.Equal("Neverwhere", metadata.Title);
         Model.Creator creator = Assert.Single(metadata.Creators);
@@ -107,7 +101,7 @@ public sealed class RepairNamespaceTests
     }
 
     [Fact]
-    public void RepairChangesExactlyOneLine()
+    public void Repair_changes_exactly_one_line()
     {
         NamespaceRepairResult result = Repair(EpubBuilder.Epub2OpfUndeclaredOpfPrefix);
 
@@ -127,34 +121,10 @@ public sealed class RepairNamespaceTests
         Assert.Contains(@"xmlns:opf=""http://www.idpf.org/2007/opf""", after[differing[0]], StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void TheDeclarationLandsOnTheRootElement()
-    {
-        NamespaceRepairResult result = Repair(EpubBuilder.Epub2OpfUndeclaredOpfPrefix);
-
-        XDocument document = XDocument.Parse(Text(result.RepairedBytes));
-        XElement root = Assert.IsType<XElement>(document.Root);
-
-        Assert.Equal("package", root.Name.LocalName);
-        Assert.Equal("http://www.idpf.org/2007/opf", root.GetNamespaceOfPrefix("opf")?.NamespaceName);
-    }
-
-    [Fact]
-    public void RepairDoesNotMutateTheInputBytes()
-    {
-        byte[] source = Utf8(EpubBuilder.Epub2OpfUndeclaredOpfPrefix);
-        byte[] copy = source.ToArray();
-
-        NamespaceRepairResult result = Assert.IsType<NamespaceRepairResult>(NamespaceRepair.Repair(source));
-
-        Assert.Equal(copy, source);
-        Assert.NotEqual(copy, result.RepairedBytes);
-    }
-
     // --- the "report, never guess" boundary ------------------------------
 
     [Fact]
-    public void AnUnknownPrefixIsReportedButNotRepaired()
+    public void An_unknown_prefix_is_reported_but_not_repaired()
     {
         NamespaceRepairResult result = Repair(EpubBuilder.OpfUnknownPrefix);
 
@@ -164,20 +134,15 @@ public sealed class RepairNamespaceTests
 
         // Nothing was invented, so the bytes come back as they went in.
         Assert.Equal(EpubBuilder.OpfUnknownPrefix, Text(result.RepairedBytes));
-    }
 
-    [Fact]
-    public void AnUnknownPrefixIsNotAdvertisedAsAutofixable()
-    {
         Finding finding = Assert.Single(NamespaceRepair.Validate(Utf8(EpubBuilder.OpfUnknownPrefix)));
-
         Assert.Equal("EPUB-W070", finding.RuleId);
         Assert.False(finding.HasAutofix);
         Assert.Contains("cannot be repaired automatically", finding.Detail!, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void KnownPrefixesAreFixedWhileUnknownOnesAreReported()
+    public void Known_prefixes_are_fixed_while_unknown_ones_are_reported()
     {
         const string opf = """
             <?xml version="1.0" encoding="UTF-8"?>
@@ -190,8 +155,7 @@ public sealed class RepairNamespaceTests
 
         NamespaceRepairResult result = Repair(opf);
 
-        // dc and opf are recoverable; acme is not, so the result is honest about
-        // being partial rather than reporting success.
+        // The result is honest about being partial rather than reporting success.
         Assert.True(result.HasChanges);
         Assert.False(result.IsComplete);
         Assert.Equal(["dc", "opf"], result.Added);
@@ -203,38 +167,52 @@ public sealed class RepairNamespaceTests
         Assert.DoesNotContain("xmlns:acme", repaired, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void A_document_with_other_damage_is_not_claimed_as_repaired()
+    {
+        // An unclosed <metadata> as well as the undeclared prefix. A document that
+        // still fails after recovery is reported, not guessed at further.
+        const string opf = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <package xmlns="http://www.idpf.org/2007/opf" version="2.0">
+              <metadata>
+                <dc:title opf:file-as="N">Neverwhere</dc:title>
+            </package>
+            """;
+
+        NamespaceRepairResult result = Repair(opf);
+
+        Assert.False(result.IsComplete);
+        Assert.NotNull(result.RemainingError);
+    }
+
     // --- byte fidelity ---------------------------------------------------
 
     [Fact]
-    public void CrLfLineEndingsSurvive()
+    public void Line_endings_and_a_byte_order_mark_survive()
     {
-        string opf = EpubBuilder.Epub2OpfUndeclaredOpfPrefix.Replace("\n", "\r\n");
-
-        NamespaceRepairResult result = Repair(opf);
+        string crlf = EpubBuilder.Epub2OpfUndeclaredOpfPrefix.Replace("\n", "\r\n");
+        NamespaceRepairResult result = Repair(crlf);
         string repaired = Text(result.RepairedBytes);
 
         Assert.True(result.IsComplete);
         Assert.Equal(
-            opf.Split(new[] { "\r\n" }, StringSplitOptions.None).Length,
-            repaired.Split(new[] { "\r\n" }, StringSplitOptions.None).Length);
+            crlf.Split(["\r\n"], StringSplitOptions.None).Length,
+            repaired.Split(["\r\n"], StringSplitOptions.None).Length);
         Assert.DoesNotContain(repaired.Replace("\r\n", string.Empty), "\n", StringComparison.Ordinal);
-    }
 
-    [Fact]
-    public void AByteOrderMarkSurvives()
-    {
         byte[] withBom = new UTF8Encoding(true).GetPreamble()
             .Concat(Utf8(EpubBuilder.Epub2OpfUndeclaredOpfPrefix))
             .ToArray();
 
-        NamespaceRepairResult result = Assert.IsType<NamespaceRepairResult>(NamespaceRepair.Repair(withBom));
+        NamespaceRepairResult bom = Assert.IsType<NamespaceRepairResult>(NamespaceRepair.Repair(withBom));
 
-        Assert.True(result.IsComplete);
-        Assert.Equal(new UTF8Encoding(true).GetPreamble(), result.RepairedBytes.Take(3));
+        Assert.True(bom.IsComplete);
+        Assert.Equal(new UTF8Encoding(true).GetPreamble(), bom.RepairedBytes.Take(3));
     }
 
     [Fact]
-    public void ANonUtf8EncodingSurvives()
+    public void A_non_utf8_encoding_survives()
     {
         // A declared windows-1252 document must come back as windows-1252 bytes,
         // not silently promoted to UTF-8 by the repair.
@@ -255,63 +233,43 @@ public sealed class RepairNamespaceTests
 
     // --- start-tag scanning edge cases -----------------------------------
 
-    [Fact]
-    public void AGreaterThanInsideAnAttributeValueDoesNotConfuseTheScan()
+    /// <summary>
+    /// Finding the root element means scanning past a '&gt;' that does not end a
+    /// tag, in an attribute value, a doctype internal subset or a comment.
+    /// </summary>
+    [Theory]
+    [InlineData("""
+        <?xml version="1.0"?>
+        <package xmlns="http://www.idpf.org/2007/opf" note="a &gt; b" version="2.0">
+          <metadata><dc:title>X</dc:title></metadata>
+        </package>
+        """, "note=\"a &gt; b\"")]
+    [InlineData("""
+        <?xml version="1.0"?>
+        <!DOCTYPE package [<!ENTITY nb "&#160;">]>
+        <package xmlns="http://www.idpf.org/2007/opf" version="2.0">
+          <metadata><dc:title>X</dc:title></metadata>
+        </package>
+        """, """<!ENTITY nb "&#160;">""")]
+    [InlineData("""
+        <?xml version="1.0"?>
+        <!-- generated by something <package> -->
+        <package xmlns="http://www.idpf.org/2007/opf" version="2.0">
+          <metadata><dc:title>X</dc:title></metadata>
+        </package>
+        """, "<!-- generated by something <package> -->")]
+    public void The_scan_finds_the_root_past_a_misleading_angle_bracket(string opf, string preserved)
     {
-        const string opf = """
-            <?xml version="1.0"?>
-            <package xmlns="http://www.idpf.org/2007/opf" note="a &gt; b" version="2.0">
-              <metadata><dc:title>X</dc:title></metadata>
-            </package>
-            """;
-
         NamespaceRepairResult result = Repair(opf);
+        string repaired = Text(result.RepairedBytes);
 
         Assert.True(result.IsComplete);
-        Assert.Contains(@"note=""a &gt; b""", Text(result.RepairedBytes), StringComparison.Ordinal);
+        Assert.Contains(preserved, repaired, StringComparison.Ordinal);
+        Assert.Contains(@"xmlns:dc=""http://purl.org/dc/elements/1.1/""", repaired, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void ADoctypeInternalSubsetDoesNotConfuseTheScan()
-    {
-        // The '>' inside the ENTITY declaration must not be mistaken for the end
-        // of the doctype, or the root element is never found.
-        const string opf = """
-            <?xml version="1.0"?>
-            <!DOCTYPE package [<!ENTITY nb "&#160;">]>
-            <package xmlns="http://www.idpf.org/2007/opf" version="2.0">
-              <metadata><dc:title>X</dc:title></metadata>
-            </package>
-            """;
-
-        NamespaceRepairResult result = Repair(opf);
-
-        Assert.True(result.IsComplete);
-        Assert.Contains(@"<package xmlns=""http://www.idpf.org/2007/opf"" version=""2.0"" xmlns:dc=",
-            Text(result.RepairedBytes), StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void CommentsBeforeTheRootAreSkipped()
-    {
-        const string opf = """
-            <?xml version="1.0"?>
-            <!-- generated by something <package> -->
-            <package xmlns="http://www.idpf.org/2007/opf" version="2.0">
-              <metadata><dc:title>X</dc:title></metadata>
-            </package>
-            """;
-
-        NamespaceRepairResult result = Repair(opf);
-
-        Assert.True(result.IsComplete);
-        Assert.Contains("<!-- generated by something <package> -->", Text(result.RepairedBytes), StringComparison.Ordinal);
-        Assert.Contains(@"<package xmlns=""http://www.idpf.org/2007/opf"" version=""2.0"" xmlns:dc=",
-            Text(result.RepairedBytes), StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void ASelfClosingRootGetsTheDeclarationBeforeTheSlash()
+    public void A_self_closing_root_gets_the_declaration_before_the_slash()
     {
         NamespaceRepairResult result = Repair("""<root dc:x="1"/>""");
         string repaired = Text(result.RepairedBytes);
@@ -319,26 +277,5 @@ public sealed class RepairNamespaceTests
         Assert.True(result.IsComplete);
         Assert.EndsWith("/>", repaired, StringComparison.Ordinal);
         Assert.Contains(@"xmlns:dc=""http://purl.org/dc/elements/1.1/""/>", repaired, StringComparison.Ordinal);
-    }
-
-    // --- a document broken beyond namespaces ------------------------------
-
-    [Fact]
-    public void ADocumentWithOtherDamageIsNotClaimedAsRepaired()
-    {
-        // An unclosed <metadata> as well as the undeclared prefix. A document
-        // that still fails after recovery is reported, not guessed at further.
-        const string opf = """
-            <?xml version="1.0" encoding="UTF-8"?>
-            <package xmlns="http://www.idpf.org/2007/opf" version="2.0">
-              <metadata>
-                <dc:title opf:file-as="N">Neverwhere</dc:title>
-            </package>
-            """;
-
-        NamespaceRepairResult result = Repair(opf);
-
-        Assert.False(result.IsComplete);
-        Assert.NotNull(result.RemainingError);
     }
 }

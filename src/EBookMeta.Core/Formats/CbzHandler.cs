@@ -9,19 +9,6 @@ namespace EBookMeta.Formats;
 /// Reads, validates and writes comic archive metadata: ZIP plus
 /// <c>ComicInfo.xml</c>.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Reads the other two conventions as well — CoMet and the ComicBookLover blob in
-/// the archive comment — but only to cross-check them (CBZ-W012). Writing goes to
-/// <c>ComicInfo.xml</c> alone, because that is what Komga, Kavita and ComicTagger
-/// agree on, and the others are left exactly as they were found.
-/// </para>
-/// <para>
-/// Opens only what it needs: the entry list, which comes from the ZIP central
-/// directory, and <c>ComicInfo.xml</c> itself. A 300-page comic is not walked and
-/// no page image is decompressed unless a cover is asked for.
-/// </para>
-/// </remarks>
 public sealed class CbzHandler : IFormatHandler
 {
     /// <summary>The CoMet metadata document, read for cross-checking only.</summary>
@@ -381,13 +368,6 @@ public sealed class CbzHandler : IFormatHandler
     /// <summary>
     /// Parses the metadata document, reporting CBZ-F001 before giving up.
     /// </summary>
-    /// <remarks>
-    /// The finding is added and the exception rethrown, rather than one or the
-    /// other. The rule ID is the useful part of the diagnosis and belongs in the
-    /// log; the exception is what stops the open, because a comic archive has no
-    /// recovery path for a malformed <c>ComicInfo.xml</c> — there is no missing
-    /// declaration to supply, and guessing further is what invariant 15 forbids.
-    /// </remarks>
     private static ComicInfoDocument Parse(
         IContainer container, ContainerEntry entry, ICollection<Finding>? findings)
     {
@@ -463,11 +443,6 @@ public sealed class CbzHandler : IFormatHandler
     /// Returns the offending date when Year, Month and Day cannot all be true at
     /// once, or <see langword="null"/> when they can.
     /// </summary>
-    /// <remarks>
-    /// Checked component by component rather than by parsing a composed string,
-    /// because the interesting failures are a month of 13 and a 31st of February,
-    /// and a parse of "1989-13-01" only says "no".
-    /// </remarks>
     private static string? ImpossibleDate(ComicInfoDocument document)
     {
         string? rawYear = document.Value("Year");
@@ -555,13 +530,6 @@ public sealed class CbzHandler : IFormatHandler
     /// Whether an ordinary name sort produces the same order as a numeric-aware
     /// one.
     /// </summary>
-    /// <remarks>
-    /// The definition of "stable reading order" that matters in practice: readers
-    /// sort page entries by name, and a collection numbered <c>1.jpg</c> to
-    /// <c>12.jpg</c> without padding sorts 1, 10, 11, 12, 2 — which is what
-    /// CBZ-W022 is for. Comparing the two orders says so without having to guess
-    /// at a naming scheme.
-    /// </remarks>
     private static bool SortsIntoReadingOrder(List<ContainerEntry> images)
     {
         if (images.Count < 2)
@@ -580,11 +548,6 @@ public sealed class CbzHandler : IFormatHandler
     /// <summary>
     /// Reads the cover: the first page, in reading order.
     /// </summary>
-    /// <remarks>
-    /// A comic has no separate cover image — page one is the cover. It is read as
-    /// bytes and never decoded here, so Core stays free of any imaging dependency
-    /// and the UI decides what to do with it.
-    /// </remarks>
     private static void ReadCover(IContainer container, BookMetadata metadata)
     {
         ContainerEntry? first = Images(container)
@@ -621,12 +584,6 @@ public sealed class CbzHandler : IFormatHandler
     /// Finds <c>ComicInfo.xml</c>, tolerating the casing and location producers
     /// get wrong.
     /// </summary>
-    /// <remarks>
-    /// The exact name wins; a case variant is accepted next, because refusing to
-    /// read <c>comicinfo.xml</c> would help nobody; and a nested copy is accepted
-    /// last and reported as CBZ-E011. Reading a file is not the same as approving
-    /// of it.
-    /// </remarks>
     private static ContainerEntry? FindComicInfo(IContainer container)
     {
         ContainerEntry? exact = null;
@@ -687,12 +644,6 @@ public sealed class CbzHandler : IFormatHandler
 /// Orders names the way a person reads them, so <c>2.jpg</c> comes before
 /// <c>10.jpg</c>.
 /// </summary>
-/// <remarks>
-/// Comic page names are numbered and rarely padded, and ordinal comparison puts
-/// every double-digit page before page 2. This compares runs of digits as numbers
-/// and everything else ordinally, which is what a reader application does and
-/// therefore what "reading order" has to mean here.
-/// </remarks>
 internal sealed class NaturalNameComparer : IComparer<string>
 {
     /// <summary>The shared instance; the comparer holds no state.</summary>

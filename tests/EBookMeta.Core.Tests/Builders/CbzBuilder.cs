@@ -6,19 +6,6 @@ namespace EBookMeta.Tests.Builders;
 /// <summary>
 /// Generates synthetic comic archives for the corpus.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Same contract as <see cref="EpubBuilder"/>: defaults produce a valid CBZ, so a
-/// fixture for one specific defect is one call away from correct rather than
-/// assembled from scratch, which keeps a "broken" fixture broken in exactly one
-/// way.
-/// </para>
-/// <para>
-/// Pages are 1×1 PNGs. A comic's real content is irrelevant to metadata editing
-/// and committing real page images would be both pointless and a copyright
-/// problem, so the corpus is three pixels pretending to be a comic.
-/// </para>
-/// </remarks>
 internal sealed class CbzBuilder
 {
     private readonly List<Entry> _extraEntries = [];
@@ -32,8 +19,6 @@ internal sealed class CbzBuilder
     private sealed record Entry(string Name, byte[] Content, bool Stored);
 
     /// <summary>Uses the given <c>ComicInfo.xml</c> instead of the default.</summary>
-    /// <param name="xml">The complete metadata document.</param>
-    /// <returns>This builder.</returns>
     internal CbzBuilder WithComicInfo(string xml)
     {
         _comicInfoText = xml;
@@ -41,8 +26,6 @@ internal sealed class CbzBuilder
     }
 
     /// <summary>Uses raw <c>ComicInfo.xml</c> bytes, for encoding fixtures.</summary>
-    /// <param name="xml">The complete document bytes.</param>
-    /// <returns>This builder.</returns>
     internal CbzBuilder WithComicInfoBytes(byte[] xml)
     {
         _comicInfoBytes = xml;
@@ -50,7 +33,6 @@ internal sealed class CbzBuilder
     }
 
     /// <summary>Omits the metadata document entirely (CBZ-W010).</summary>
-    /// <returns>This builder.</returns>
     internal CbzBuilder WithoutComicInfo()
     {
         _comicInfoText = null;
@@ -59,8 +41,6 @@ internal sealed class CbzBuilder
     }
 
     /// <summary>Puts the metadata document somewhere other than the root (CBZ-E011).</summary>
-    /// <param name="path">The entry name to write it as.</param>
-    /// <returns>This builder.</returns>
     internal CbzBuilder WithComicInfoAt(string path)
     {
         _comicInfoPath = path;
@@ -68,12 +48,6 @@ internal sealed class CbzBuilder
     }
 
     /// <summary>Writes the metadata document after the pages rather than before.</summary>
-    /// <returns>This builder.</returns>
-    /// <remarks>
-    /// Both layouts are common in the wild, and where the entry sits decides
-    /// whether <see cref="EBookMeta.Formats.FormatDetector"/> settles the format
-    /// from the first local header or has to read the central directory.
-    /// </remarks>
     internal CbzBuilder WithComicInfoLast()
     {
         _comicInfoFirst = false;
@@ -81,8 +55,6 @@ internal sealed class CbzBuilder
     }
 
     /// <summary>Adds a CoMet document alongside <c>ComicInfo.xml</c> (CBZ-W012).</summary>
-    /// <param name="xml">The CoMet document, or the default when null.</param>
-    /// <returns>This builder.</returns>
     internal CbzBuilder WithCoMet(string? xml = null)
     {
         _cometXml = xml ?? DefaultCoMet;
@@ -90,12 +62,6 @@ internal sealed class CbzBuilder
     }
 
     /// <summary>Replaces the page images with the given names, in order.</summary>
-    /// <param name="names">The page entry names.</param>
-    /// <returns>This builder.</returns>
-    /// <remarks>
-    /// Drives the page rules: a different count from <c>PageCount</c> is
-    /// CBZ-E020, and names that do not sort into reading order are CBZ-W022.
-    /// </remarks>
     internal CbzBuilder WithPages(params string[] names)
     {
         _pageNames = names;
@@ -103,10 +69,6 @@ internal sealed class CbzBuilder
     }
 
     /// <summary>Adds an arbitrary entry.</summary>
-    /// <param name="name">The entry name.</param>
-    /// <param name="content">The content.</param>
-    /// <param name="stored">Whether to store rather than deflate it.</param>
-    /// <returns>This builder.</returns>
     internal CbzBuilder WithEntry(string name, byte[] content, bool stored = false)
     {
         _extraEntries.Add(new Entry(name, content, stored));
@@ -114,19 +76,10 @@ internal sealed class CbzBuilder
     }
 
     /// <summary>Adds a text entry.</summary>
-    /// <param name="name">The entry name.</param>
-    /// <param name="content">The content.</param>
-    /// <returns>This builder.</returns>
     internal CbzBuilder WithEntry(string name, string content) =>
         WithEntry(name, Encoding.UTF8.GetBytes(content));
 
     /// <summary>Builds the archive and writes it to a file.</summary>
-    /// <param name="path">Where to write.</param>
-    /// <returns>The path written.</returns>
-    /// <remarks>
-    /// Through <see cref="ZipContainer.Create"/>, the same writer the product
-    /// saves with, for the reason given on <see cref="EpubBuilder.WriteTo"/>.
-    /// </remarks>
     internal string WriteTo(string path)
     {
         ZipContainer.Create(BuildEntries(), path);
@@ -134,7 +87,6 @@ internal sealed class CbzBuilder
     }
 
     /// <summary>Builds the archive in memory.</summary>
-    /// <returns>The complete CBZ bytes.</returns>
     internal byte[] Build()
     {
         string temp = System.IO.Path.Combine(
@@ -155,25 +107,12 @@ internal sealed class CbzBuilder
     }
 
     /// <summary>
-    /// Appends an archive-level comment to a finished ZIP file.
+    /// Appends an archive-level comment to a finished ZIP file, patched in
+    /// because no writer here can produce one — <c>System.IO.Compression</c> on
+    /// net48 has no comment API and <see cref="ZipContainer.Create"/> does not add
+    /// one. The end-of-central-directory record is fixed-size apart from the
+    /// comment, so setting its length field and appending the bytes is the job.
     /// </summary>
-    /// <param name="path">The archive to patch.</param>
-    /// <param name="comment">The comment to store.</param>
-    /// <remarks>
-    /// <para>
-    /// Comic archives sometimes carry a ComicBookLover JSON blob here, and
-    /// <c>CbzHandler</c> refuses to write such a file because
-    /// <see cref="ZipContainer.Rebuild"/> cannot reproduce the comment. Testing
-    /// that refusal needs a fixture that has one.
-    /// </para>
-    /// <para>
-    /// Patched in rather than written by the ZIP writer because no writer here can
-    /// produce one: <c>System.IO.Compression</c> on net48 has no comment API at
-    /// all, and <see cref="ZipContainer.Create"/> deliberately does not add one.
-    /// The end-of-central-directory record is fixed-size apart from the comment,
-    /// so setting its length field and appending the bytes is the whole job.
-    /// </para>
-    /// </remarks>
     internal static void AddArchiveComment(string path, string comment)
     {
         byte[] archive = File.ReadAllBytes(path);

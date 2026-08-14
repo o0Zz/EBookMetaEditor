@@ -4,12 +4,6 @@ namespace EBookMeta.Formats;
 /// The fields of <see cref="Model.BookMetadata"/>, as a flag set, so a format
 /// can declare which of them it is able to store.
 /// </summary>
-/// <remarks>
-/// Adding a field to <see cref="Model.BookMetadata"/> means adding a flag here
-/// and updating every handler's capabilities. That friction is intentional: the
-/// UI disables inputs a format cannot store, and a field with no declaration
-/// would be a box the user can type into whose contents get silently discarded.
-/// </remarks>
 [Flags]
 public enum MetadataField
 {
@@ -72,11 +66,6 @@ public enum MetadataField
 /// What a format handler can do with a file: which fields it can read, which it
 /// can write, and whether it can write at all.
 /// </summary>
-/// <remarks>
-/// Read by the UI to decide which inputs to enable, and by the CLI to reject an
-/// edit that could not be honoured, so that a user never supplies a value that
-/// is quietly dropped on save.
-/// </remarks>
 public sealed record FormatCapabilities
 {
     /// <summary>The format these capabilities describe.</summary>
@@ -98,23 +87,12 @@ public sealed record FormatCapabilities
     /// Why the format cannot be written, in words suitable for showing a user.
     /// <see langword="null"/> when it can be.
     /// </summary>
-    /// <remarks>
-    /// Exists so the UI can explain rather than just grey out. "Read-only" with
-    /// no reason invites the user to assume a missing feature; CBR is read-only
-    /// because RAR compression is proprietary and cannot be legally
-    /// reimplemented, which is a different thing and worth saying.
-    /// </remarks>
     public string? WriteBlockedReason { get; init; }
 
     /// <summary>
     /// A format this file can be converted to in order to become editable, or
     /// <see langword="null"/> if none.
     /// </summary>
-    /// <remarks>
-    /// Set for CBR, whose only correct edit path is convert-to-CBZ-then-tag,
-    /// surfaced as an explicit user choice by rule GEN-W004. The original is
-    /// always kept.
-    /// </remarks>
     public FormatId? ConversionTarget { get; init; }
 
     /// <summary>

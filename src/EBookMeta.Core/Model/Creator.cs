@@ -17,21 +17,6 @@ public enum CreatorKind
 /// A person or organisation credited on the work, with the sort form and role
 /// as the source expressed them.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Role mapping is lossy and that is accepted. <c>ComicInfo</c>'s Writer,
-/// Penciller, Inker, Colorist, Letterer and CoverArtist do not map cleanly onto
-/// MARC relators — there is no relator for "penciller" that a comic reader
-/// would recognise on the way back out.
-/// </para>
-/// <para>
-/// So both are kept. <see cref="Role"/> holds the mapped MARC relator for
-/// cross-format work, and <see cref="NativeRole"/> holds the source's own
-/// string verbatim. When writing back to the format the creator came from,
-/// prefer <see cref="NativeRole"/>: it is what that format's readers expect,
-/// and round-tripping through the mapping would degrade it.
-/// </para>
-/// </remarks>
 public sealed record Creator
 {
     /// <summary>The display name, as it should appear to a reader.</summary>
@@ -66,12 +51,6 @@ public sealed record Creator
     /// The <c>id</c> attribute this creator carried in the source document, when
     /// the format has such a thing.
     /// </summary>
-    /// <remarks>
-    /// Retained because EPUB 3 attaches refinements by id — a
-    /// <c>&lt;meta refines="#creator01" property="file-as"&gt;</c> is only
-    /// reattachable on write if the original id survived the read. Losing it
-    /// would orphan every refinement on the element.
-    /// </remarks>
     public string? SourceId { get; init; }
 
     /// <summary>Returns the display name, for diagnostics.</summary>

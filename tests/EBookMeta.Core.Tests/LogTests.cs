@@ -1,4 +1,5 @@
-﻿using EBookMeta.Containers;
+using System.Text;
+using EBookMeta.Containers;
 using EBookMeta.Formats;
 using EBookMeta.Tests.Builders;
 using Xunit;
@@ -6,19 +7,16 @@ using Xunit;
 namespace EBookMeta.Tests;
 
 /// <summary>
-/// Covers the session log: what gets recorded, and the rule that a clean run
-/// never touches the disk while a bad one always does.
+/// Covers the session log: what gets recorded, and the rule that a clean run never
+/// touches the disk while a bad one always does.
 /// </summary>
 public sealed class LogTests : IDisposable
 {
-    public LogTests()
-    {
-        Log.Clear();
-        Log.FilePath = null;
-        Log.AlwaysWriteToFile = false;
-    }
+    public LogTests() => Reset();
 
-    public void Dispose()
+    public void Dispose() => Reset();
+
+    private static void Reset()
     {
         Log.Clear();
         Log.FilePath = null;
@@ -26,7 +24,7 @@ public sealed class LogTests : IDisposable
     }
 
     [Fact]
-    public void EntriesAreRecordedInOrderWithTheirLevel()
+    public void Entries_are_recorded_in_order_with_their_level()
     {
         Log.Debug("one");
         Log.Info("two");
@@ -41,7 +39,7 @@ public sealed class LogTests : IDisposable
     }
 
     [Fact]
-    public void AnEntryFormatsAsOneAlignedLine()
+    public void An_entry_formats_as_one_aligned_line()
     {
         var entry = new LogEntry(new DateTime(2026, 8, 14, 9, 5, 3, 42), LogLevel.Warning, "something odd");
 
@@ -49,7 +47,7 @@ public sealed class LogTests : IDisposable
     }
 
     [Fact]
-    public void AnExceptionIsRecordedWithItsTypeAndMessage()
+    public void An_exception_is_recorded_with_its_type_and_message()
     {
         Log.Error("Could not open 'x.epub'", new BookFormatException("not well-formed"));
 
@@ -64,7 +62,7 @@ public sealed class LogTests : IDisposable
     [InlineData(Severity.Warning, LogLevel.Warning)]
     [InlineData(Severity.Error, LogLevel.Error)]
     [InlineData(Severity.Fatal, LogLevel.Error)]
-    public void FindingsAreLoggedAtAMatchingLevel(Severity severity, LogLevel expected)
+    public void Findings_are_logged_at_a_matching_level(Severity severity, LogLevel expected)
     {
         Log.Finding(new Finding
         {
@@ -82,7 +80,7 @@ public sealed class LogTests : IDisposable
     }
 
     [Fact]
-    public void SubscribersAreNotifiedOfEachEntry()
+    public void Subscribers_are_notified_of_each_entry()
     {
         var seen = new List<LogEntry>();
         void Handler(LogEntry e) => seen.Add(e);
@@ -105,23 +103,23 @@ public sealed class LogTests : IDisposable
     // --- the file, and when it appears -----------------------------------
 
     [Fact]
-    public void ACleanRunNeverTouchesTheDisk()
+    public void A_clean_run_never_touches_the_disk()
     {
         using var temp = new TempDir();
         string path = temp.File("EBookMetaEditor.log");
         Log.FilePath = path;
 
+        // Info and Debug alone must not create the file: startup has a 400 ms
+        // budget and opening a file can cost an antivirus scan.
         Log.Info("opened a file");
         Log.Debug("all fine");
 
-        // Info and Debug alone must not create the file: startup has a 400 ms
-        // budget and opening a file can cost an antivirus scan.
         Assert.False(File.Exists(path));
         Assert.False(Log.FileWritten);
     }
 
     [Fact]
-    public void AWarningWritesTheWholeSessionSoFar()
+    public void A_warning_writes_the_whole_session_so_far_and_then_appends()
     {
         using var temp = new TempDir();
         string path = temp.File("EBookMetaEditor.log");
@@ -130,6 +128,7 @@ public sealed class LogTests : IDisposable
         Log.Info("this happened first");
         Log.Debug("and this");
         Log.Warning("then something odd");
+        Log.Info("carried on");
 
         // The run-up matters as much as the problem, so earlier entries are
         // flushed too rather than only the warning.
@@ -138,28 +137,13 @@ public sealed class LogTests : IDisposable
         Assert.Contains("this happened first", written, StringComparison.Ordinal);
         Assert.Contains("and this", written, StringComparison.Ordinal);
         Assert.Contains("then something odd", written, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void EntriesAfterAWarningAreAppendedAsTheyArrive()
-    {
-        using var temp = new TempDir();
-        string path = temp.File("EBookMetaEditor.log");
-        Log.FilePath = path;
-
-        Log.Warning("first problem");
-        Log.Info("carried on");
-
-        string written = File.ReadAllText(path);
-        Assert.Contains("first problem", written, StringComparison.Ordinal);
-        Assert.Contains("carried on", written, StringComparison.Ordinal);
 
         // Written once each, not duplicated by the second flush.
         Assert.Equal(1, written.Split(["carried on"], StringSplitOptions.None).Length - 1);
     }
 
     [Fact]
-    public void AnUnwritableFileDoesNotBecomeTheProblem()
+    public void An_unwritable_file_does_not_become_the_problem()
     {
         // A directory that does not exist. The log must degrade to memory rather
         // than throwing out of whatever was being logged about.
@@ -172,7 +156,7 @@ public sealed class LogTests : IDisposable
     }
 
     [Fact]
-    public void MemoryIsBounded()
+    public void Memory_is_bounded_and_keeps_the_newest()
     {
         for (int i = 0; i < Log.Capacity + 100; i++)
         {
@@ -180,15 +164,16 @@ public sealed class LogTests : IDisposable
         }
 
         Assert.True(Log.Entries.Count <= Log.Capacity);
-
-        // The newest are the ones kept.
-        Assert.Contains($"entry {Log.Capacity + 99}", Log.Entries[Log.Entries.Count - 1].Message, StringComparison.Ordinal);
+        Assert.Contains(
+            $"entry {Log.Capacity + 99}",
+            Log.Entries[Log.Entries.Count - 1].Message,
+            StringComparison.Ordinal);
     }
 
     // --- what real work records ------------------------------------------
 
     [Fact]
-    public void OpeningABookIsLogged()
+    public void Opening_a_book_is_logged()
     {
         using var temp = new TempDir();
         string path = new EpubBuilder().WriteTo(temp.File("valid.epub"));
@@ -198,13 +183,11 @@ public sealed class LogTests : IDisposable
         using ZipContainer container = ZipContainer.Open(path);
         new EpubHandler().Read(container);
 
-        Assert.Contains(
-            Log.Entries,
-            e => e.Level == LogLevel.Info && e.Message.Contains("Read EPUB"));
+        Assert.Contains(Log.Entries, e => e.Level == LogLevel.Info && e.Message.Contains("Read EPUB"));
     }
 
     [Fact]
-    public void ARepairIsLoggedAsAWarning()
+    public void A_repair_is_logged_as_a_warning()
     {
         using var temp = new TempDir();
         string path = new EpubBuilder()
@@ -213,12 +196,11 @@ public sealed class LogTests : IDisposable
 
         Log.Clear();
 
-        // Through Book.Load, which is the path the app takes: a repair is reported
-        // as a finding, and forwarding findings to the log is Book's job.
+        // Through Book.Load, which is the path the app takes: forwarding findings
+        // to the log is Book's job. A repair is exactly the kind of thing a user
+        // should be able to find out about after the fact.
         Book.Load(path);
 
-        // A repair is exactly the kind of thing a user should be able to find out
-        // about after the fact, so it is a warning rather than a debug line.
         LogEntry repair = Assert.Single(
             Log.Entries, e => e.Level == LogLevel.Warning && e.Message.Contains("repaired"));
 
@@ -227,7 +209,7 @@ public sealed class LogTests : IDisposable
     }
 
     [Fact]
-    public void AnUnrepairableDocumentIsLoggedAsAnError()
+    public void An_unrepairable_document_is_logged_as_an_error()
     {
         using var temp = new TempDir();
         string path = new EpubBuilder()
@@ -239,28 +221,24 @@ public sealed class LogTests : IDisposable
         using ZipContainer container = ZipContainer.Open(path);
         Assert.Throws<BookFormatException>(() => new EpubHandler().Read(container));
 
-        Assert.Contains(
-            Log.Entries,
-            e => e.Level == LogLevel.Error && e.Message.Contains("acme"));
+        Assert.Contains(Log.Entries, e => e.Level == LogLevel.Error && e.Message.Contains("acme"));
     }
 
     [Fact]
-    public void AMisleadingExtensionIsLoggedAsAWarning()
+    public void A_misleading_extension_is_logged_as_a_warning()
     {
         using var temp = new TempDir();
         string path = temp.File("rar-disguised-as-cbz.cbz");
         File.WriteAllBytes(
             path,
-            System.Text.Encoding.ASCII.GetBytes("Rar!\x1a\x07\x00").Concat(new byte[64]).ToArray());
+            [.. Encoding.ASCII.GetBytes("Rar!\x1a\x07\x00"), .. new byte[64]]);
 
         Log.Clear();
 
-        // Detection alone says nothing: it answers a question and is asked more than
-        // once per file. The disagreement is rule GEN-W002, reported by the load.
+        // Detection alone says nothing: it answers a question and is asked more
+        // than once per file. The disagreement is rule GEN-W002, reported by the load.
         Assert.Throws<UnsupportedFormatException>(() => Book.Load(path));
 
-        Assert.Contains(
-            Log.Entries,
-            e => e.Level == LogLevel.Warning && e.Message.Contains("extension"));
+        Assert.Contains(Log.Entries, e => e.Level == LogLevel.Warning && e.Message.Contains("extension"));
     }
 }

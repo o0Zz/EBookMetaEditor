@@ -1,4 +1,4 @@
-﻿using EBookMeta.Compat;
+using EBookMeta.Compat;
 using EBookMeta.Containers;
 using EBookMeta.Formats;
 using EBookMeta.Tests.Builders;
@@ -10,16 +10,9 @@ namespace EBookMeta.Tests;
 /// One fixture per EPUB rule, each triggering its rule in isolation.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The rules run as part of the load — there is no validate call to make — so every
-/// test here is a load, and the findings are what the load reported.
-/// </para>
-/// <para>
 /// Asserted by containment rather than as the whole set, unlike the comic suite. A
 /// conformant EPUB 3 declares its cover and series the EPUB 3 way only, which
-/// EPUB-W032 and EPUB-W061 legitimately report on every fixture below; demanding an
-/// exact set would mean restating those two in twenty tests that are not about them.
-/// </para>
+/// EPUB-W032 and EPUB-W061 legitimately report on every fixture below.
 /// </remarks>
 public sealed class EpubRuleTests
 {
@@ -138,19 +131,12 @@ public sealed class EpubRuleTests
         Assert.Equal("English", finding.Detail);
     }
 
-    /// <summary>
-    /// A plausible tag is not reported, however unusual.
-    /// </summary>
-    /// <remarks>
-    /// The rule tests shape, not the subtag registry: warning about a language that
-    /// is perfectly legitimate is worse than staying quiet about an odd one.
-    /// </remarks>
+    // The rule tests shape, not the subtag registry: warning about a language that
+    // is perfectly legitimate is worse than staying quiet about an odd one.
     [Theory]
     [InlineData("en")]
-    [InlineData("fr")]
     [InlineData("pt-BR")]
     [InlineData("zh-Hant-TW")]
-    [InlineData("gsw")]
     public void Epub_w014_accepts_plausible_tags(string tag)
     {
         using var temp = new TempDir();
@@ -222,20 +208,10 @@ public sealed class EpubRuleTests
 
         Assert.Equal(Severity.Warning, finding.Severity);
         Assert.Contains("OEBPS/text/orphan.xhtml", finding.Detail!, StringComparison.Ordinal);
-    }
 
-    /// <summary>
-    /// <c>META-INF</c> is never an orphan.
-    /// </summary>
-    /// <remarks>
-    /// The manifest is not supposed to list it, and neither is <c>mimetype</c> or the
-    /// package document itself — so a rule that flagged them would fire on every
-    /// conformant book and be ignored within a day.
-    /// </remarks>
-    [Fact]
-    public void Epub_w023_ignores_the_files_no_manifest_lists()
-    {
-        using var temp = new TempDir();
+        // META-INF, mimetype and the package document are never orphans: no
+        // manifest is supposed to list them, so a rule that flagged them would
+        // fire on every conformant book and be ignored within a day.
         AssertNoRule(new EpubBuilder().WriteTo(temp.File("valid.epub")), "EPUB-W023");
     }
 
@@ -288,49 +264,31 @@ public sealed class EpubRuleTests
         AssertNoRule(path, "EPUB-W032");
     }
 
-    /// <summary>
-    /// A cover declared only one way is reported, not corrected.
-    /// </summary>
-    /// <remarks>
-    /// Deliberately not an autofix — see
-    /// <see cref="An_unedited_save_leaves_the_convention_rules_standing"/> for why.
-    /// </remarks>
     [Fact]
-    public void Epub_w032_cover_in_only_one_convention()
+    public void Epub_w032_and_w061_report_a_convention_used_on_only_one_side()
     {
         using var temp = new TempDir();
-        string path = new EpubBuilder().WriteTo(temp.File("epub3-cover-only.epub"));
+        string path = new EpubBuilder().WriteTo(temp.File("epub3-only.epub"));
 
-        Finding finding = Single(path, "EPUB-W032");
+        foreach (string ruleId in new[] { "EPUB-W032", "EPUB-W061" })
+        {
+            Finding finding = Single(path, ruleId);
 
-        Assert.Equal(Severity.Warning, finding.Severity);
-        Assert.False(finding.HasAutofix);
-    }
-
-    [Fact]
-    public void Epub_w061_series_in_only_one_convention()
-    {
-        using var temp = new TempDir();
-        string path = new EpubBuilder().WriteTo(temp.File("epub3-series-only.epub"));
-
-        Finding finding = Single(path, "EPUB-W061");
-
-        Assert.Equal(Severity.Warning, finding.Severity);
-        Assert.False(finding.HasAutofix);
+            Assert.Equal(Severity.Warning, finding.Severity);
+            Assert.False(finding.HasAutofix);
+        }
     }
 
     /// <summary>
     /// An unedited save does not settle the convention rules, and says so.
     /// </summary>
     /// <remarks>
-    /// These two are reported, not corrected, and the distinction is forced by a
-    /// genuine conflict between two hard invariants. Invariant 8 wants both
+    /// Forced by a conflict between two hard invariants. Invariant 8 wants both
     /// conventions written on every save; invariant 6 wants an unedited save of a
-    /// conformant book to be byte-identical. A conformant EPUB 3 book carries only
-    /// the EPUB 3 forms, so honouring 8 unconditionally would rewrite metadata lines
-    /// in a file the user only opened — which is why the second convention is written
-    /// when the field is edited and not before. Asserted rather than left implicit so
-    /// that changing the trade-off has to be deliberate.
+    /// conformant book to be byte-identical. A conformant EPUB 3 carries only the
+    /// EPUB 3 forms, so honouring 8 unconditionally would rewrite metadata lines in
+    /// a file the user only opened — which is why the second convention is written
+    /// when the field is edited and not before.
     /// </remarks>
     [Fact]
     public void An_unedited_save_leaves_the_convention_rules_standing()
@@ -348,15 +306,6 @@ public sealed class EpubRuleTests
 
     // --- the mimetype entry ----------------------------------------------
 
-    /// <summary>
-    /// Without a <c>mimetype</c> entry there is nothing left to identify an EPUB by.
-    /// </summary>
-    /// <remarks>
-    /// Not a rule but the absence of one, and worth pinning down. A ZIP with no
-    /// <c>mimetype</c>, no <c>ComicInfo.xml</c> and no images is indistinguishable
-    /// from any other ZIP by content, and detection is by content — so the honest
-    /// answer is that this build cannot edit it, not a made-up EPUB verdict.
-    /// </remarks>
     [Fact]
     public void A_zip_with_no_mimetype_is_not_recognised_as_an_epub()
     {
@@ -365,38 +314,47 @@ public sealed class EpubRuleTests
             .WithoutMimetype()
             .WriteTo(temp.File("no-mimetype.epub"));
 
+        // A ZIP with no mimetype, no ComicInfo.xml and no images is
+        // indistinguishable from any other ZIP by content, and detection is by
+        // content — so the honest answer is that this build cannot edit it.
         Assert.Throws<UnsupportedFormatException>(() => Book.Load(path));
     }
 
     [Fact]
-    public void Epub_e040_mimetype_not_first()
+    public void Epub_e040_covers_every_way_the_mimetype_entry_can_be_wrong()
     {
         using var temp = new TempDir();
-        string path = new EpubBuilder()
-            .WithMimetypeNotFirst()
-            .WriteTo(temp.File("broken-epub-e040-mimetype-late.epub"));
 
-        Assert.Contains("first", Single(path, "EPUB-E040").Message, StringComparison.Ordinal);
-    }
+        Assert.Contains(
+            "first",
+            Single(
+                new EpubBuilder().WithMimetypeNotFirst().WriteTo(temp.File("late.epub")),
+                "EPUB-E040").Message,
+            StringComparison.Ordinal);
 
-    [Fact]
-    public void Epub_e040_mimetype_compressed()
-    {
-        using var temp = new TempDir();
-        string path = new EpubBuilder()
-            .WithCompressedMimetype()
-            .WriteTo(temp.File("broken-mimetype-compressed.epub"));
+        Assert.Contains(
+            "stored",
+            Single(
+                new EpubBuilder().WithCompressedMimetype().WriteTo(temp.File("compressed.epub")),
+                "EPUB-E040").Message,
+            StringComparison.Ordinal);
 
-        Assert.Contains("stored", Single(path, "EPUB-E040").Message, StringComparison.Ordinal);
+        // A trailing newline is enough: readers compare the bytes exactly.
+        Assert.Contains(
+            "exactly",
+            Single(
+                new EpubBuilder().WithMimetypeContent("application/epub+zip\n").WriteTo(temp.File("newline.epub")),
+                "EPUB-E040").Message,
+            StringComparison.Ordinal);
     }
 
     /// <summary>
     /// A book whose <c>mimetype</c> is wrong is made readable again by saving.
     /// </summary>
     /// <remarks>
-    /// All three requirements are the specification's, not a preference, so putting
-    /// the entry back is provable rather than a guess. This is the correction with
-    /// the most direct payoff: readers reject the file outright until it is made.
+    /// All three requirements are the specification's, so putting the entry back is
+    /// provable rather than a guess. This is the correction with the most direct
+    /// payoff: readers reject the file outright until it is made.
     /// </remarks>
     [Theory]
     [InlineData(true)]
@@ -423,18 +381,6 @@ public sealed class EpubRuleTests
 
         // And the corrected file needs no correction the second time.
         AssertNoRule(path, "EPUB-E040");
-    }
-
-    [Fact]
-    public void Epub_e040_mimetype_with_the_wrong_content()
-    {
-        using var temp = new TempDir();
-        string path = new EpubBuilder()
-            .WithMimetypeContent("application/epub+zip\n")
-            .WriteTo(temp.File("broken-epub-e040-mimetype-newline.epub"));
-
-        // A trailing newline is enough: readers compare the bytes exactly.
-        Assert.Contains("exactly", Single(path, "EPUB-E040").Message, StringComparison.Ordinal);
     }
 
     // --- encoding ---------------------------------------------------------

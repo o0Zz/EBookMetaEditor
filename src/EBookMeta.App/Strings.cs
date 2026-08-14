@@ -6,26 +6,6 @@ namespace EBookMeta.App;
 /// <summary>
 /// The interface language: every piece of text the windows show.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Backed by one small <c>key = value</c> file per language, embedded in the
-/// exe. Deliberately not .resx and satellite assemblies: a satellite is a DLL in
-/// a subfolder, and this application is one file with nothing beside it. It is
-/// also not a format a translator can open — a plain text file is, which is the
-/// whole reason a language ships as data rather than as code.
-/// </para>
-/// <para>
-/// Adding a language is adding one file to <c>Languages/</c>. Nothing here
-/// enumerates them by name: the picker in the settings dialog is built from
-/// whatever is embedded.
-/// </para>
-/// <para>
-/// <b>Only the interface is translated.</b> The session log and the findings it
-/// carries stay in English, because they are diagnostics: a rule ID and its
-/// message are what a user pastes into a bug report, and Core has no business
-/// knowing what language a window is in.
-/// </para>
-/// </remarks>
 internal static class Strings
 {
     /// <summary>Matches the <c>LogicalName</c> the csproj target assigns.</summary>
@@ -36,11 +16,6 @@ internal static class Strings
     /// <summary>
     /// The language every other one falls back to, key by key.
     /// </summary>
-    /// <remarks>
-    /// Per key rather than per file, so a translation that is merely incomplete
-    /// still works — the untranslated lines come out in English instead of the
-    /// window showing raw key names.
-    /// </remarks>
     private const string FallbackCode = "en";
 
     private static Dictionary<string, string> _english = Load(FallbackCode) ?? [];
@@ -52,11 +27,6 @@ internal static class Strings
     /// <summary>
     /// The languages this build carries, each named in itself.
     /// </summary>
-    /// <remarks>
-    /// Read on demand: the settings dialog is the only thing that needs the whole
-    /// list, and parsing every language at launch would be work done for a window
-    /// most sessions never open.
-    /// </remarks>
     internal static IReadOnlyList<Language> Available
     {
         get
@@ -138,12 +108,6 @@ internal static class Strings
     /// <param name="key">The key, as it appears in the language files.</param>
     /// <param name="args">The values for <c>{0}</c>, <c>{1}</c> and so on.</param>
     /// <returns>The formatted text.</returns>
-    /// <remarks>
-    /// A translation with a mistyped placeholder returns unformatted rather than
-    /// throwing. Language files are edited by people who are not building the
-    /// application, and a stray brace in one line of Italian is not a reason for
-    /// the window to fall over.
-    /// </remarks>
     internal static string Format(string key, params object?[] args)
     {
         string template = Get(key);
@@ -164,12 +128,6 @@ internal static class Strings
     /// <param name="count">How many, which chooses the form.</param>
     /// <param name="args">The values for <c>{0}</c>, <c>{1}</c> and so on.</param>
     /// <returns>The formatted text.</returns>
-    /// <remarks>
-    /// Two forms, which is enough for the languages here and honest about not
-    /// being enough in general. "1 file" and "2 files" cannot be built by pasting
-    /// an "s" onto the end outside English, so the two readings are separate
-    /// lines a translator can write independently.
-    /// </remarks>
     internal static string Plural(string key, int count, params object?[] args) =>
         Format(key + (count == 1 ? ".one" : ".many"), args);
 
@@ -261,11 +219,6 @@ internal static class Strings
     }
 
     /// <summary>One language, as offered in the settings dialog.</summary>
-    /// <remarks>
-    /// A class rather than a record: <c>init</c> accessors need a support type
-    /// that only Core polyfills, and the UI project has no business declaring
-    /// compiler plumbing of its own.
-    /// </remarks>
     internal sealed class Language(string code, string name)
     {
         /// <summary>The two-letter code, which is also the file name.</summary>

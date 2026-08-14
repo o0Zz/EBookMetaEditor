@@ -7,12 +7,6 @@ namespace EBookMeta.Documents;
 /// <c>META-INF/container.xml</c> — the file that says where an EPUB's package
 /// document lives.
 /// </summary>
-/// <remarks>
-/// The only fixed path in an EPUB. Everything else, including the OPF, is found
-/// by following this, which is why a missing or unparseable one is fatal
-/// (EPUB-F002) rather than merely an error: without it there is no way to know
-/// what to edit.
-/// </remarks>
 public sealed class ContainerXml
 {
     /// <summary>The entry name, which the EPUB specification fixes.</summary>
@@ -28,10 +22,6 @@ public sealed class ContainerXml
     /// <summary>
     /// The <c>full-path</c> of every declared rootfile, in document order.
     /// </summary>
-    /// <remarks>
-    /// Usually one. The specification permits several — a multiple-rendition
-    /// publication — and the first is the default rendition.
-    /// </remarks>
     public IReadOnlyList<string> RootfilePaths { get; }
 
     /// <summary>

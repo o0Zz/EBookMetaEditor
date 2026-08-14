@@ -8,12 +8,6 @@ namespace EBookMeta.Formats;
 /// <summary>
 /// Reads and writes EPUB 2 and EPUB 3 metadata.
 /// </summary>
-/// <remarks>
-/// Opens only what it needs: <c>META-INF/container.xml</c> to find the package
-/// document, then the package document itself. The rest of the archive is left
-/// alone, because cold launch to a populated window has a 400 ms budget and a
-/// book with 500 manifest entries must not be walked to show its title.
-/// </remarks>
 public sealed class EpubHandler : IFormatHandler
 {
     /// <summary>The entry every EPUB must store first, uncompressed.</summary>
@@ -30,8 +24,7 @@ public sealed class EpubHandler : IFormatHandler
     {
         Format = FormatId.Epub,
 
-        // EPUB expresses everything in the model, which is why it is phase 1:
-        // it exercises the whole surface.
+        // EPUB expresses every field the model carries.
         ReadableFields = MetadataField.All,
         WritableFields = MetadataField.All,
     };
@@ -295,21 +288,6 @@ public sealed class EpubHandler : IFormatHandler
     /// <summary>
     /// Puts <c>mimetype</c> back where the specification requires it.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// First entry, stored uncompressed, containing exactly the media type: readers
-    /// reject a file that gets this wrong, so a book that arrives wrong is one this
-    /// tool can make readable again. All three parts are provable from the
-    /// specification alone, which is what makes correcting them legitimate rather
-    /// than a guess.
-    /// </para>
-    /// <para>
-    /// Returns without touching the list when the entry is already correct — the
-    /// early return that keeps an unedited save of a conformant book
-    /// byte-identical. A missing entry is added rather than reported, because an
-    /// EPUB without one is not an EPUB to any reader.
-    /// </para>
-    /// </remarks>
     private static void RepairMimetype(List<PendingEntry> entries, ICollection<Finding>? findings)
     {
         int index = entries.FindIndex(e => e.Name.Equals(MimetypeEntryName, StringComparison.Ordinal));
@@ -350,13 +328,6 @@ public sealed class EpubHandler : IFormatHandler
     /// <summary>
     /// Checks the package document against itself and against the archive.
     /// </summary>
-    /// <remarks>
-    /// Split into three because the rules answer three different questions: is the
-    /// required metadata there, do the internal references resolve, and does the
-    /// archive match what the manifest claims. All of it works from the parsed tree
-    /// and from entry names, so none of it decompresses anything beyond the
-    /// twenty-byte <c>mimetype</c>.
-    /// </remarks>
     private static void CheckPackage(
         IContainer container, OpfDocument opf, ICollection<Finding> findings)
     {
@@ -519,10 +490,6 @@ public sealed class EpubHandler : IFormatHandler
     /// <summary>
     /// Checks the two cover conventions against each other and against the manifest.
     /// </summary>
-    /// <remarks>
-    /// Both are written on save, so a file carrying only one is not broken — it is
-    /// a file that some readers will show without a cover, which is worth saying.
-    /// </remarks>
     private static void CheckCoverDeclarations(
         OpfDocument opf, HashSet<string> manifestIds, ICollection<Finding> findings)
     {
@@ -754,12 +721,6 @@ public sealed class EpubHandler : IFormatHandler
     /// <summary>
     /// Whether a language tag is shaped like BCP 47.
     /// </summary>
-    /// <remarks>
-    /// Shape only, deliberately. The registry of valid subtags is large, changes,
-    /// and getting it wrong would mean warning about a language that is perfectly
-    /// legitimate — so this rejects what cannot be a tag rather than accepting only
-    /// what is definitely one.
-    /// </remarks>
     private static bool IsPlausibleLanguageTag(string tag)
     {
         string[] parts = tag.Split('-');
@@ -783,14 +744,6 @@ public sealed class EpubHandler : IFormatHandler
     /// <summary>
     /// Resolves the cover image through both declaration conventions.
     /// </summary>
-    /// <remarks>
-    /// EPUB 2 names the cover with <c>&lt;meta name="cover" content="id"&gt;</c>
-    /// and EPUB 3 with <c>properties="cover-image"</c> on the manifest item.
-    /// Files carry one, the other, or both, and disagreement between them is
-    /// what rule EPUB-W032 reports. The EPUB 3 form is preferred when both are
-    /// present and point at different items, since it is the one modern readers
-    /// honour.
-    /// </remarks>
     private static void ReadCover(IContainer container, OpfDocument opf, BookMetadata metadata)
     {
         ManifestItem? item = opf.Manifest.FirstOrDefault(i => i.IsCoverImage);

@@ -15,11 +15,6 @@ public sealed partial class OpfDocument
     /// Serialises the document back to bytes.
     /// </summary>
     /// <returns>The complete package document.</returns>
-    /// <remarks>
-    /// An untouched document serialises to exactly the characters it arrived as,
-    /// and a one-field edit produces a one-line diff — see
-    /// <see cref="XmlSourceFormat"/> for what that costs and why.
-    /// </remarks>
     public byte[] Serialize() => Format.Compose(Document.Root);
 
     /// <summary>
@@ -27,20 +22,6 @@ public sealed partial class OpfDocument
     /// conventions.
     /// </summary>
     /// <param name="metadata">The metadata to write.</param>
-    /// <remarks>
-    /// <para>
-    /// Both conventions are always written, regardless of the declared
-    /// <c>package/@version</c>. Old readers understand only the attribute forms
-    /// and <c>calibre:series</c>; new ones prefer the refinement forms. Writing
-    /// both is what calibre does, and it is the only way a file reads correctly
-    /// in both.
-    /// </para>
-    /// <para>
-    /// Elements are updated in place and only when their value actually
-    /// changes. Nothing this method does not recognise is touched, which is how
-    /// an unknown <c>&lt;meta&gt;</c> survives a save intact.
-    /// </para>
-    /// </remarks>
     public void ApplyMetadata(BookMetadata metadata)
     {
         Throw.IfNull(metadata);
@@ -167,12 +148,6 @@ public sealed partial class OpfDocument
     /// Declares a manifest item as the cover in both conventions.
     /// </summary>
     /// <param name="manifestItemId">The manifest <c>id</c> of the cover image.</param>
-    /// <remarks>
-    /// EPUB 2 readers look for <c>&lt;meta name="cover"&gt;</c>; EPUB 3 readers
-    /// look for <c>properties="cover-image"</c> on the manifest item. Files in
-    /// the wild routinely carry one and not the other, which is what rule
-    /// EPUB-W032 reports — so when the cover does change, write both.
-    /// </remarks>
     public void ApplyCoverDeclaration(string manifestItemId)
     {
         Throw.IfNullOrEmpty(manifestItemId);

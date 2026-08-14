@@ -7,28 +7,6 @@ namespace EBookMeta.Documents;
 /// Serialises an <see cref="XElement"/> tree back to text as close to the
 /// original characters as the tree allows.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Neither <c>XElement.ToString</c> nor <c>XmlWriter</c> is faithful enough for
-/// this project, and the two ways they diverge both matter.
-/// </para>
-/// <para>
-/// <b>Empty elements.</b> Both always emit <c>&lt;x /&gt;</c> with a space, with
-/// no setting to change it, while most EPUBs write <c>&lt;x/&gt;</c>. Left
-/// alone, a one-word title fix rewrites every manifest item in the file,
-/// which is a whole-file change from an edit the user made to one field.
-/// </para>
-/// <para>
-/// <b>Namespace prefixes.</b> When a namespace is bound to both the default and
-/// an explicit prefix — extremely common in EPUB 2, where
-/// <c>xmlns:opf</c> repeats the package's own default namespace — XLinq re-picks
-/// the explicit prefix, rewriting <c>&lt;metadata&gt;</c> as
-/// <c>&lt;opf:metadata&gt;</c>. That is semantically identical and cosmetically
-/// disastrous, and it violates the rule against inventing prefixes. Here an
-/// element whose namespace matches the in-scope default is written unprefixed,
-/// which reproduces what the author wrote.
-/// </para>
-/// </remarks>
 internal static class XmlExactWriter
 {
     /// <summary>Serialises an element and its descendants.</summary>
@@ -117,12 +95,6 @@ internal static class XmlExactWriter
     /// <summary>
     /// Chooses the prefix an element should be written with.
     /// </summary>
-    /// <remarks>
-    /// Prefers no prefix whenever the element's namespace is the one in scope as
-    /// the default. This is the rule that keeps <c>&lt;metadata&gt;</c> from
-    /// becoming <c>&lt;opf:metadata&gt;</c> in files that redundantly bind
-    /// <c>xmlns:opf</c> to the package namespace.
-    /// </remarks>
     private static string QualifiedName(XElement element)
     {
         XNamespace ns = element.Name.Namespace;

@@ -39,28 +39,6 @@ public sealed record LogEntry(DateTime Time, LogLevel Level, string Message)
 /// <summary>
 /// The session log: what the application did, in order.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Deliberately a static class holding a list, not a logging framework. This is a
-/// utility that runs for twenty seconds and must reach a populated window in
-/// under 400 ms, so there is no provider model, no configuration, no reflection
-/// and no dependency — writing a line is an <c>Add</c> under a lock.
-/// </para>
-/// <para>
-/// <b>Memory is the source of truth; the file is for the run that ends badly.</b>
-/// The viewer reads <see cref="Entries"/> directly, because writing lines out and
-/// reading them back to display them would be a pointless round trip. A clean run
-/// therefore touches the disk not at all. But memory dies with the process, which
-/// is exactly the case a log is most wanted for, so the first
-/// <see cref="LogLevel.Warning"/> or worse flushes the whole session so far to
-/// <see cref="FilePath"/> and everything after it as it arrives. You get the
-/// run-up to the problem, not just the problem.
-/// </para>
-/// <para>
-/// Core writes to this and never to the console. It carries no opinion about how
-/// a line is presented; the UI decides that.
-/// </para>
-/// </remarks>
 public static class Log
 {
     /// <summary>
@@ -76,20 +54,12 @@ public static class Log
     private static bool _fileFailed;
 
     /// <summary>Raised for each entry, on the thread that logged it.</summary>
-    /// <remarks>
-    /// Lets an open log window append live. A handler must marshal to the UI
-    /// thread itself: Core does not know what a UI thread is.
-    /// </remarks>
     public static event Action<LogEntry>? Written;
 
     /// <summary>
     /// Where to write the log when something goes wrong, or <see langword="null"/>
     /// to keep it in memory only.
     /// </summary>
-    /// <remarks>
-    /// Assigning a path writes nothing. It also resets the write state, because a
-    /// new destination has had nothing written to it yet.
-    /// </remarks>
     public static string? FilePath
     {
         get => _filePath;
@@ -153,10 +123,6 @@ public static class Log
 
     /// <summary>Logs a validation finding at a level matching its severity.</summary>
     /// <param name="finding">The finding to record.</param>
-    /// <remarks>
-    /// The log is where findings surface, so a rule firing is never silent even
-    /// though the window has no panel for it.
-    /// </remarks>
     public static void Finding(Finding finding)
     {
         Throw.IfNull(finding);
@@ -187,10 +153,6 @@ public static class Log
 
     /// <summary>Writes the whole session to <see cref="FilePath"/> now.</summary>
     /// <returns>An error message, or <see langword="null"/> on success.</returns>
-    /// <remarks>
-    /// For a "save the log" command. Ordinary logging does not need this: a
-    /// warning flushes the file by itself.
-    /// </remarks>
     public static string? FlushToFile()
     {
         lock (Gate)

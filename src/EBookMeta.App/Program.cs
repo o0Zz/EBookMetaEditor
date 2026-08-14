@@ -7,23 +7,8 @@ namespace EBookMeta.App;
 /// Entry point. Receives what to edit as arguments, supplied by the Explorer
 /// context menu verb.
 /// </summary>
-/// <remarks>
-/// One file opens the single-file editor, which is the right-click case the startup
-/// budget is about. Several files, or a folder, open the batch grid. A launch that
-/// finds another instance already running hands its paths over and exits, so a
-/// multi-file selection converges on one window however the shell chose to deliver
-/// it.
-/// </remarks>
 internal static class Program
 {
-    /// <remarks>
-    /// This body does nothing but install the assembly resolver, and that is
-    /// the whole point. Dependencies live inside the exe rather than beside it
-    /// (see <see cref="EmbeddedAssemblies"/>), and the JIT loads every assembly
-    /// a method mentions before running its first instruction — so anything
-    /// touching EBookMeta.Core has to sit behind a separate, non-inlined call
-    /// that is not compiled until the resolver is already listening.
-    /// </remarks>
     [STAThread]
     internal static void Main(string[] args)
     {
@@ -85,13 +70,6 @@ internal static class Program
     /// <param name="settings">The loaded user settings.</param>
     /// <param name="paths">The paths from the command line.</param>
     /// <returns>The window to run.</returns>
-    /// <remarks>
-    /// One file is the ordinary right-click, and goes straight into the single-file
-    /// editor: that path has a 400 ms budget and must not be routed through anything
-    /// that reads a folder first. Anything else — several files, or a folder — is a
-    /// batch, and starting the grid directly avoids showing a window that would only
-    /// be replaced.
-    /// </remarks>
     private static Form CreateWindow(AppSettings settings, string[] paths)
     {
         if (paths.Length == 1 && !Directory.Exists(paths[0]))
@@ -107,12 +85,6 @@ internal static class Program
     /// <summary>
     /// Keeps the arguments that name something on disk.
     /// </summary>
-    /// <remarks>
-    /// There are no switches to parse: the only thing this application is ever
-    /// passed is what the shell substituted for <c>%1</c>. Anything that is not a
-    /// file or a folder is dropped here rather than becoming a row that fails, so a
-    /// stray quote in a registry command does not look like a broken book.
-    /// </remarks>
     private static string[] ExistingPaths(string[] args) =>
         [.. args.Where(arg => !string.IsNullOrWhiteSpace(arg))
                 .Where(arg => File.Exists(arg) || Directory.Exists(arg))];
@@ -120,12 +92,6 @@ internal static class Program
     /// <summary>
     /// Points the log at a file beside the settings and records what we started with.
     /// </summary>
-    /// <remarks>
-    /// Setting <see cref="Log.FilePath"/> does not create or open anything. The
-    /// file is written only if a warning or worse occurs, so a clean launch does
-    /// no disk I/O for logging at all — which matters against a 400 ms budget,
-    /// where opening a file can cost an antivirus scan.
-    /// </remarks>
     private static void StartLogging(AppSettings settings, string[] args)
     {
         try

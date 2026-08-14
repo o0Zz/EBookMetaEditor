@@ -8,21 +8,6 @@ namespace EBookMeta.Containers;
 /// <summary>
 /// A ZIP container — the storage behind EPUB, CBZ and FB2.ZIP.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Combines two views of the same file. <c>ZipArchive</c> supplies entry names
-/// and decompressed content; <see cref="ZipCentralDirectory"/> supplies the
-/// per-entry compression method, which <c>ZipArchiveEntry</c> does not expose
-/// and which is a hard invariant to preserve. The views are paired by index,
-/// since <c>ZipArchive.Entries</c> is in central directory order and ZIP does
-/// not guarantee unique names.
-/// </para>
-/// <para>
-/// The archive is never opened in update mode. Editing means reading fully and
-/// rebuilding into a new file, so that a crash part-way through cannot leave a
-/// truncated archive where the user's book used to be.
-/// </para>
-/// </remarks>
 public sealed class ZipContainer : IContainer
 {
     private readonly ZipArchive _archive;
@@ -50,7 +35,6 @@ public sealed class ZipContainer : IContainer
     }
 
     /// <inheritdoc />
-    /// <remarks>Always <see langword="true"/>: ZIP is fully writable here.</remarks>
     public bool IsWritable => true;
 
     /// <inheritdoc />
@@ -236,24 +220,12 @@ public sealed class ZipContainer : IContainer
     /// <param name="targetPath">The file to create.</param>
     /// <exception cref="BookIoException">The target could not be written.</exception>
     /// <remarks>
-    /// <para>
-    /// Written with SharpCompress rather than <c>System.IO.Compression</c> for
-    /// one specific reason: on .NET Framework, <c>CompressionLevel.NoCompression</c>
-    /// does not produce a <em>stored</em> entry. It produces deflate at level 0,
-    /// which is compression method 8 with the data merely not compressed. An
-    /// EPUB whose <c>mimetype</c> is method 8 is rejected by readers regardless
-    /// of how well it compressed, so the distinction is not cosmetic and there
-    /// is no way to express it through the framework's ZIP writer.
-    /// </para>
-    /// <para>
-    /// Reading stays on <c>ZipArchive</c>, which is well tested and has no
-    /// equivalent gap.
-    /// </para>
-    /// <para>
-    /// Exposed as a static so that the test corpus builds its fixtures through
-    /// exactly this code. That is what makes byte-identical round-tripping a
-    /// real property rather than a coincidence of two writers agreeing.
-    /// </para>
+    /// SharpCompress rather than <c>System.IO.Compression</c> for one specific
+    /// reason: on .NET Framework, <c>CompressionLevel.NoCompression</c> produces
+    /// deflate at level 0 (method 8), not a <em>stored</em> entry. An EPUB whose
+    /// <c>mimetype</c> is method 8 is rejected by readers, and there is no way to
+    /// express the difference through the framework's ZIP writer. Reading stays on
+    /// <c>ZipArchive</c>, which has no equivalent gap.
     /// </remarks>
     public static void Create(IEnumerable<PendingEntry> entries, string targetPath)
     {

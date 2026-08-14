@@ -9,10 +9,8 @@ namespace EBookMeta.Tests;
 /// Tests for the field projection both editors share.
 /// </summary>
 /// <remarks>
-/// These rules used to live in the window and were therefore untestable. They are
-/// what makes "open a file, save it, get identical bytes" true, so they are worth
-/// pinning: every <c>Apply</c> that changes nothing must report that it changed
-/// nothing, or an untouched file gets rewritten.
+/// These rules are what makes "open a file, save it, get identical bytes" true, so
+/// every <c>Apply</c> that changes nothing must report that it changed nothing.
 /// </remarks>
 public sealed class MetadataFieldsTests
 {
@@ -66,14 +64,6 @@ public sealed class MetadataFieldsTests
     public void Reads_each_field_as_editable_text(MetadataField field, string expected) =>
         Assert.Equal(expected, MetadataFields.Read(Sample(), field));
 
-    /// <summary>
-    /// Only the primary creators are shown, because only they are edited — the
-    /// contributor must not appear in a box that would then rewrite it.
-    /// </summary>
-    [Fact]
-    public void Contributors_are_not_part_of_the_authors_text() =>
-        Assert.DoesNotContain("McKean", MetadataFields.Read(Sample(), MetadataField.Creators));
-
     [Fact]
     public void An_absent_field_reads_as_empty_text()
     {
@@ -85,10 +75,7 @@ public sealed class MetadataFieldsTests
         Assert.Equal(string.Empty, MetadataFields.Read(empty, MetadataField.Creators));
     }
 
-    /// <summary>
-    /// The property everything else rests on: writing back what was read is not an
-    /// edit.
-    /// </summary>
+    /// <summary>The property everything else rests on.</summary>
     [Theory]
     [InlineData(MetadataField.Title)]
     [InlineData(MetadataField.SortTitle)]
@@ -108,43 +95,25 @@ public sealed class MetadataFieldsTests
     }
 
     [Fact]
-    public void Applying_a_new_value_reports_a_change()
+    public void Applying_text_trims_it_and_treats_blank_as_a_clear()
     {
         BookMetadata metadata = Sample();
 
-        Assert.True(MetadataFields.Apply(metadata, MetadataField.Title, "American Gods"));
+        Assert.True(MetadataFields.Apply(metadata, MetadataField.Title, "  American Gods  "));
         Assert.Equal("American Gods", metadata.Title);
-    }
 
-    [Theory]
-    [InlineData("")]
-    [InlineData("   ")]
-    public void Blank_text_clears_a_field(string blank)
-    {
-        BookMetadata metadata = Sample();
-
-        Assert.True(MetadataFields.Apply(metadata, MetadataField.Publisher, blank));
+        Assert.True(MetadataFields.Apply(metadata, MetadataField.Publisher, "   "));
         Assert.Null(metadata.Publisher);
     }
 
     [Fact]
-    public void Surrounding_whitespace_is_trimmed()
-    {
-        BookMetadata metadata = Sample();
-
-        MetadataFields.Apply(metadata, MetadataField.Title, "  American Gods  ");
-
-        Assert.Equal("American Gods", metadata.Title);
-    }
-
-    /// <summary>
-    /// An editor that shows only authors must not delete the illustrator it never
-    /// showed.
-    /// </summary>
-    [Fact]
     public void Rewriting_the_authors_keeps_the_contributors()
     {
         BookMetadata metadata = Sample();
+
+        // Only the primary creators are shown, because only they are edited — an
+        // editor that shows only authors must not delete the illustrator.
+        Assert.DoesNotContain("McKean", MetadataFields.Read(metadata, MetadataField.Creators));
 
         Assert.True(MetadataFields.Apply(metadata, MetadataField.Creators, "Terry Pratchett"));
 
@@ -154,14 +123,17 @@ public sealed class MetadataFieldsTests
             metadata.Creators.Where(c => c.Kind == CreatorKind.Contributor).Select(c => c.Name));
     }
 
-    /// <summary>
-    /// "Gaiman, Neil" belongs to Neil Gaiman. Carrying it onto whoever ends up in
-    /// that position would be worse than leaving it empty.
-    /// </summary>
     [Fact]
-    public void A_sort_name_does_not_follow_a_changed_author()
+    public void A_sort_name_follows_its_author_and_no_one_else()
     {
         BookMetadata metadata = Sample();
+
+        MetadataFields.Apply(metadata, MetadataField.Creators, "Neil Gaiman; Terry Pratchett");
+
+        // "Gaiman, Neil" belongs to Neil Gaiman. Carrying it onto whoever ends up
+        // in that position would be worse than leaving it empty.
+        Assert.Equal("Gaiman, Neil", metadata.PrimaryCreators.First().SortName);
+        Assert.Null(metadata.PrimaryCreators.Last().SortName);
 
         MetadataFields.Apply(metadata, MetadataField.Creators, "Terry Pratchett");
 
@@ -172,146 +144,76 @@ public sealed class MetadataFieldsTests
     }
 
     [Fact]
-    public void A_sort_name_survives_when_its_author_is_untouched()
-    {
-        BookMetadata metadata = Sample();
-
-        MetadataFields.Apply(metadata, MetadataField.Creators, "Neil Gaiman; Terry Pratchett");
-
-        Assert.Equal("Gaiman, Neil", metadata.PrimaryCreators.First().SortName);
-        Assert.Null(metadata.PrimaryCreators.Last().SortName);
-    }
-
-    [Fact]
-    public void Authors_are_split_on_semicolons_and_trimmed()
+    public void Authors_split_on_semicolons_and_subjects_on_commas()
     {
         BookMetadata metadata = Sample();
 
         MetadataFields.Apply(metadata, MetadataField.Creators, " A ;; B ; ");
-
         Assert.Equal(["A", "B"], metadata.PrimaryCreators.Select(c => c.Name));
-    }
-
-    [Fact]
-    public void Subjects_are_split_on_commas_and_trimmed()
-    {
-        BookMetadata metadata = Sample();
 
         Assert.True(MetadataFields.Apply(metadata, MetadataField.Subjects, "Horror,, Comics , "));
         Assert.Equal(["Horror", "Comics"], metadata.Subjects);
     }
 
-    /// <summary>
-    /// The name carries the index, so clearing the name clears both. An index on
-    /// its own is not something the model can hold.
-    /// </summary>
     [Fact]
-    public void Clearing_the_series_name_clears_the_index_too()
-    {
-        BookMetadata metadata = Sample();
-
-        Assert.True(MetadataFields.Apply(metadata, MetadataField.Series, ""));
-        Assert.Null(metadata.Series);
-        Assert.Equal(string.Empty, MetadataFields.Read(metadata, MetadataField.SeriesIndex));
-    }
-
-    [Fact]
-    public void Renaming_the_series_keeps_the_index()
+    public void The_series_name_carries_the_index()
     {
         BookMetadata metadata = Sample();
 
         MetadataFields.Apply(metadata, MetadataField.Series, "Discworld");
-
         Assert.Equal("Discworld", metadata.Series?.Name);
         Assert.Equal(2.5m, metadata.Series?.Index);
-    }
 
-    [Fact]
-    public void An_index_with_no_series_has_nowhere_to_go()
-    {
-        var metadata = new BookMetadata();
+        // An index on its own is not something the model can hold, so clearing the
+        // name clears both.
+        Assert.True(MetadataFields.Apply(metadata, MetadataField.Series, ""));
+        Assert.Null(metadata.Series);
+        Assert.Equal(string.Empty, MetadataFields.Read(metadata, MetadataField.SeriesIndex));
 
         Assert.False(MetadataFields.Apply(metadata, MetadataField.SeriesIndex, "3"));
         Assert.Null(metadata.Series);
     }
 
-    [Theory]
-    [InlineData("3", 3)]
-    [InlineData("2.5", 2.5)]
-    public void A_numeric_index_is_parsed_invariantly(string text, double expected)
-    {
-        BookMetadata metadata = Sample();
-
-        MetadataFields.Apply(metadata, MetadataField.SeriesIndex, text);
-
-        Assert.Equal((decimal)expected, metadata.Series?.Index);
-        Assert.Null(metadata.Series?.RawIndex);
-    }
-
-    /// <summary>
-    /// "3 of 7" and "Annual" are real, and the format that supplied one can
-    /// usually store it back.
-    /// </summary>
     [Fact]
-    public void An_index_that_will_not_parse_is_kept_verbatim()
+    public void An_index_is_parsed_invariantly_or_kept_verbatim()
     {
         BookMetadata metadata = Sample();
 
-        MetadataFields.Apply(metadata, MetadataField.SeriesIndex, "3 of 7");
+        MetadataFields.Apply(metadata, MetadataField.SeriesIndex, "2.5");
+        Assert.Equal(2.5m, metadata.Series?.Index);
+        Assert.Null(metadata.Series?.RawIndex);
 
+        // "3 of 7" and "Annual" are real, and the format that supplied one can
+        // usually store it back.
+        MetadataFields.Apply(metadata, MetadataField.SeriesIndex, "3 of 7");
         Assert.Null(metadata.Series?.Index);
         Assert.Equal("3 of 7", metadata.Series?.RawIndex);
         Assert.Equal("3 of 7", MetadataFields.Read(metadata, MetadataField.SeriesIndex));
-    }
-
-    [Fact]
-    public void Clearing_the_index_leaves_the_series()
-    {
-        BookMetadata metadata = Sample();
 
         Assert.True(MetadataFields.Apply(metadata, MetadataField.SeriesIndex, ""));
         Assert.Equal("London Below", metadata.Series?.Name);
         Assert.Null(metadata.Series?.Index);
     }
 
-    /// <summary>
-    /// A file that said "2013" must not come back as "2013-01-01", which would
-    /// assert a day it never claimed.
-    /// </summary>
     [Fact]
     public void A_date_keeps_the_characters_it_arrived_as()
     {
         BookMetadata metadata = Sample();
 
+        // A file that said "2013" must not come back as "2013-01-01", which would
+        // assert a day it never claimed.
         Assert.False(MetadataFields.Apply(metadata, MetadataField.PublicationDate, "2013"));
         Assert.Equal("2013", metadata.PublicationDate?.Raw);
         Assert.Equal(DatePrecision.Year, metadata.PublicationDate?.Precision);
-    }
-
-    [Fact]
-    public void A_new_date_is_reparsed()
-    {
-        BookMetadata metadata = Sample();
 
         Assert.True(MetadataFields.Apply(metadata, MetadataField.PublicationDate, "2013-09-24"));
         Assert.Equal(DatePrecision.Day, metadata.PublicationDate?.Precision);
-    }
-
-    [Fact]
-    public void An_unparseable_date_is_still_kept()
-    {
-        BookMetadata metadata = Sample();
 
         MetadataFields.Apply(metadata, MetadataField.PublicationDate, "circa 1890");
-
         Assert.Equal("circa 1890", metadata.PublicationDate?.Raw);
         Assert.Equal(DatePrecision.Unknown, metadata.PublicationDate?.Precision);
     }
 
-    /// <summary>
-    /// A field with no text projection is a programming error, not something to
-    /// guess at.
-    /// </summary>
     [Theory]
     [InlineData(MetadataField.Cover)]
     [InlineData(MetadataField.Identifiers)]

@@ -9,9 +9,9 @@ namespace EBookMeta.Tests;
 /// </summary>
 /// <remarks>
 /// Loading through <c>XDocument</c> would hide the difference between "declared
-/// UTF-8 and is UTF-8" and "declared UTF-8, is really Windows-1252, and the
-/// parser substituted replacement characters". Telling the user which one they
-/// have is the point of rule EPUB-E050.
+/// UTF-8 and is UTF-8" and "declared UTF-8, is really Windows-1252, and the parser
+/// substituted replacement characters". Telling the user which one they have is the
+/// point of rule EPUB-E050.
 /// </remarks>
 public sealed class EncodingTests
 {
@@ -25,27 +25,15 @@ public sealed class EncodingTests
         Assert.True(info.HasByteOrderMark);
         Assert.Equal(3, info.ByteOrderMarkLength);
         Assert.True(info.DeclarationMatchesBytes);
+        Assert.Equal("UTF-8", info.DeclaredName);
         Assert.StartsWith("<?xml", XmlEncodingDetector.Decode(bytes, info));
     }
 
     [Fact]
-    public void Declared_utf8_that_really_is_utf8_is_accepted()
-    {
-        byte[] bytes = Encoding.UTF8.GetBytes("<?xml version=\"1.0\" encoding=\"UTF-8\"?><a>café</a>");
-
-        XmlEncodingInfo info = XmlEncodingDetector.Detect(bytes);
-
-        Assert.True(info.DeclarationMatchesBytes);
-        Assert.Equal("UTF-8", info.DeclaredName);
-    }
-
-    /// <summary>
-    /// The <c>latin1-declared-utf8</c> fixture case. 0xE9 is 'é' in Latin-1 and
-    /// an invalid lone lead byte in UTF-8.
-    /// </summary>
-    [Fact]
     public void Latin1_bytes_declared_as_utf8_are_caught()
     {
+        // The latin1-declared-utf8 fixture case. 0xE9 is 'é' in Latin-1 and an
+        // invalid lone lead byte in UTF-8.
         byte[] bytes =
         [
             .. Encoding.ASCII.GetBytes("<?xml version=\"1.0\" encoding=\"UTF-8\"?><a>caf"),
@@ -60,10 +48,9 @@ public sealed class EncodingTests
     }
 
     /// <summary>
-    /// .NET Framework has every legacy code page in the box, unlike .NET Core
-    /// where this needs an extra encoding provider. So a Windows-1252 EPUB is
-    /// decoded correctly rather than merely diagnosed — which is one of the
-    /// reasons this project targets net48.
+    /// .NET Framework has every legacy code page in the box, unlike .NET Core where
+    /// this needs an extra encoding provider — so a Windows-1252 EPUB is decoded
+    /// correctly rather than merely diagnosed. One of the reasons for targeting net48.
     /// </summary>
     [Fact]
     public void Windows1252_is_available_and_decodes_correctly()
@@ -83,24 +70,13 @@ public sealed class EncodingTests
     }
 
     [Fact]
-    public void No_declaration_defaults_to_utf8()
+    public void No_declaration_defaults_to_utf8_and_still_checks_the_bytes()
     {
-        byte[] bytes = Encoding.UTF8.GetBytes("<a>plain</a>");
+        Assert.True(XmlEncodingDetector.Detect(Encoding.UTF8.GetBytes("<a>plain</a>")).DeclarationMatchesBytes);
+        Assert.Equal(65001, XmlEncodingDetector.Detect(Encoding.UTF8.GetBytes("<a>plain</a>")).Encoding.CodePage);
 
-        XmlEncodingInfo info = XmlEncodingDetector.Detect(bytes);
-
-        Assert.Equal(65001, info.Encoding.CodePage);
-        Assert.True(info.DeclarationMatchesBytes);
-    }
-
-    [Fact]
-    public void No_declaration_and_invalid_utf8_is_reported()
-    {
-        byte[] bytes = [.. Encoding.ASCII.GetBytes("<a>caf"), 0xE9, .. Encoding.ASCII.GetBytes("</a>")];
-
-        XmlEncodingInfo info = XmlEncodingDetector.Detect(bytes);
-
-        Assert.False(info.DeclarationMatchesBytes);
+        byte[] invalid = [.. Encoding.ASCII.GetBytes("<a>caf"), 0xE9, .. Encoding.ASCII.GetBytes("</a>")];
+        Assert.False(XmlEncodingDetector.Detect(invalid).DeclarationMatchesBytes);
     }
 
     [Fact]
@@ -115,13 +91,11 @@ public sealed class EncodingTests
         Assert.Equal(65001, info.Encoding.CodePage);
     }
 
-    /// <summary>
-    /// UTF-32 LE and UTF-16 LE both begin FF FE, so testing in the wrong order
-    /// would misidentify every UTF-32 LE document.
-    /// </summary>
     [Fact]
     public void Utf32_le_bom_is_not_mistaken_for_utf16()
     {
+        // UTF-32 LE and UTF-16 LE both begin FF FE, so testing in the wrong order
+        // would misidentify every UTF-32 LE document.
         byte[] bytes = [0xFF, 0xFE, 0x00, 0x00, .. new UTF32Encoding(false, false).GetBytes("<a/>")];
 
         Assert.Equal(12000, XmlEncodingDetector.Detect(bytes).Encoding.CodePage);
@@ -138,8 +112,8 @@ public sealed class EncodingTests
 
         XmlEncodingInfo info = XmlEncodingDetector.Detect(bytes);
 
-        // The BOM wins, because it is unambiguous — but the contradiction is
-        // still worth telling the user about rather than quietly resolving.
+        // The BOM wins, because it is unambiguous — but the contradiction is still
+        // worth telling the user about rather than quietly resolving.
         Assert.Equal(65001, info.Encoding.CodePage);
         Assert.False(info.DeclarationMatchesBytes);
     }
@@ -148,8 +122,6 @@ public sealed class EncodingTests
     [InlineData("<?xml version=\"1.0\" encoding='UTF-8'?><a/>", "UTF-8")]
     [InlineData("<?xml version=\"1.0\" encoding = \"UTF-8\" ?><a/>", "UTF-8")]
     [InlineData("<?xml version=\"1.0\"?><a/>", null)]
-    public void Declaration_parsing_tolerates_spacing_and_quoting(string xml, string? expected)
-    {
+    public void Declaration_parsing_tolerates_spacing_and_quoting(string xml, string? expected) =>
         Assert.Equal(expected, XmlEncodingDetector.Detect(Encoding.UTF8.GetBytes(xml)).DeclaredName);
-    }
 }

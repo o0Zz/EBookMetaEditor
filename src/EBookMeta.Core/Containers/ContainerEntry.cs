@@ -4,22 +4,12 @@ namespace EBookMeta.Containers;
 /// One entry inside a container, described well enough that
 /// <see cref="IContainer.Rebuild"/> can reproduce it.
 /// </summary>
-/// <remarks>
-/// Knows nothing about books. An entry is a name, some bytes, and the storage
-/// details needed to put it back the way it was found.
-/// </remarks>
 public sealed record ContainerEntry
 {
     /// <summary>
     /// The entry name, with forward slashes, exactly as stored — never
     /// normalised, rooted or resolved.
     /// </summary>
-    /// <remarks>
-    /// Deliberately raw. An entry named <c>../../etc/passwd</c> or
-    /// <c>C:\windows\system32\x</c> is reported by rule GEN-E003 and refused;
-    /// it is never followed. Normalising here would erase the evidence the rule
-    /// needs.
-    /// </remarks>
     public required string Name { get; init; }
 
     /// <summary>
@@ -46,20 +36,6 @@ public sealed record ContainerEntry
     /// The compression method as read, using ZIP method codes: 0 for stored,
     /// 8 for deflate.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Captured because reproducing it is a hard invariant, and because rule
-    /// EPUB-E040 needs to know whether <c>mimetype</c> was genuinely stored.
-    /// Formats that do not compress per entry report 0.
-    /// </para>
-    /// <para>
-    /// This is read from the ZIP central directory rather than inferred.
-    /// <c>ZipArchiveEntry</c> does not expose it, and comparing
-    /// <c>CompressedLength</c> to <c>Length</c> is not a sound substitute: a
-    /// deflate stream can be the same length as its input, or longer, for small
-    /// or already-compressed content.
-    /// </para>
-    /// </remarks>
     public ushort CompressionMethod { get; init; }
 
     /// <summary>The last-modified timestamp recorded for the entry.</summary>

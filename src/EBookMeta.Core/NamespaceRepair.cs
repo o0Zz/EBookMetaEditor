@@ -16,12 +16,6 @@ public sealed record NamespaceRepairResult
     /// <summary>
     /// Whether the repaired document parses as well-formed, namespace-correct XML.
     /// </summary>
-    /// <remarks>
-    /// <see langword="false"/> means the repair is real but insufficient — the
-    /// document has something else wrong with it too. A partial repair is not
-    /// used: handing back a document that still will not parse is worse than
-    /// reporting the original error.
-    /// </remarks>
     public required bool IsComplete { get; init; }
 
     /// <summary>Prefixes that were declared, in first-use order.</summary>
@@ -45,42 +39,6 @@ public sealed record NamespaceRepairResult
 /// <summary>
 /// Supplies namespace declarations a document uses but never declares.
 /// </summary>
-/// <remarks>
-/// <para>
-/// This fixes the single most common reason a package document will not open:
-/// <c>'opf' is an undeclared prefix</c>. It happens because <c>opf:file-as</c>,
-/// <c>opf:role</c> and <c>opf:scheme</c> are attributes on <c>dc:</c> elements, so
-/// an author or tool that copies a <c>&lt;metadata&gt;</c> block carries the
-/// attributes across without the <c>xmlns:opf</c> declaration that gave them
-/// meaning. The document is otherwise intact — every byte of content is fine and
-/// only one declaration is absent.
-/// </para>
-/// <para>
-/// Three decisions hold this together, and each is load-bearing:
-/// </para>
-/// <para>
-/// <b>Diagnose permissively, fix surgically, verify strictly.</b> The strict
-/// parser refuses the file outright, so the prefixes are found by reading the
-/// markup with namespace processing switched off. The fix is one attribute
-/// inserted at one offset — not a reserialisation, because re-emitting the whole
-/// tree rewrites every line, and a user who opened a book to correct a typo would
-/// save a file in which nothing is where they left it. The result is then parsed
-/// strictly to prove it actually loads.
-/// </para>
-/// <para>
-/// <b>Read the markup, never the exception message.</b> Pulling <c>opf</c> out of
-/// "'opf' is an undeclared prefix" with a regex works perfectly on an English
-/// machine and silently stops matching everywhere else, because the framework
-/// localises that text.
-/// </para>
-/// <para>
-/// <b>Report unknown prefixes; never invent one.</b> <see cref="KnownNamespaces"/>
-/// is the whole list of prefixes this project will bind on an author's behalf.
-/// Binding an unrecognised <c>acme:</c> to a plausible-looking URI would fabricate
-/// metadata that was never in the file, and the user would have no reason to
-/// doubt it.
-/// </para>
-/// </remarks>
 public static class NamespaceRepair
 {
     /// <summary>The rule this repair answers.</summary>
@@ -89,11 +47,6 @@ public static class NamespaceRepair
     /// <summary>
     /// Namespace URIs a missing declaration can be recovered from, by prefix.
     /// </summary>
-    /// <remarks>
-    /// Every entry is fixed by a published specification, not by convention. The
-    /// boundary of this table is the feature's safety property: a prefix that is
-    /// not in it is reported, never guessed.
-    /// </remarks>
     private static readonly Dictionary<string, string> KnownNamespaces = new(StringComparer.Ordinal)
     {
         ["opf"] = "http://www.idpf.org/2007/opf",
@@ -197,10 +150,6 @@ public static class NamespaceRepair
     /// <param name="bytes">The document's bytes.</param>
     /// <param name="entryName">The container entry name, reported as the location.</param>
     /// <returns>One finding per undeclared prefix, empty when there are none.</returns>
-    /// <remarks>
-    /// <c>HasAutofix</c> distinguishes the prefixes this project will bind from the
-    /// ones it will only tell you about.
-    /// </remarks>
     public static IEnumerable<Finding> Validate(ReadOnlySpan<byte> bytes, string entryName = "content.opf")
     {
         XmlEncodingInfo encoding = XmlEncodingDetector.Detect(bytes);
@@ -237,13 +186,6 @@ public static class NamespaceRepair
     /// Finds prefixes used on an element or attribute name that no
     /// <c>xmlns:</c> declaration binds.
     /// </summary>
-    /// <remarks>
-    /// <see cref="XmlTextReader"/> is used deliberately, obsolete though it looks:
-    /// it is the only reader exposing <c>Namespaces = false</c>, and
-    /// <c>XmlReader.Create</c> offers no equivalent. Without that, a document
-    /// whose prefixes do not resolve cannot be read at all — which is exactly the
-    /// document being diagnosed.
-    /// </remarks>
     private static List<Undeclared> FindUndeclared(
         string text, out bool reachedEnd, out string? stoppedBecause)
     {
@@ -344,14 +286,6 @@ public static class NamespaceRepair
     /// Finds the offset in the root element's start tag at which an attribute may
     /// be inserted.
     /// </summary>
-    /// <remarks>
-    /// Scanned from the raw text because no parser will open this document. Two
-    /// details make a naive <c>IndexOf('&gt;')</c> wrong, and both occur in real
-    /// files: a quoted attribute value may contain <c>&gt;</c>
-    /// (<c>title="a &gt; b"</c>), and a DOCTYPE internal subset may contain one
-    /// (<c>&lt;!DOCTYPE p [&lt;!ENTITY nbsp "&amp;#160;"&gt;]&gt;</c>). Quotes and
-    /// bracket depth are both tracked.
-    /// </remarks>
     private static bool FindRootTagInsertionPoint(string text, out int insertAt)
     {
         insertAt = 0;

@@ -6,20 +6,6 @@ namespace EBookMeta.App;
 /// <summary>
 /// User preferences, persisted beside the executable.
 /// </summary>
-/// <remarks>
-/// <para>
-/// Stored in the application's own folder, per the promise that EBookMetaEditor keeps
-/// no configuration elsewhere — unzip it, use it, delete the folder and nothing
-/// is left behind. If that folder is read-only, which it will be for an unzip
-/// into Program Files, it falls back to <c>%APPDATA%</c> rather than silently
-/// discarding the user's choices.
-/// </para>
-/// <para>
-/// Serialised by hand. The schema is four flags and a list of extensions;
-/// pulling in a JSON library for that would cost more startup than the whole
-/// settings load, and cold launch has a 400 ms budget.
-/// </para>
-/// </remarks>
 internal sealed class AppSettings
 {
     private const string FileName = "settings.json";
@@ -27,12 +13,6 @@ internal sealed class AppSettings
     /// <summary>
     /// The interface language, as a two-letter code, or empty to follow Windows.
     /// </summary>
-    /// <remarks>
-    /// Empty by default, which is the answer that is right without being asked:
-    /// a French user's first launch is in French. An explicit choice is for the
-    /// case the default gets wrong — an English interface on a German Windows,
-    /// which is a preference no amount of detection can guess.
-    /// </remarks>
     internal string Language { get; set; } = string.Empty;
 
     /// <summary>Whether a <c>.bak</c> is left beside a file after saving.</summary>
@@ -48,11 +28,6 @@ internal sealed class AppSettings
     internal bool WindowMaximised { get; set; }
 
     /// <summary>The last bounds of the batch window, which is sized separately.</summary>
-    /// <remarks>
-    /// Its own setting rather than sharing the editor's, because the two windows
-    /// want different shapes: a form over one file is tall and narrow, a grid over
-    /// four hundred is wide.
-    /// </remarks>
     internal Rectangle BatchWindowBounds { get; set; } = Rectangle.Empty;
 
     /// <summary>Whether the batch window was last maximised.</summary>
@@ -61,10 +36,6 @@ internal sealed class AppSettings
     /// <summary>
     /// The extensions the context-menu button registers.
     /// </summary>
-    /// <remarks>
-    /// Both supported formats by default. Kept as a set so a user can tag comics
-    /// without EBookMetaEditor appearing on their EPUBs.
-    /// </remarks>
     internal List<string> RegisteredExtensions { get; set; } = [".epub", ".cbz"];
 
     /// <summary>The file the settings were loaded from and will be saved to.</summary>
@@ -225,12 +196,6 @@ internal sealed class AppSettings
     /// <summary>
     /// Reads a flat JSON object of string and boolean values.
     /// </summary>
-    /// <remarks>
-    /// Deliberately minimal — it understands exactly the shape this class
-    /// writes. Anything else it does not recognise is skipped rather than
-    /// treated as an error, so a settings file from a future version does not
-    /// prevent an older build from starting.
-    /// </remarks>
     private static Dictionary<string, string> ParseFlatJson(string text)
     {
         var result = new Dictionary<string, string>(StringComparer.Ordinal);

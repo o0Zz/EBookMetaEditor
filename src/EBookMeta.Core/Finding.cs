@@ -1,10 +1,6 @@
 namespace EBookMeta;
 
 /// <summary>How badly a finding affects the file.</summary>
-/// <remarks>
-/// The letter in a rule ID encodes this: <c>EPUB-F001</c> is fatal,
-/// <c>EPUB-E010</c> an error, <c>EPUB-W014</c> a warning.
-/// </remarks>
 public enum Severity
 {
     /// <summary>
@@ -36,12 +32,6 @@ public enum Severity
 /// <summary>
 /// One validation result: which rule fired, how bad it is, and where.
 /// </summary>
-/// <remarks>
-/// The validator is the core value of this project, so findings are structured
-/// data rather than strings. A stable <see cref="RuleId"/> lets a user script
-/// against a specific check, lets the test corpus name fixtures after the rule
-/// they trigger, and lets a message be reworded without breaking anything.
-/// </remarks>
 public sealed record Finding
 {
     /// <summary>
@@ -81,12 +71,6 @@ public sealed record Finding
     /// <summary>
     /// Whether a repair exists that could fix this automatically.
     /// </summary>
-    /// <remarks>
-    /// Distinguishes a problem the tool will correct on open from one it will
-    /// only report. A correction is held in memory and reaches the file only
-    /// through an ordinary save, so this never means "your file has been
-    /// rewritten".
-    /// </remarks>
     public bool HasAutofix { get; init; }
 
     /// <summary>
