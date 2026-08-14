@@ -93,12 +93,12 @@ public sealed class BatchEntry
                 yield break;
             }
 
-            foreach (MetadataField field in MetadataFields.All)
+            foreach (MetadataField candidate in MetadataFields.All)
             {
-                if (_original.TryGetValue(field, out string? original) &&
-                    !string.Equals(original, MetadataFields.Read(metadata, field), StringComparison.Ordinal))
+                if (_original.TryGetValue(candidate, out string? original) &&
+                    !string.Equals(original, MetadataFields.Read(metadata, candidate), StringComparison.Ordinal))
                 {
-                    yield return field;
+                    yield return candidate;
                 }
             }
         }
