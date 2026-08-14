@@ -74,11 +74,11 @@ shell.verb = Editar metadatos
 shell.updateFailed = No se pudo actualizar el menú contextual: {0}
 
 about.title = Acerca de EBookMetaEditor
-about.version = Versión {0}   ·   .NET Framework 4.8
+about.version = Versión {0}
 about.what = Un editor de metadatos rápido para libros electrónicos y cómics. Haga clic derecho en un archivo, corrija los metadatos y cierre. El XML dañado se repara al abrir; el archivo del disco solo cambia cuando usted guarda.
 about.formats = Formatos editables:
 about.formats.none = (ninguno registrado)
-about.note = Los demás formatos se identifican pero no se abren, así que un .cbz que en realidad es un archivo RAR se nombra en lugar de estropearse.
+about.author = By o0Zz (https://github.com/o0Zz/EBookMetaEditor)
 
 log.title = Registro
 log.includeDebug = Incluir detalles de depuración

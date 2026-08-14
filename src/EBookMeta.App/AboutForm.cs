@@ -71,7 +71,7 @@ internal sealed class AboutForm : Form
             Margin = new Padding(2, 0, 0, 12),
         };
 
-        Label note = Paragraph(Strings.Get("about.note"), SystemColors.GrayText);
+        Label author = Paragraph(Strings.Get("about.author"), SystemColors.GrayText);
 
         var ok = new Button
         {
@@ -91,7 +91,7 @@ internal sealed class AboutForm : Form
 
         buttons.Controls.Add(ok);
 
-        foreach (Control row in new Control[] { name, detail, what, formatsLabel, formats, note })
+        foreach (Control row in new Control[] { name, detail, what, formatsLabel, formats, author })
         {
             body.RowCount++;
             body.RowStyles.Add(new RowStyle(SizeType.AutoSize));

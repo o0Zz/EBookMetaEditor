@@ -87,11 +87,12 @@ shell.verb = Edit metadata
 shell.updateFailed = The context menu could not be updated: {0}
 
 about.title = About EBookMetaEditor
-about.version = Version {0}   ·   .NET Framework 4.8
+about.version = Version {0}
 about.what = A fast metadata editor for ebooks and comics. Right-click a file, fix the metadata, close. Broken XML is repaired on open; the file on disk is only changed when you save.
 about.formats = Editable formats:
 about.formats.none = (none registered)
-about.note = Other formats are identified but not opened, so a .cbz that is really a RAR archive is named rather than mangled.
+# A name and a URL: the same line in every language, and deliberately not translated.
+about.author = By o0Zz (https://github.com/o0Zz/EBookMetaEditor)
 
 log.title = Log
 log.includeDebug = Include debug detail
