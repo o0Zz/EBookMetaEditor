@@ -31,24 +31,28 @@ separate; conflating them is the main design risk in this codebase.
 | EPUB 2 / 3 | ZIP | OPF | yes |
 | CBZ | ZIP | `ComicInfo.xml` | yes |
 | CBT | TAR | `ComicInfo.xml` | yes |
+| FB2 | none (raw XML) | `<description>` | yes |
+| FB2.ZIP | ZIP | `<description>` | yes |
+| MOBI / PRC | PalmDB | EXTH | yes |
+| AZW / AZW3 | PalmDB | EXTH (one or two) | yes |
 
-That is the whole list, and it is deliberately short. Everything else costs a new
-container, a new metadata document, or both.
 
-CBT is the illustration of what "cheap" means here, and why the two axes are kept
-apart: it reuses `ComicInfo.xml` and every comic rule unchanged, so it cost one
-`IContainer` and three lines of registration. `CbzFormat` is registered twice, once
-per `FormatId`, and names no container. **A format that reuses an existing metadata
-document is a container; a format that needs a new one is a project.**
+The table has two axes for a reason, and the additions show it. CBT reuses
+`ComicInfo.xml` and every comic rule unchanged, so it cost one `IContainer` and
+three lines of registration. FB2.ZIP reuses the FB2 document over the ZIP container
+already there and cost nothing but a registration. MOBI cost both halves at once.
+**A format that reuses an existing metadata document is a container; a format that
+needs a new one is a project.** Each of `CbzFormat`, `Fb2Format` and `MobiFormat` is
+registered twice, once per `FormatId`, and none of them names a container.
 
-**Explicitly out of scope**, say so rather than attempting: CBR, CB7,
-MOBI, PRC, AZW, AZW3, KF8, KFX, AZW4, FB2, PDF, LIT, PDB, RB, DjVu, audiobook
-formats.
+**Explicitly out of scope**, say so rather than attempting: CBR, CB7, KFX, AZW4,
+PDF, LIT, PDB, RB, DjVu, audiobook formats.
 
-Do not add one of these because it "looks close to CBZ". MOBI and AZW3 need PalmDB
-record surgery with offset arithmetic, PDF needs incremental update, KFX and LIT
-have no implementation outside GPL projects. Each is a project of its own, and none
-is in scope.
+Do not add one of these because it "looks close to" something supported. PDF needs
+incremental update, KFX is a proprietary Ion container, LIT has no implementation
+outside GPL projects, and `.pdb` is not one format but a family of them — PalmDoc,
+eReader, Plucker — that happen to share a container with MOBI. Each is a project of
+its own, and none is in scope.
 
 **CBR and CB7 are the ones to keep saying no to**, because they look like the CBT
 change and are not. SharpCompress reads RAR and 7z and writes neither: RAR
@@ -114,14 +118,17 @@ src/
     NaturalNameComparer.cs so 2.jpg sorts before 10.jpg
     Log.cs                 the session log: Info / Warning / Error / Finding
     Compat.cs              everything net48 lacks, in one file
-    Containers/        implementations of IContainer: ZipContainer,
-                       ZipCentralDirectory, TarContainer, TarHeader,
+    Containers/        implementations of IContainer: ZipContainer +
+                       ZipCentralDirectory, TarContainer + TarHeader,
+                       PalmDbContainer, RawContainer, SectionStream,
                        ContainerEntry, PendingEntry
     Formats/           implementations of IBookFormat: EpubFormat, CbzFormat
-                       (registered twice, for CBZ and CBT),
-                       each split X.cs (Read/Write) + X.Rules.cs (the rules);
+                       (CBZ + CBT), Fb2Format (FB2 + FB2.ZIP), MobiFormat
+                       (MOBI/PRC + AZW/AZW3); each split X.cs (Read/Write) +
+                       X.Rules.cs (the rules);
                        FormatDetector, FormatCapabilities, FormatId, ReadOptions
-    Documents/         OpfDocument (+ .Write), ComicInfoDocument, ContainerXml,
+    Documents/         OpfDocument (+ .Write), ComicInfoDocument, Fb2Document,
+                       MobiDocument, ContainerXml,
                        and the internal Xml* set that XDocument makes necessary
     Model/             BookMetadata, Creator, Identifier, SeriesInfo, CoverImage
   EBookMeta.App/        net48          — WinForms, single instance, argv = paths
@@ -207,9 +214,23 @@ entry as found, the other instructs a rebuild to produce one, and
 content as a `Func<Stream>` so a rebuild streams entries through rather than
 holding a 300-page comic in memory.
 
-ZIP and TAR are implemented, and `BookContainers.Open` is where that is decided.
-`IsWritable` stays on the interface because a read-only container is a real
-concept the callers should keep handling.
+Four are implemented — ZIP, TAR, PalmDB and Raw — and `BookContainers.Open` is
+where the choice is made. `IsWritable` stays on the interface because a read-only
+container is a real concept the callers should keep handling.
+
+`RawContainer` is the degenerate case and worth understanding before adding
+anything like it: a bare `.fb2` is not an archive at all, so it is presented as a
+container of exactly one entry named after the file. That is a small lie, and it
+buys the whole design — `Fb2Format` does not know whether it is reading a loose
+file or a ZIP member, and `Book`, `AtomicFileWriter` and the batch grid needed no
+changes at all.
+
+`PalmDbContainer` tells the same kind of lie for MOBI: PalmDB records are numbered
+rather than named, so they are exposed as `record0`, `record1` and so on. It
+refuses a rebuild whose record *count* differs from the source, because record
+numbers are referenced from inside the file — the KF8 boundary, the first image
+index — and this build cannot find every such pointer to fix it up. Resizing a
+record is fine and recomputes the offset table; adding or removing one is not.
 
 `PendingEntry.Source` points back at the entry a rebuild is reproducing, and is
 how a container preserves what `ContainerEntry` does not model. Use
@@ -258,12 +279,14 @@ friction.
 extensions lie constantly — a `.cbz` that is really RAR is common.
 
 - `PK\x03\x04` → ZIP; then inspect entries: `mimetype` containing
-  `application/epub+zip` → EPUB; `ComicInfo.xml` or only image files → comic
+  `application/epub+zip` → EPUB; `ComicInfo.xml` or only image files → comic;
+  a `.fb2` entry → FB2.ZIP
 - `Rar!\x1a\x07` (v4) or `Rar!\x1a\x07\x01\x00` (v5) → RAR — recognised, not supported
 - `7z\xBC\xAF\x27\x1C` → 7z — recognised, not supported
 - `ustar` at offset 257 → TAR → CBT
-- PDB type+creator at offset 60: `BOOKMOBI` or `TEXtREAd` → MOBI family — recognised, not supported
+- PDB type+creator at offset 60: `BOOKMOBI` or `TEXtREAd` → PalmDB → MOBI family
 - `%PDF-` → PDF — recognised, not supported
+- a `<FictionBook` root element in the first 2 KB of text → FB2
 
 Read at most the first 8 KB for the magic-number pass. Distinguishing the
 ZIP-based formats needs one more step, since EPUB and CBZ are both ZIPs: the
@@ -271,6 +294,12 @@ first local file header sits at offset 0 and settles it for conformant files
 (an EPUB must store `mimetype` first). Only when that is inconclusive may the
 sniffer fall back to reading the central directory — entry names only, never
 content. If extension and content disagree, report it (`GEN-W002`).
+
+FB2 is the one format sniffed from text rather than a magic number, because it
+has none: it is an ordinary XML file whose root element is the only thing that
+distinguishes it. The search is bounded to the first 2 KB and gated on the file
+starting with an angle bracket, so it costs nothing for everything that is not
+XML.
 
 **Inconclusive includes a `mimetype` whose bytes cannot be read inline** — a
 compressed one, for instance. Falling back there rather than concluding "anonymous
@@ -555,6 +584,59 @@ the open fails), `E` = error, `W` = warning.
 | CBZ-W031 | warn | `Year`/`Month`/`Day` form an impossible date |
 | CBZ-W032 | warn | `LanguageISO` not a valid ISO 639-1 code |
 
+### FictionBook
+
+| ID | Sev | Check |
+|---|---|---|
+| FB2-F001 | fatal | Not well-formed XML, or the root is not `FictionBook` |
+| FB2-F002 | fatal | No `<description>`, so there is no metadata to edit |
+| FB2-E010 | error | No `<title-info>` |
+| FB2-E011 | error | `<book-title>` missing or empty |
+| FB2-E012 | error | `<lang>` missing |
+| FB2-W013 | warn | `<lang>` not a plausible language code |
+| FB2-W014 | warn | No `<author>` |
+| FB2-W020 | warn | More than one `.fb2` in the archive |
+| FB2-E030 | error | The cover page points at a `<binary>` that is not there |
+| FB2-W031 | warn | The cover image will not base64-decode |
+| FB2-W032 | warn | No cover declared |
+| FB2-E050 | error | Declared encoding does not match actual bytes |
+| FB2-W060 | warn | `sequence/@number` is not a number |
+
+FB2-E030 and FB2-W031 are the two rules that are not free: they need the
+`<binary>`, which is past the body and outside the span this format parses. They
+run only when the read was asked for a cover, which the batch grid never is.
+
+### MOBI family
+
+| ID | Sev | Check |
+|---|---|---|
+| MOBI-F001 | fatal | Record 0 carries no MOBI header, or the header is malformed |
+| MOBI-F002 | fatal | The text is DRM-encrypted |
+| MOBI-E010 | error | No title, in either the header's name field or EXTH 503 |
+| MOBI-W011 | warn | No author (EXTH 100) |
+| MOBI-W012 | warn | No language (EXTH 524) |
+| MOBI-W020 | warn | The MOBI and KF8 halves carry different titles |
+| MOBI-W021 | warn | The declared cover record does not begin like an image |
+| MOBI-W022 | warn | No cover declared (EXTH 201) |
+| MOBI-E023 | error | The cover points outside the database, or the image index is unstated |
+| MOBI-W030 | warn | Reported on save: the edited fields were written to both headers of a joint file |
+| MOBI-W031 | warn | EXTH 121 points at a record that is not a MOBI header |
+
+**MOBI-F002 is a refusal, not a warning.** DRM is a non-goal, and rewriting the
+header of an encrypted book produces a file no reader will open — so the read
+throws rather than handing back metadata the user could try to save.
+
+**MOBI-W020 is reported and left alone, and the reason is a rule worth keeping.**
+When a joint file's two halves disagree, neither is provably the right one, and
+copying the KF8 half over the MOBI 6 one would delete every field the older half
+carries and the newer one does not. So a save propagates *the fields the user
+edited* and nothing else: `MobiFormat.Merge` overlays the difference between what
+`Read` handed out and what came back onto each header's own metadata. Applying the
+edited `BookMetadata` wholesale to both headers is the obvious implementation and
+is wrong — it turns an unedited save of a mismatched file into data loss, which
+`MobiTests.Saving_a_joint_file_does_not_overwrite_one_half_with_the_other` exists
+to catch.
+
 When adding a rule, add a fixture that triggers it in isolation.
 
 ## Interface language
@@ -597,16 +679,29 @@ Broken fixtures are named after the rule they trigger:
 `broken-epub-e020-dangling-idref.epub`, `broken-cbz-e020-pagecount.cbz`.
 
 `CbzBuilder.WriteTo` takes a `ContainerKind`, so one set of comic fixtures serves
-CBZ and CBT — do not fork it into a second builder. `RawTarBuilder` is the
-exception and deliberately does *not* use `TarContainer`: it assembles headers the
-way `tar` does, with a mode, an owner and a ten-kilobyte tail, so that preserving
-them is provable. A fixture generated by the code under test could not prove it.
+CBZ and CBT — do not fork it into a second builder.
+
+`RawTarBuilder` and `MobiBuilder` are the exceptions, and deliberately do *not* use
+`TarContainer` or `PalmDbContainer`. They assemble bytes the way `tar` and
+kindlegen do — a mode and an owner and a ten-kilobyte tail, a record table and an
+EXTH block with records this build has no field for — so that preserving all of it
+is provable. **A fixture generated by the code under test cannot prove the code
+under test reads real files**, and for these two formats that is the whole
+question.
 
 Required coverage:
 
 - valid + byte-identical round-trip for every format
 - a CBT whose headers carry a real archive's mode, uid, gid, uname and gname, and
   a blocking factor above the minimum — the test that keeps `TarContainer` honest
+- a MOBI carrying EXTH records this build does not map, asserted to survive a write
+- a MOBI whose header record is resized in both directions, asserted to leave every
+  later record readable — the record table is the only thing that says where they are
+- a joint MOBI/KF8 file, asserted to read from the KF8 half, to write an edit to
+  both, and to leave each half's own fields alone when they were not edited
+- a DRM-encrypted MOBI, asserted to be refused
+- an FB2 with a large body, asserted byte-identical from `<body>` onwards after an
+  edit
 - one fixture per validation rule
 - `broken-unclosed-tag.epub`, `broken-bare-ampersand.epub` — repair path
 - `broken-mimetype-compressed.epub`
@@ -646,11 +741,24 @@ policy.
 - **xunit** — tests only.
 
 **The project is Apache-2.0**, so every dependency must be compatible with it.
-Do **not** add iText (AGPL) or any GPL-licensed library. With MOBI out of scope,
-the calibre licensing problem that once constrained this project no longer
-applies: `MetadataUpdater` in `calibre/ebooks/metadata/mobi.py` is GPL-3.0, but
-there is no longer any reason to go near it. MIT dependencies are fine;
+Do **not** add iText (AGPL) or any GPL-licensed library. MIT dependencies are fine;
 copyleft ones are not.
+
+**MOBI brings the calibre licensing problem back, so it needs stating plainly.**
+`MetadataUpdater` in `calibre/ebooks/metadata/mobi.py` does exactly what
+`MobiDocument` does and is GPL-3.0, which this project cannot take code from.
+`MobiDocument` was written from the published description of the PalmDB, MOBI and
+EXTH layouts — the record table at offset 78, the MOBI header at record 0 offset
+16, the `EXTH` block at `16 + headerLength` when bit `0x40` of the header's EXTH
+flags is set. That description is a specification, not an implementation, and
+implementing a documented file format independently is exactly what is allowed.
+**Do not read calibre's MOBI code, and do not port it.** If a MOBI question cannot
+be answered from the format description, say so rather than going and looking.
+
+Note that MOBI, FB2 and CBT together added no dependencies at all. Every one of
+them is a byte-level reader written against a documented layout, which is the
+cheapest kind of format to add and the reason the list below is still four items
+long.
 
 ## Shell integration
 
@@ -669,9 +777,15 @@ HKCU\Software\Classes\SystemFileAssociations\<.ext>\shell\EBookMetaEditorEdit\co
 Use `SystemFileAssociations`, not `HKCU\Software\Classes\<.ext>` — the latter
 hijacks the user's default association. Registration is opt-in per format group
 (ebooks / comics) so a user can tag comics without touching EPUB. Register only
-`.epub`, `.cbz` and `.cbt`; do not register formats the app cannot open. The
-Settings form builds its list from `ShellRegistration.SupportedExtensions`, so
-adding a format there is the whole change.
+`.epub`, `.cbz`, `.cbt`, `.fb2`, `.mobi`, `.prc`, `.azw` and `.azw3`; do not
+register formats the app cannot open. The Settings form builds its list from
+`ShellRegistration.SupportedExtensions`, so adding a format there is the whole
+change.
+
+`.fb2.zip` is deliberately not registered. `SystemFileAssociations` keys on a
+single extension, so the only thing available to register would be `.zip` — which
+would put this app's verb on every archive on the machine. Those files open by
+drag-and-drop or through the Open dialog.
 
 `MultiSelectModel = "Player"` asks Explorer to invoke the verb **once** with the
 whole selection rather than once per file, which is what makes right-clicking
@@ -700,6 +814,16 @@ This is a product requirement — the whole point is right-click, fix, close.
   cost an antivirus scan, which is real money against 400 ms.
 - Detect from the first 8 KB. Parse only the metadata document. Do not
   enumerate, hash or decompress the whole archive on open.
+- **FB2 is the format that could most easily break this budget, and the design is
+  what stops it.** The metadata and the entire book are one XML file, illustrations
+  base64-encoded into it, so a ten-megabyte document is ordinary and running it
+  through `XDocument` would cost the budget several times over. `Fb2Document`
+  therefore locates `<description>` and parses that alone, splicing its serialised
+  form back at the offsets it came from on save. Do not "simplify" it into a whole
+  document parse: that would break the startup budget and hard invariant 6 in the
+  same change.
+- MOBI reads record 0 and nothing else. The record table gives every other record's
+  length without touching it, so a cover is only pulled when one was asked for.
 - **Every rule runs on open, and that is affordable because of what they read.**
   Cross-checks like `EPUB-E021`, `EPUB-W023`, `CBZ-E020` and `CBZ-W021` compare
   entry *names* against the metadata document, and `ZipContainer.Open` has already
@@ -732,9 +856,14 @@ This is a product requirement — the whole point is right-click, fix, close.
 
 ## Working style for Claude
 
-- All three formats are implemented. Never touch a serialisation path while the
+- All seven formats are implemented. Never touch a serialisation path while the
   round-trip or golden-byte tests for any of them are red — they are the only thing
   standing between a bug and a corrupted library.
+- **Every format has a byte-identity test, and that is the load-bearing one.** Each
+  reaches it differently: EPUB and CBZ by reproducing the archive, CBT by re-emitting
+  retained TAR headers, FB2 by splicing an edited `<description>` back into the
+  original text, MOBI by returning record 0 untouched when nothing changed. If a new
+  format cannot be given that test, the design is wrong, not the test.
 - Prefer Core changes + tests over touching the UI. UI is the last step of a
   feature, not the first.
 - When adding a format, the order is: builder → sniffer → read → rules → write.

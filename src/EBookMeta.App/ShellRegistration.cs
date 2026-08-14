@@ -9,8 +9,17 @@ internal static class ShellRegistration
 {
     private const string VerbKeyName = "EBookMetaEditorEdit";
 
-    /// <summary>The extensions EBookMetaEditor can actually open.</summary>
-    internal static IReadOnlyList<string> SupportedExtensions { get; } = [".epub", ".cbz", ".cbt"];
+    /// <summary>
+    /// The extensions EBookMetaEditor can actually open.
+    /// </summary>
+    /// <remarks>
+    /// <c>.fb2.zip</c> is deliberately absent: a compound extension is not
+    /// something <c>SystemFileAssociations</c> can key on, and registering
+    /// <c>.zip</c> would put this app's verb on every archive on the machine.
+    /// Those files open by drag-and-drop or through the Open dialog instead.
+    /// </remarks>
+    internal static IReadOnlyList<string> SupportedExtensions { get; } =
+        [".epub", ".cbz", ".cbt", ".fb2", ".mobi", ".prc", ".azw", ".azw3"];
 
     /// <summary>Registers the verb for the given extensions and removes it from the rest.</summary>
     /// <param name="extensions">The extensions to register, each with a leading dot.</param>

@@ -46,6 +46,8 @@ public static class BookContainers
         {
             ContainerKind.Zip => ZipContainer.Open(path),
             ContainerKind.Tar => TarContainer.Open(path),
+            ContainerKind.Raw => RawContainer.Open(path),
+            ContainerKind.PalmDb => PalmDbContainer.Open(path),
             _ => throw new NotSupportedException(
                 $"{kind} containers cannot be opened by this build."),
         };
@@ -55,5 +57,6 @@ public static class BookContainers
     /// <param name="kind">The container to test.</param>
     /// <returns><see langword="true"/> when the container can be opened.</returns>
     public static bool IsSupported(ContainerKind kind) =>
-        kind is ContainerKind.Zip or ContainerKind.Tar;
+        kind is ContainerKind.Zip or ContainerKind.Tar or ContainerKind.Raw
+            or ContainerKind.PalmDb;
 }

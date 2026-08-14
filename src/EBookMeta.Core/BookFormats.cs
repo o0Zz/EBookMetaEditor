@@ -27,6 +27,15 @@ public static class BookFormats
         // ComicInfo.xml and the same rules. All that differs is the container,
         // which BookContainers picks.
         Register(new CbzFormat(FormatId.Cbt));
+
+        // And again for FictionBook, which is one document either bare or zipped.
+        Register(new Fb2Format(FormatId.Fb2));
+        Register(new Fb2Format(FormatId.Fb2Zip));
+
+        // And once more for the MOBI family: MOBI and PRC on one id, AZW and AZW3
+        // on the other, all of them a PalmDB with an EXTH block.
+        Register(new MobiFormat(FormatId.Mobi));
+        Register(new MobiFormat(FormatId.Azw3));
     }
 
     /// <summary>Every registered format.</summary>

@@ -25,15 +25,41 @@ public sealed class BookFormatsTests
 
     [Theory]
     [InlineData(FormatId.Cbr)]
-    [InlineData(FormatId.Mobi)]
+    [InlineData(FormatId.Cb7)]
     [InlineData(FormatId.Pdf)]
+    [InlineData(FormatId.UnknownZip)]
     [InlineData(FormatId.Unknown)]
     public void Recognised_but_unsupported_formats_are_not_registered(FormatId format)
     {
         // Recognising a format and supporting it are different things, and the
         // registry is where that difference is expressed.
+        //
+        // CBR and CB7 are the ones to keep an eye on: both are readable, and
+        // neither is writable, so registering them would produce an editor that
+        // cannot save. PDF needs incremental update and is a project of its own.
         Assert.Null(BookFormats.For(format));
         Assert.False(BookFormats.IsSupported(format));
+    }
+
+    [Theory]
+    [InlineData(FormatId.Epub)]
+    [InlineData(FormatId.Cbz)]
+    [InlineData(FormatId.Cbt)]
+    [InlineData(FormatId.Fb2)]
+    [InlineData(FormatId.Fb2Zip)]
+    [InlineData(FormatId.Mobi)]
+    [InlineData(FormatId.Azw3)]
+    public void Every_supported_format_is_registered_and_writable(FormatId format)
+    {
+        IBookFormat? registered = BookFormats.For(format);
+
+        Assert.NotNull(registered);
+        Assert.Equal(format, registered!.Id);
+        Assert.Equal(format, registered.Capabilities.Format);
+
+        // Reading without writing is not what this tool is for; a format that
+        // cannot save has no business in the registry.
+        Assert.True(registered.Capabilities.CanWrite);
     }
 
     [Fact]

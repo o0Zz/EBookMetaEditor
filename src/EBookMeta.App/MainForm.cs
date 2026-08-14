@@ -287,10 +287,16 @@ internal sealed class MainForm : Form, IPathReceiver
     /// The file-dialog filter, assembled rather than translated whole.
     /// </summary>
     internal static string BookFilter() =>
-        $"{Strings.Get("filter.supported")}|*.epub;*.cbz;*.cbt"
+        $"{Strings.Get("filter.supported")}|{AllPatterns}"
         + $"|{Strings.Get("filter.epub")}|*.epub"
         + $"|{Strings.Get("filter.cbz")}|*.cbz;*.cbt"
+        + $"|{Strings.Get("filter.fb2")}|*.fb2;*.fb2.zip"
+        + $"|{Strings.Get("filter.mobi")}|*.mobi;*.prc;*.azw;*.azw3"
         + $"|{Strings.Get("filter.all")}|*.*";
+
+    /// <summary>Every pattern the app can open, for the combined filter.</summary>
+    private const string AllPatterns =
+        "*.epub;*.cbz;*.cbt;*.fb2;*.fb2.zip;*.mobi;*.prc;*.azw;*.azw3";
 
     private void OpenFolder()
     {

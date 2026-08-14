@@ -52,9 +52,11 @@ dialog.addFiles.title = Aggiungi libri o fumetti
 dialog.folder.batch = Modifica i metadati di tutti i libri e fumetti di una cartella
 dialog.folder.add = Aggiungi tutti i libri e fumetti di una cartella
 
-filter.supported = File supportati (*.epub;*.cbz;*.cbt)
+filter.supported = File supportati (*.epub;*.cbz;*.cbt;*.fb2;*.fb2.zip;*.mobi;*.prc;*.azw;*.azw3)
 filter.epub = EPUB (*.epub)
 filter.cbz = Archivio di fumetti (*.cbz;*.cbt)
+filter.fb2 = FictionBook (*.fb2;*.fb2.zip)
+filter.mobi = Libro Kindle (*.mobi;*.prc;*.azw;*.azw3)
 filter.all = Tutti i file (*.*)
 filter.log = File di registro (*.log)
 filter.text = File di testo (*.txt)

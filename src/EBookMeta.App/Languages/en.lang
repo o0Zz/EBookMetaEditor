@@ -63,9 +63,11 @@ dialog.folder.add = Add every book and comic in a folder
 
 # File-dialog filters. Translate the description; leave the patterns in brackets
 # exactly as they are.
-filter.supported = Supported files (*.epub;*.cbz;*.cbt)
+filter.supported = Supported files (*.epub;*.cbz;*.cbt;*.fb2;*.fb2.zip;*.mobi;*.prc;*.azw;*.azw3)
 filter.epub = EPUB (*.epub)
 filter.cbz = Comic archive (*.cbz;*.cbt)
+filter.fb2 = FictionBook (*.fb2;*.fb2.zip)
+filter.mobi = Kindle book (*.mobi;*.prc;*.azw;*.azw3)
 filter.all = All files (*.*)
 filter.log = Log file (*.log)
 filter.text = Text file (*.txt)
