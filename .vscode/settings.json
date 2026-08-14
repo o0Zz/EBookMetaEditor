@@ -35,5 +35,7 @@
   // instead of finding out at build time. Roslyn language server, not OmniSharp.
   "dotnet.server.useOmnisharp": false,
   "dotnet.backgroundAnalysis.analyzerDiagnosticsScope": "fullSolution",
-  "dotnet.backgroundAnalysis.compilerDiagnosticsScope": "fullSolution"
+  "dotnet.backgroundAnalysis.compilerDiagnosticsScope": "fullSolution",
+  "dotnet.testWindow.skipTargetFrameworkCompatibilityCheck": true,
+  "dotnet.testWindow.enableNextTest": false
 }
