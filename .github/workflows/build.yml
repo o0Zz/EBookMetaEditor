@@ -1,0 +1,104 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    env:
+      SOLUTION: EBookMeta.sln
+      CONFIGURATION: Release
+      APP_PROJECT: src/EBookMeta.App/EBookMeta.App.csproj
+      # net48 output layout: bin/<Configuration>/<TargetFramework>/
+      APP_OUTPUT: src/EBookMeta.App/bin/Release/net48
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Compute version from git
+        id: version
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF_TYPE -eq 'tag') {
+            # Tag builds carry a real version derived from the tag.
+            $describe = git describe --tags --long --match 'v*' 2>$null
+            if ($LASTEXITCODE -ne 0 -or -not $describe) {
+              $version = "0.0.0.0"
+            } elseif ($describe -match '^v(\d+\.\d+\.\d+)-(\d+)-g[0-9a-f]+$') {
+              $version = "{0}.{1}" -f $matches[1], $matches[2]
+            } else {
+              $version = "0.0.0.0"
+            }
+          } else {
+            # main / PR / manual builds are unreleased -> pin to 0.0.0.0.
+            $version = "0.0.0.0"
+          }
+          Write-Host "Computed version: $version"
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Restore
+        shell: pwsh
+        run: dotnet restore $env:SOLUTION
+
+      # SDK-style projects generate their own assembly attributes, so the version
+      # is an MSBuild property rather than a patched AssemblyInfo.cs. This
+      # overrides <Version> in Directory.Build.props for CI builds only; the
+      # checked-in value stays authoritative for local builds.
+      - name: Build
+        shell: pwsh
+        run: >
+          dotnet build $env:SOLUTION
+          --configuration $env:CONFIGURATION
+          --no-restore
+          -p:Version=${{ steps.version.outputs.version }}
+          -p:FileVersion=${{ steps.version.outputs.version }}
+          -p:AssemblyVersion=${{ steps.version.outputs.version }}
+
+      # The xunit corpus is the verification surface: with no headless driver,
+      # nothing else stands between a serialisation bug and a corrupted library.
+      - name: Test
+        shell: pwsh
+        run: dotnet test $env:SOLUTION --configuration $env:CONFIGURATION --no-build --verbosity normal
+
+      - name: Upload build artifact
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: EBookMetaEditor-${{ steps.version.outputs.version }}
+          path: ${{ env.APP_OUTPUT }}/*
+
+      - name: Package release zip
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        run: Compress-Archive -Path "$env:APP_OUTPUT/*" -DestinationPath EBookMetaEditor-${{ github.ref_name }}.zip
+
+      - name: Draft GitHub Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          name: ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          files: |
+            EBookMetaEditor-${{ github.ref_name }}.zip
