@@ -33,17 +33,22 @@ internal sealed class BatchForm : Form, IPathReceiver
     /// Everything else <see cref="MetadataFields"/> can project as text is here, and
     /// each cell is enabled per row according to what that row's format can store.
     /// </remarks>
-    private static readonly (MetadataField Field, string Header, int Width)[] FieldColumns =
+    /// <remarks>
+    /// Two keys per column because a grid header and a picker entry want
+    /// different lengths of the same name: the series index is "#" over a 45 px
+    /// column and "Series index" in a list where there is room to read it.
+    /// </remarks>
+    private static readonly (MetadataField Field, string HeaderKey, string NameKey, int Width)[] FieldColumns =
     [
-        (MetadataField.Title, "Title", 200),
-        (MetadataField.Creators, "Authors", 150),
-        (MetadataField.Series, "Series", 140),
-        (MetadataField.SeriesIndex, "#", 45),
-        (MetadataField.Publisher, "Publisher", 120),
-        (MetadataField.PublicationDate, "Published", 90),
-        (MetadataField.Language, "Language", 70),
-        (MetadataField.Subjects, "Subjects", 160),
-        (MetadataField.SortTitle, "Sort title", 150),
+        (MetadataField.Title, "field.title", "field.title", 200),
+        (MetadataField.Creators, "field.authors", "field.authors", 150),
+        (MetadataField.Series, "field.series", "field.series", 140),
+        (MetadataField.SeriesIndex, "field.seriesIndexShort", "field.seriesIndex", 45),
+        (MetadataField.Publisher, "field.publisher", "field.publisher", 120),
+        (MetadataField.PublicationDate, "field.published", "field.published", 90),
+        (MetadataField.Language, "field.language", "field.language", 70),
+        (MetadataField.Subjects, "field.subjects", "field.subjects", 160),
+        (MetadataField.SortTitle, "field.sortTitle", "field.sortTitle", 150),
     ];
 
     private const int StatusColumn = 0;
@@ -75,11 +80,13 @@ internal sealed class BatchForm : Form, IPathReceiver
         Width = 110,
     };
 
+    // AutoSize throughout rather than fixed widths: "Apply to selection" is "Auf
+    // Auswahl anwenden" in German, which does not fit in 130 px.
     private readonly TextBox _bulkValue = new() { Width = 220 };
-    private readonly Button _bulkApply = new() { Text = "Apply to selection", Width = 130, Height = 24 };
-    private readonly Button _saveAll = new() { Text = "&Save all", Width = 90, Height = 26, Enabled = false };
-    private readonly Button _validateAll = new() { Text = "&Validate all", Width = 90, Height = 26 };
-    private readonly Button _cancel = new() { Text = "Cancel", Width = 80, Height = 26, Visible = false };
+    private readonly Button _bulkApply = Action("batch.bulk.apply", 132);
+    private readonly Button _saveAll = Action("batch.button.saveAll", 96);
+    private readonly Button _validateAll = Action("batch.button.validateAll", 96);
+    private readonly Button _cancel = Action("button.cancel", 84);
 
     private readonly StatusStrip _status = new();
     private readonly ToolStripStatusLabel _statusText = new()
@@ -111,7 +118,10 @@ internal sealed class BatchForm : Form, IPathReceiver
         _settings = settings;
         _session = BatchSession.Create(Expand(paths));
 
-        Text = "Batch edit — EBookMetaEditor";
+        _saveAll.Enabled = false;
+        _cancel.Visible = false;
+
+        Text = Strings.Get("batch.title");
         AppIcon.Apply(this);
         ClientSize = new Size(1100, 560);
         MinimumSize = new Size(760, 400);
@@ -206,35 +216,53 @@ internal sealed class BatchForm : Form, IPathReceiver
         }
     }
 
+    /// <summary>A button labelled from the language files, wide enough for its text.</summary>
+    private static Button Action(string key, int minimumWidth) => new()
+    {
+        Text = Strings.Get(key),
+        AutoSize = true,
+        AutoSizeMode = AutoSizeMode.GrowAndShrink,
+        MinimumSize = new Size(minimumWidth, 26),
+        Margin = new Padding(4, 3, 4, 3),
+    };
+
+    private static ToolStripMenuItem Item(string key, Action? action = null, Keys shortcut = Keys.None)
+    {
+        var item = new ToolStripMenuItem(Strings.Get(key));
+
+        if (action is not null)
+        {
+            item.Click += (_, _) => action();
+        }
+
+        if (shortcut != Keys.None)
+        {
+            item.ShortcutKeys = shortcut;
+        }
+
+        return item;
+    }
+
     private MenuStrip BuildMenu()
     {
-        var file = new ToolStripMenuItem("&File");
-        file.DropDownItems.Add(new ToolStripMenuItem("Add &files…", null, (_, _) => AddFiles())
-        {
-            ShortcutKeys = Keys.Control | Keys.O,
-        });
-        file.DropDownItems.Add(new ToolStripMenuItem("Add f&older…", null, (_, _) => AddFolder()));
+        ToolStripMenuItem file = Item("menu.file");
+        file.DropDownItems.Add(Item("menu.file.addFiles", AddFiles, Keys.Control | Keys.O));
+        file.DropDownItems.Add(Item("menu.file.addFolder", AddFolder));
         file.DropDownItems.Add(new ToolStripSeparator());
-        file.DropDownItems.Add(new ToolStripMenuItem("&Save all", null, (_, _) => SaveAll())
-        {
-            ShortcutKeys = Keys.Control | Keys.S,
-        });
-        file.DropDownItems.Add(new ToolStripMenuItem("&Validate all", null, (_, _) => ValidateAll()));
+        file.DropDownItems.Add(Item("menu.file.saveAll", SaveAll, Keys.Control | Keys.S));
+        file.DropDownItems.Add(Item("menu.file.validateAll", ValidateAll));
         file.DropDownItems.Add(new ToolStripSeparator());
-        file.DropDownItems.Add(new ToolStripMenuItem("&Close", null, (_, _) => Close()));
+        file.DropDownItems.Add(Item("menu.file.close", Close));
 
-        var help = new ToolStripMenuItem("?");
-        help.DropDownItems.Add(new ToolStripMenuItem("&Log…", null, (_, _) => ShowLog())
-        {
-            ShortcutKeys = Keys.Control | Keys.L,
-        });
+        ToolStripMenuItem help = Item("menu.help");
+        help.DropDownItems.Add(Item("menu.help.log", ShowLog, Keys.Control | Keys.L));
         help.DropDownItems.Add(new ToolStripSeparator());
-        help.DropDownItems.Add(new ToolStripMenuItem("&About EBookMetaEditor…", null, (_, _) => ShowAbout()));
+        help.DropDownItems.Add(Item("menu.help.about", ShowAbout));
 
         // Named explicitly: a bare MenuStrip inherits its accessible name from the
         // nearest label, which here is the hint about Ctrl+D — so a screen reader
         // would announce the menu bar as a sentence about filling cells down.
-        var menu = new MenuStrip { AccessibleName = "Main menu" };
+        var menu = new MenuStrip { AccessibleName = Strings.Get("menu.accessible") };
         menu.Items.Add(file);
         menu.Items.Add(help);
         return menu;
@@ -242,32 +270,41 @@ internal sealed class BatchForm : Form, IPathReceiver
 
     private void BuildLayout(MenuStrip menu)
     {
-        foreach ((MetadataField field, string header, _) in FieldColumns)
+        foreach ((MetadataField field, _, string nameKey, _) in FieldColumns)
         {
-            _bulkField.Items.Add(new FieldChoice(field, header));
+            _bulkField.Items.Add(new FieldChoice(field, Strings.Get(nameKey)));
         }
 
         _bulkField.SelectedIndex = 0;
 
-        var bulk = new Panel { Dock = DockStyle.Top, Height = 38, Padding = new Padding(8, 7, 8, 7) };
+        // A flow rather than coordinates: every control on this bar is as wide as
+        // its own translation, so placing the next one means measuring the last.
+        var bulk = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            Padding = new Padding(8, 6, 8, 6),
+        };
 
         var label = new Label
         {
-            Text = "Set",
+            Text = Strings.Get("batch.bulk.set"),
             AutoSize = true,
-            Location = new Point(8, 11),
+            Margin = new Padding(3, 8, 6, 3),
         };
 
-        _bulkField.Location = new Point(36, 8);
-        _bulkValue.Location = new Point(152, 8);
-        _bulkApply.Location = new Point(380, 7);
+        _bulkValue.Margin = new Padding(6, 5, 6, 3);
+        _bulkField.Margin = new Padding(3, 4, 3, 3);
 
         var hint = new Label
         {
-            Text = "…on every selected row.  Ctrl+D copies the current cell down the selection.",
+            Text = Strings.Get("batch.bulk.hint"),
             AutoSize = true,
             ForeColor = SystemColors.GrayText,
-            Location = new Point(520, 11),
+            Margin = new Padding(14, 8, 3, 3),
         };
 
         bulk.Controls.AddRange([label, _bulkField, _bulkValue, _bulkApply, hint]);
@@ -297,16 +334,16 @@ internal sealed class BatchForm : Form, IPathReceiver
 
     private void BuildColumns()
     {
-        _grid.Columns.Add(ReadOnlyColumn("Status", 110));
-        _grid.Columns.Add(ReadOnlyColumn("File", 200));
-        _grid.Columns.Add(ReadOnlyColumn("Format", 60));
-        _grid.Columns.Add(ReadOnlyColumn("Findings", 60));
+        _grid.Columns.Add(ReadOnlyColumn(Strings.Get("column.status"), 110));
+        _grid.Columns.Add(ReadOnlyColumn(Strings.Get("column.file"), 200));
+        _grid.Columns.Add(ReadOnlyColumn(Strings.Get("column.format"), 70));
+        _grid.Columns.Add(ReadOnlyColumn(Strings.Get("column.findings"), 70));
 
-        foreach ((MetadataField field, string header, int width) in FieldColumns)
+        foreach ((MetadataField field, string headerKey, _, int width) in FieldColumns)
         {
             _grid.Columns.Add(new DataGridViewTextBoxColumn
             {
-                HeaderText = header,
+                HeaderText = Strings.Get(headerKey),
                 Width = width,
                 SortMode = DataGridViewColumnSortMode.NotSortable,
                 Tag = field,
@@ -401,11 +438,11 @@ internal sealed class BatchForm : Form, IPathReceiver
 
     private static string StatusTextOf(BatchEntry entry) => entry.Status switch
     {
-        BatchEntryStatus.Pending => "Reading…",
-        BatchEntryStatus.Loaded => entry.IsDirty ? "Edited" : string.Empty,
-        BatchEntryStatus.Saved => entry.IsDirty ? "Edited" : "Saved",
-        BatchEntryStatus.Unsupported => "Cannot edit",
-        BatchEntryStatus.Failed => "Failed",
+        BatchEntryStatus.Pending => Strings.Get("batch.state.reading"),
+        BatchEntryStatus.Loaded => entry.IsDirty ? Strings.Get("batch.state.edited") : string.Empty,
+        BatchEntryStatus.Saved => Strings.Get(entry.IsDirty ? "batch.state.edited" : "batch.state.saved"),
+        BatchEntryStatus.Unsupported => Strings.Get("batch.state.cannotEdit"),
+        BatchEntryStatus.Failed => Strings.Get("batch.state.failed"),
         _ => string.Empty,
     };
 
@@ -489,7 +526,7 @@ internal sealed class BatchForm : Form, IPathReceiver
 
         if (entry.IsDirty)
         {
-            SetStatus("Save this row before opening it on its own — it has unsaved edits here.");
+            SetStatus(Strings.Get("batch.rowDirty"));
             return;
         }
 
@@ -521,7 +558,9 @@ internal sealed class BatchForm : Form, IPathReceiver
         }
 
         var field = (MetadataField)_grid.Columns[current.ColumnIndex].Tag;
-        Apply(field, current.Value?.ToString() ?? string.Empty, $"{_grid.Columns[current.ColumnIndex].HeaderText} copied");
+        string what = Strings.Format("batch.what.copied", _grid.Columns[current.ColumnIndex].HeaderText);
+
+        Apply(field, current.Value?.ToString() ?? string.Empty, what);
     }
 
     private void ApplyToSelection()
@@ -531,7 +570,7 @@ internal sealed class BatchForm : Form, IPathReceiver
             return;
         }
 
-        Apply(choice.Field, _bulkValue.Text, $"{choice.Header} set");
+        Apply(choice.Field, _bulkValue.Text, Strings.Format("batch.what.set", choice.Header));
     }
 
     /// <summary>
@@ -564,13 +603,13 @@ internal sealed class BatchForm : Form, IPathReceiver
 
         if (applied == 0 && skipped == 0)
         {
-            SetStatus("Select the rows to change first.");
+            SetStatus(Strings.Get("batch.selectRows"));
             return;
         }
 
         SetStatus(skipped == 0
-            ? $"{what} on {applied} row{Plural(applied)}."
-            : $"{what} on {applied} row{Plural(applied)}; {skipped} could not store it.");
+            ? Strings.Plural("batch.applied", applied, what, applied)
+            : Strings.Plural("batch.appliedSkipped", applied, what, applied, skipped));
 
         UpdateStatus(keepMessage: true);
     }
@@ -597,6 +636,7 @@ internal sealed class BatchForm : Form, IPathReceiver
         }
 
         RunInBackground(
+            "batch.verb.reading",
             "Reading",
             (progress, token) =>
             {
@@ -614,13 +654,14 @@ internal sealed class BatchForm : Form, IPathReceiver
 
         if (_session.DirtyCount == 0)
         {
-            SetStatus("Nothing has been edited.");
+            SetStatus(Strings.Get("batch.nothingEdited"));
             return;
         }
 
         bool keepBackup = _settings.KeepBackupOnSave;
 
         RunInBackground(
+            "batch.verb.saving",
             "Saving",
             (progress, token) => _session.Save(keepBackup, progress, token).ToString());
     }
@@ -633,18 +674,26 @@ internal sealed class BatchForm : Form, IPathReceiver
         }
 
         RunInBackground(
+            "batch.verb.validating",
             "Validating",
             (progress, token) =>
             {
                 _session.Validate(progress, token);
-                return $"{_session.Entries.Sum(e => e.FindingCount ?? 0)} finding(s) — see the log.";
+
+                int findings = _session.Entries.Sum(e => e.FindingCount ?? 0);
+                return Strings.Plural("batch.findings", findings, findings);
             });
     }
 
     /// <summary>
     /// Runs a batch operation off the UI thread, with progress and a working cancel.
     /// </summary>
-    /// <param name="what">The verb for the status line.</param>
+    /// <param name="verbKey">The status line's verb, in the interface language.</param>
+    /// <param name="logVerb">
+    /// The same verb in English, for the log. Two words rather than one, because
+    /// a log is a diagnostic that gets pasted into a bug report: it stays in one
+    /// language whatever the window is showing.
+    /// </param>
     /// <param name="operation">
     /// The work. Returns the message to show when it finishes, or null for the
     /// default.
@@ -662,11 +711,16 @@ internal sealed class BatchForm : Form, IPathReceiver
     /// is not a race worth having.
     /// </para>
     /// </remarks>
-    private void RunInBackground(string what, Func<IProgress<BatchProgress>, CancellationToken, string?> operation)
+    private void RunInBackground(
+        string verbKey,
+        string logVerb,
+        Func<IProgress<BatchProgress>, CancellationToken, string?> operation)
     {
         _work?.Dispose();
         _work = new CancellationTokenSource();
         CancellationToken token = _work.Token;
+
+        string what = Strings.Get(verbKey);
 
         SetBusy(true, what);
 
@@ -674,18 +728,19 @@ internal sealed class BatchForm : Form, IPathReceiver
         {
             _progress.Maximum = Math.Max(1, report.Total);
             _progress.Value = Math.Min(report.Completed, _progress.Maximum);
-            SetStatus($"{what} {report.Completed} of {report.Total} — {Path.GetFileName(report.Path)}");
+            SetStatus(Strings.Format(
+                "batch.progress", what, report.Completed, report.Total, Path.GetFileName(report.Path)));
         });
 
         Task.Run(() => operation(progress, token))
             .ContinueWith(
-                task => Finish(what, task),
+                task => Finish(what, logVerb, task),
                 CancellationToken.None,
                 TaskContinuationOptions.None,
                 TaskScheduler.Default);
     }
 
-    private void Finish(string what, Task<string?> task)
+    private void Finish(string what, string logVerb, Task<string?> task)
     {
         // Marshalled by hand rather than continued on the UI scheduler: the window
         // can be closing while a batch finishes, and BeginInvoke on a dead handle is
@@ -712,13 +767,13 @@ internal sealed class BatchForm : Form, IPathReceiver
 
                 if (cancelled)
                 {
-                    SetStatus($"{what} cancelled.");
+                    SetStatus(Strings.Format("batch.cancelled", what));
                 }
                 else if (task.Exception is { } failure)
                 {
                     Exception cause = failure.InnerExceptions[0];
-                    Log.Error($"{what} failed", cause);
-                    SetStatus($"{what} failed: {cause.Message}");
+                    Log.Error($"{logVerb} failed", cause);
+                    SetStatus(Strings.Format("batch.failed", what, cause.Message));
                 }
                 else if (task.Result is { } message)
                 {
@@ -740,7 +795,7 @@ internal sealed class BatchForm : Form, IPathReceiver
         }
         catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException)
         {
-            Log.Debug($"Batch {what.ToLowerInvariant()} finished after the window closed.");
+            Log.Debug($"Batch {logVerb.ToLowerInvariant()} finished after the window closed.");
         }
     }
 
@@ -758,7 +813,7 @@ internal sealed class BatchForm : Form, IPathReceiver
         if (busy)
         {
             _progress.Value = 0;
-            SetStatus($"{what}…");
+            SetStatus(Strings.Format("batch.busy", what));
         }
     }
 
@@ -776,19 +831,19 @@ internal sealed class BatchForm : Form, IPathReceiver
         int unusable = _session.Entries.Count(
             e => e.Status is BatchEntryStatus.Unsupported or BatchEntryStatus.Failed);
 
-        var parts = new List<string> { $"{loaded} file{Plural(loaded)}" };
+        var parts = new List<string> { Strings.Plural("batch.summary.files", loaded, loaded) };
 
         if (unusable > 0)
         {
-            parts.Add($"{unusable} cannot be edited");
+            parts.Add(Strings.Format("batch.summary.unusable", unusable));
         }
 
-        parts.Add(dirty == 0 ? "no edits" : $"{dirty} edited");
+        parts.Add(dirty == 0
+            ? Strings.Get("batch.summary.noEdits")
+            : Strings.Format("batch.summary.edited", dirty));
 
         SetStatus(string.Join(" · ", parts));
     }
-
-    private static string Plural(int count) => count == 1 ? string.Empty : "s";
 
     private void SetStatus(string text) => _statusText.Text = text;
 
@@ -796,10 +851,9 @@ internal sealed class BatchForm : Form, IPathReceiver
     {
         using var dialog = new OpenFileDialog
         {
-            Title = "Add books or comics",
+            Title = Strings.Get("dialog.addFiles.title"),
             Multiselect = true,
-            Filter = "Supported files (*.epub;*.cbz)|*.epub;*.cbz|EPUB (*.epub)|*.epub"
-                + "|Comic archive (*.cbz)|*.cbz|All files (*.*)|*.*",
+            Filter = MainForm.BookFilter(),
         };
 
         if (dialog.ShowDialog(this) == DialogResult.OK)
@@ -810,7 +864,7 @@ internal sealed class BatchForm : Form, IPathReceiver
 
     private void AddFolder()
     {
-        using var dialog = new FolderBrowserDialog { Description = "Add every book and comic in a folder" };
+        using var dialog = new FolderBrowserDialog { Description = Strings.Get("dialog.folder.add") };
 
         if (dialog.ShowDialog(this) == DialogResult.OK)
         {
@@ -878,8 +932,8 @@ internal sealed class BatchForm : Form, IPathReceiver
             // files, never inside one.
             DialogResult stop = MessageBox.Show(
                 this,
-                "A batch operation is still running. Stop it and close?",
-                "EBookMetaEditor",
+                Strings.Get("batch.close.busy"),
+                Strings.Get("app.name"),
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Warning);
 
@@ -895,8 +949,8 @@ internal sealed class BatchForm : Form, IPathReceiver
         {
             DialogResult answer = MessageBox.Show(
                 this,
-                $"{_session.DirtyCount} file(s) have unsaved edits. Close without saving?",
-                "EBookMetaEditor",
+                Strings.Plural("batch.close.dirty", _session.DirtyCount, _session.DirtyCount),
+                Strings.Get("app.name"),
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Warning);
 

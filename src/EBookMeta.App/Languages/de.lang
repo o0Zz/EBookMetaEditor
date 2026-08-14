@@ -1,0 +1,141 @@
+# EBookMetaEditor — Deutsch.
+# Fehlende Zeilen werden auf Englisch angezeigt (siehe en.lang).
+
+@name = Deutsch
+
+app.name = EBookMetaEditor
+app.title.file = {0} — EBookMetaEditor
+
+button.ok = OK
+button.cancel = Abbrechen
+button.close = Schließen
+
+menu.file = &Datei
+menu.file.open = Ö&ffnen…
+menu.file.batch = &Stapelverarbeitung…
+menu.file.save = S&peichern
+menu.file.settings = &Einstellungen…
+menu.file.exit = &Beenden
+menu.file.addFiles = Dateien &hinzufügen…
+menu.file.addFolder = &Ordner hinzufügen…
+menu.file.saveAll = &Alle speichern
+menu.file.validateAll = Alle &prüfen
+menu.file.close = S&chließen
+menu.help = ?
+menu.help.log = &Protokoll…
+menu.help.about = &Über EBookMetaEditor…
+menu.accessible = Hauptmenü
+
+field.title = Titel
+field.sortTitle = Sortiertitel
+field.authors = Autoren
+field.series = Reihe
+field.seriesIndex = Nummer in der Reihe
+field.seriesIndexShort = #
+field.publisher = Verlag
+field.published = Erschienen
+field.language = Sprache
+field.subjects = Schlagwörter
+field.description = Beschreibung
+
+main.status.begin = Öffnen Sie eine Datei, um zu beginnen.
+main.status.format = {0} · {1} Einträge
+main.status.saved = Gespeichert.
+main.status.savedBackup = Gespeichert. Vorherige Fassung als {0}.bak behalten
+main.unsupported = Diese Datei ist {0}.\n\nEBookMetaEditor kann dieses Format nicht bearbeiten.
+main.formatWithDetail = {0} ({1})
+
+dialog.open.title = Buch oder Comic öffnen
+dialog.addFiles.title = Bücher oder Comics hinzufügen
+dialog.folder.batch = Die Metadaten aller Bücher und Comics in einem Ordner bearbeiten
+dialog.folder.add = Alle Bücher und Comics eines Ordners hinzufügen
+
+filter.supported = Unterstützte Dateien (*.epub;*.cbz)
+filter.epub = EPUB (*.epub)
+filter.cbz = Comic-Archiv (*.cbz)
+filter.all = Alle Dateien (*.*)
+filter.log = Protokolldatei (*.log)
+filter.text = Textdatei (*.txt)
+
+settings.title = Einstellungen
+settings.language = Sprache
+settings.language.auto = Automatisch (Systemsprache)
+settings.keepBackup = Nach dem Speichern eine .bak-Sicherung neben der Datei behalten
+settings.validateFully = Beim Öffnen einer Datei alle Prüfungen ausführen
+settings.validateNote = Manche Prüfungen müssen jeden Eintrag des Archivs lesen. Ausgeschaltet bleibt das Öffnen sofort; diese Prüfungen laufen dann, wenn Sie die Ergebnisse ansehen.
+settings.rememberGeometry = Fenstergröße und -position merken
+settings.extensions = „Metadaten bearbeiten“ im Kontextmenü anzeigen für:
+settings.contextMenu.add = Zum Kontextmenü hinzufügen
+settings.contextMenu.remove = Aus dem Kontextmenü entfernen
+settings.registrationNote = Wird nur für Ihr Benutzerkonto eingetragen. Die Standardanwendung für diese Dateien ändert sich dadurch nicht. Unter Windows 11 erscheint der Eintrag unter „Weitere Optionen anzeigen“.
+settings.saveFailed = Die Einstellungen konnten nicht in {0} gespeichert werden: {1}
+
+shell.verb = Metadaten bearbeiten
+shell.updateFailed = Das Kontextmenü konnte nicht aktualisiert werden: {0}
+
+about.title = Über EBookMetaEditor
+about.version = Version {0}   ·   .NET Framework 4.8
+about.what = Ein schneller Metadaten-Editor für E-Books und Comics. Rechtsklick auf eine Datei, Metadaten korrigieren, schließen. Beschädigtes XML wird beim Öffnen repariert; die Datei auf der Festplatte ändert sich erst beim Speichern.
+about.formats = Bearbeitbare Formate:
+about.formats.none = (keine registriert)
+about.note = Andere Formate werden erkannt, aber nicht geöffnet: Eine .cbz, die in Wahrheit ein RAR-Archiv ist, wird benannt statt beschädigt.
+
+log.title = Protokoll
+log.includeDebug = Debug-Details einschließen
+log.copy = Alles kopieren
+log.saveAs = Speichern unter…
+log.empty = (noch nichts protokolliert)
+log.memoryOnly = Nur im Arbeitsspeicher.
+log.written = Wird auch nach {0} geschrieben
+log.willWrite = Wird nach {0} geschrieben, sobald eine Warnung auftritt.
+log.save.title = Protokoll speichern
+log.saveFailed = Das Protokoll konnte nicht gespeichert werden: {0}
+
+batch.title = Stapelverarbeitung — EBookMetaEditor
+batch.bulk.set = Setze
+batch.bulk.apply = Auf Auswahl anwenden
+batch.bulk.hint = …in jeder ausgewählten Zeile.  Strg+D kopiert die aktuelle Zelle nach unten.
+batch.button.saveAll = &Alle speichern
+batch.button.validateAll = Alle &prüfen
+
+column.status = Status
+column.file = Datei
+column.format = Format
+column.findings = Befunde
+
+batch.state.reading = Wird gelesen…
+batch.state.edited = Bearbeitet
+batch.state.saved = Gespeichert
+batch.state.cannotEdit = Nicht bearbeitbar
+batch.state.failed = Fehlgeschlagen
+
+batch.verb.reading = Lesen
+batch.verb.saving = Speichern
+batch.verb.validating = Prüfen
+batch.busy = {0}…
+batch.progress = {0} {1} von {2} — {3}
+batch.cancelled = {0} abgebrochen.
+batch.failed = {0} fehlgeschlagen: {1}
+
+batch.applied.one = {0} in 1 Zeile.
+batch.applied.many = {0} in {1} Zeilen.
+batch.appliedSkipped.one = {0} in 1 Zeile; {2} konnte es nicht speichern.
+batch.appliedSkipped.many = {0} in {1} Zeilen; {2} konnten es nicht speichern.
+batch.what.copied = {0} kopiert
+batch.what.set = {0} gesetzt
+
+batch.selectRows = Wählen Sie zuerst die zu ändernden Zeilen aus.
+batch.nothingEdited = Es wurde nichts bearbeitet.
+batch.rowDirty = Speichern Sie diese Zeile, bevor Sie sie einzeln öffnen — sie enthält ungespeicherte Änderungen.
+batch.findings.one = 1 Befund — siehe Protokoll.
+batch.findings.many = {0} Befunde — siehe Protokoll.
+
+batch.summary.files.one = 1 Datei
+batch.summary.files.many = {0} Dateien
+batch.summary.unusable = {0} nicht bearbeitbar
+batch.summary.noEdits = keine Änderungen
+batch.summary.edited = {0} bearbeitet
+
+batch.close.busy = Ein Stapelvorgang läuft noch. Anhalten und schließen?
+batch.close.dirty.one = 1 Datei enthält ungespeicherte Änderungen. Ohne Speichern schließen?
+batch.close.dirty.many = {0} Dateien enthalten ungespeicherte Änderungen. Ohne Speichern schließen?

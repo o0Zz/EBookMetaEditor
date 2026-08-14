@@ -1,0 +1,141 @@
+# EBookMetaEditor — Español.
+# Las líneas que falten se muestran en inglés (véase en.lang).
+
+@name = Español
+
+app.name = EBookMetaEditor
+app.title.file = {0} — EBookMetaEditor
+
+button.ok = Aceptar
+button.cancel = Cancelar
+button.close = Cerrar
+
+menu.file = &Archivo
+menu.file.open = &Abrir…
+menu.file.batch = Edición por &lotes…
+menu.file.save = &Guardar
+menu.file.settings = &Configuración…
+menu.file.exit = &Salir
+menu.file.addFiles = Añadir &archivos…
+menu.file.addFolder = Añadir &carpeta…
+menu.file.saveAll = &Guardar todo
+menu.file.validateAll = &Validar todo
+menu.file.close = C&errar
+menu.help = ?
+menu.help.log = &Registro…
+menu.help.about = &Acerca de EBookMetaEditor…
+menu.accessible = Menú principal
+
+field.title = Título
+field.sortTitle = Título de ordenación
+field.authors = Autores
+field.series = Serie
+field.seriesIndex = Número en la serie
+field.seriesIndexShort = #
+field.publisher = Editorial
+field.published = Publicado
+field.language = Idioma
+field.subjects = Materias
+field.description = Descripción
+
+main.status.begin = Abra un archivo para empezar.
+main.status.format = {0} · {1} entradas
+main.status.saved = Guardado.
+main.status.savedBackup = Guardado. Versión anterior conservada como {0}.bak
+main.unsupported = Este archivo es {0}.\n\nEBookMetaEditor no puede editar ese formato.
+main.formatWithDetail = {0} ({1})
+
+dialog.open.title = Abrir un libro o un cómic
+dialog.addFiles.title = Añadir libros o cómics
+dialog.folder.batch = Editar los metadatos de todos los libros y cómics de una carpeta
+dialog.folder.add = Añadir todos los libros y cómics de una carpeta
+
+filter.supported = Archivos compatibles (*.epub;*.cbz)
+filter.epub = EPUB (*.epub)
+filter.cbz = Archivo de cómic (*.cbz)
+filter.all = Todos los archivos (*.*)
+filter.log = Archivo de registro (*.log)
+filter.text = Archivo de texto (*.txt)
+
+settings.title = Configuración
+settings.language = Idioma
+settings.language.auto = Automático (idioma del sistema)
+settings.keepBackup = Conservar una copia .bak junto al archivo después de guardar
+settings.validateFully = Ejecutar todas las comprobaciones al abrir un archivo
+settings.validateNote = Algunas comprobaciones deben leer todas las entradas del archivo comprimido. Dejar esto desactivado mantiene la apertura instantánea; esas comprobaciones se ejecutan cuando consulta los resultados.
+settings.rememberGeometry = Recordar el tamaño y la posición de la ventana
+settings.extensions = Mostrar «Editar metadatos» en el menú contextual para:
+settings.contextMenu.add = Añadir al menú contextual
+settings.contextMenu.remove = Quitar del menú contextual
+settings.registrationNote = Se registra solo en su cuenta. No cambia qué aplicación abre estos archivos de forma predeterminada. En Windows 11 la entrada aparece en «Mostrar más opciones».
+settings.saveFailed = No se pudo guardar la configuración en {0}: {1}
+
+shell.verb = Editar metadatos
+shell.updateFailed = No se pudo actualizar el menú contextual: {0}
+
+about.title = Acerca de EBookMetaEditor
+about.version = Versión {0}   ·   .NET Framework 4.8
+about.what = Un editor de metadatos rápido para libros electrónicos y cómics. Haga clic derecho en un archivo, corrija los metadatos y cierre. El XML dañado se repara al abrir; el archivo del disco solo cambia cuando usted guarda.
+about.formats = Formatos editables:
+about.formats.none = (ninguno registrado)
+about.note = Los demás formatos se identifican pero no se abren, así que un .cbz que en realidad es un archivo RAR se nombra en lugar de estropearse.
+
+log.title = Registro
+log.includeDebug = Incluir detalles de depuración
+log.copy = Copiar todo
+log.saveAs = Guardar como…
+log.empty = (todavía no hay nada en el registro)
+log.memoryOnly = Solo en memoria.
+log.written = También escrito en {0}
+log.willWrite = Se escribirá en {0} si se produce una advertencia.
+log.save.title = Guardar el registro
+log.saveFailed = No se pudo guardar el registro: {0}
+
+batch.title = Edición por lotes — EBookMetaEditor
+batch.bulk.set = Establecer
+batch.bulk.apply = Aplicar a la selección
+batch.bulk.hint = …en cada fila seleccionada.  Ctrl+D copia la celda actual hacia abajo.
+batch.button.saveAll = &Guardar todo
+batch.button.validateAll = &Validar todo
+
+column.status = Estado
+column.file = Archivo
+column.format = Formato
+column.findings = Resultados
+
+batch.state.reading = Leyendo…
+batch.state.edited = Editado
+batch.state.saved = Guardado
+batch.state.cannotEdit = No editable
+batch.state.failed = Error
+
+batch.verb.reading = Lectura
+batch.verb.saving = Guardado
+batch.verb.validating = Validación
+batch.busy = {0}…
+batch.progress = {0} {1} de {2} — {3}
+batch.cancelled = {0} cancelada.
+batch.failed = {0} fallida: {1}
+
+batch.applied.one = {0} en 1 fila.
+batch.applied.many = {0} en {1} filas.
+batch.appliedSkipped.one = {0} en 1 fila; {2} no pudo almacenarlo.
+batch.appliedSkipped.many = {0} en {1} filas; {2} no pudieron almacenarlo.
+batch.what.copied = {0} copiado
+batch.what.set = {0} establecido
+
+batch.selectRows = Seleccione primero las filas que desea cambiar.
+batch.nothingEdited = No se ha editado nada.
+batch.rowDirty = Guarde esta fila antes de abrirla por separado: contiene cambios sin guardar.
+batch.findings.one = 1 resultado — consulte el registro.
+batch.findings.many = {0} resultados — consulte el registro.
+
+batch.summary.files.one = 1 archivo
+batch.summary.files.many = {0} archivos
+batch.summary.unusable = {0} no editable(s)
+batch.summary.noEdits = sin cambios
+batch.summary.edited = {0} editado(s)
+
+batch.close.busy = Todavía se está ejecutando una operación por lotes. ¿Detenerla y cerrar?
+batch.close.dirty.one = 1 archivo tiene cambios sin guardar. ¿Cerrar sin guardar?
+batch.close.dirty.many = {0} archivos tienen cambios sin guardar. ¿Cerrar sin guardar?

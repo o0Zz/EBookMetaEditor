@@ -4,13 +4,22 @@ namespace EBookMeta.App;
 /// The settings dialog, reached from <b>File ▸ Settings</b>.
 /// </summary>
 /// <remarks>
+/// <para>
 /// Also the home of context-menu registration. There is no separate setup
 /// program: a tool you unzip and run should be able to hook and unhook itself
 /// from Explorer without an installer.
+/// </para>
+/// <para>
+/// Laid out by a <see cref="TableLayoutPanel"/> rather than by coordinates,
+/// because the text is translated. "Keep a .bak backup beside the file after
+/// saving" is a third longer in German, and a dialog built from fixed positions
+/// answers that by cutting the sentence in half.
+/// </para>
 /// </remarks>
 internal sealed class SettingsForm : Form
 {
     private readonly AppSettings _settings;
+    private readonly ComboBox _language;
     private readonly CheckBox _keepBackup;
     private readonly CheckBox _validateFully;
     private readonly CheckBox _rememberGeometry;
@@ -23,60 +32,61 @@ internal sealed class SettingsForm : Form
     {
         _settings = settings;
 
-        Text = "Settings";
+        Text = Strings.Get("settings.title");
         AppIcon.Apply(this);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         StartPosition = FormStartPosition.CenterParent;
         MinimizeBox = false;
         MaximizeBox = false;
-        ClientSize = new Size(420, 380);
+        ShowInTaskbar = false;
+        AutoScaleMode = AutoScaleMode.Font;
+        ClientSize = new Size(460, 440);
+
+        _language = new ComboBox
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Width = 220,
+            Margin = new Padding(3, 3, 3, 10),
+        };
+
+        FillLanguages();
 
         _keepBackup = new CheckBox
         {
-            Text = "Keep a .bak backup beside the file after saving",
+            Text = Strings.Get("settings.keepBackup"),
             Checked = settings.KeepBackupOnSave,
-            Location = new Point(16, 16),
             AutoSize = true,
         };
 
         _validateFully = new CheckBox
         {
-            Text = "Run all validation checks when a file opens",
+            Text = Strings.Get("settings.validateFully"),
             Checked = settings.ValidateFullyOnOpen,
-            Location = new Point(16, 44),
             AutoSize = true,
         };
 
-        var validateNote = new Label
-        {
-            // Say why the default is off, so the setting reads as a trade-off
-            // rather than a missing feature.
-            Text = "Some checks must read every entry in the archive. Leaving this off "
-                 + "keeps opening instant; those checks run when you view the findings.",
-            Location = new Point(34, 66),
-            Size = new Size(370, 34),
-            ForeColor = SystemColors.GrayText,
-        };
+        // Say why the default is off, so the setting reads as a trade-off rather
+        // than a missing feature.
+        Label validateNote = Note("settings.validateNote", indent: 20);
 
         _rememberGeometry = new CheckBox
         {
-            Text = "Remember the window size and position",
+            Text = Strings.Get("settings.rememberGeometry"),
             Checked = settings.RememberWindowGeometry,
-            Location = new Point(16, 106),
             AutoSize = true,
+            Margin = new Padding(3, 8, 3, 10),
         };
 
         var extensionsLabel = new Label
         {
-            Text = "Show \"Edit metadata\" in the right-click menu for:",
-            Location = new Point(16, 142),
+            Text = Strings.Get("settings.extensions"),
             AutoSize = true,
         };
 
         _extensions = new CheckedListBox
         {
-            Location = new Point(16, 164),
-            Size = new Size(388, 60),
+            Height = 58,
+            Width = 420,
             CheckOnClick = true,
             IntegralHeight = false,
         };
@@ -88,49 +98,148 @@ internal sealed class SettingsForm : Form
 
         _contextMenu = new Button
         {
-            Location = new Point(16, 234),
-            Size = new Size(388, 32),
+            Width = 420,
+            Height = 32,
+            Margin = new Padding(3, 8, 3, 3),
         };
 
         _contextMenu.Click += OnContextMenuClicked;
         UpdateContextMenuButton();
 
-        var registrationNote = new Label
+        Label registrationNote = Note("settings.registrationNote", indent: 0);
+
+        Controls.Add(BuildLayout(validateNote, extensionsLabel, registrationNote));
+        Controls.Add(BuildButtons());
+    }
+
+    /// <summary>
+    /// One column of controls, each sized to whatever its translation needs.
+    /// </summary>
+    private TableLayoutPanel BuildLayout(Label validateNote, Label extensionsLabel, Label registrationNote)
+    {
+        var layout = new TableLayoutPanel
         {
-            Text = "Registers under your account only. It does not change which "
-                 + "application opens these files by default. On Windows 11 the entry "
-                 + "appears under \"Show more options\".",
-            Location = new Point(16, 272),
-            Size = new Size(388, 48),
-            ForeColor = SystemColors.GrayText,
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            AutoScroll = true,
+            Padding = new Padding(14, 12, 14, 6),
         };
 
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+
+        var languageRow = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            Margin = new Padding(0),
+        };
+
+        languageRow.Controls.Add(new Label
+        {
+            Text = Strings.Get("settings.language"),
+            AutoSize = true,
+            Margin = new Padding(3, 7, 8, 3),
+        });
+
+        languageRow.Controls.Add(_language);
+
+        Control[] rows =
+        [
+            languageRow, _keepBackup, _validateFully, validateNote, _rememberGeometry,
+            extensionsLabel, _extensions, _contextMenu, registrationNote,
+        ];
+
+        foreach (Control row in rows)
+        {
+            layout.RowCount++;
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.Controls.Add(row);
+        }
+
+        return layout;
+    }
+
+    private FlowLayoutPanel BuildButtons()
+    {
         var ok = new Button
         {
-            Text = "OK",
+            Text = Strings.Get("button.ok"),
             DialogResult = DialogResult.OK,
-            Location = new Point(248, 334),
-            Size = new Size(75, 26),
+            AutoSize = true,
+            MinimumSize = new Size(80, 27),
         };
 
         var cancel = new Button
         {
-            Text = "Cancel",
+            Text = Strings.Get("button.cancel"),
             DialogResult = DialogResult.Cancel,
-            Location = new Point(329, 334),
-            Size = new Size(75, 26),
+            AutoSize = true,
+            MinimumSize = new Size(80, 27),
         };
 
         ok.Click += (_, _) => Commit();
 
-        Controls.AddRange(
-        [
-            _keepBackup, _validateFully, validateNote, _rememberGeometry,
-            extensionsLabel, _extensions, _contextMenu, registrationNote, ok, cancel,
-        ]);
+        var buttons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Bottom,
+            FlowDirection = FlowDirection.RightToLeft,
+            AutoSize = true,
+            Padding = new Padding(8, 6, 14, 10),
+        };
+
+        buttons.Controls.Add(cancel);
+        buttons.Controls.Add(ok);
 
         AcceptButton = ok;
         CancelButton = cancel;
+
+        return buttons;
+    }
+
+    /// <summary>
+    /// A greyed explanatory paragraph that grows downwards instead of clipping.
+    /// </summary>
+    private static Label Note(string key, int indent) => new()
+    {
+        Text = Strings.Get(key),
+        AutoSize = true,
+
+        // Wrap at the dialog's width and take as many lines as that needs. A
+        // fixed Size here is what turns a longer translation into a truncated
+        // sentence.
+        MaximumSize = new Size(414 - indent, 0),
+        Margin = new Padding(indent + 3, 2, 3, 6),
+        ForeColor = SystemColors.GrayText,
+    };
+
+    /// <summary>
+    /// Offers every language embedded in the exe, plus following Windows.
+    /// </summary>
+    private void FillLanguages()
+    {
+        // Deliberately first and deliberately the default: the right answer for
+        // most people is the language their computer is already in.
+        _language.Items.Add(new Strings.Language(string.Empty, Strings.Get("settings.language.auto")));
+
+        foreach (Strings.Language language in Strings.Available)
+        {
+            _language.Items.Add(language);
+        }
+
+        int chosen = 0;
+
+        for (int i = 1; i < _language.Items.Count; i++)
+        {
+            if (((Strings.Language)_language.Items[i]).Code == _settings.Language)
+            {
+                chosen = i;
+                break;
+            }
+        }
+
+        _language.SelectedIndex = chosen;
     }
 
     /// <summary>
@@ -151,7 +260,7 @@ internal sealed class SettingsForm : Form
 
         if (error is not null)
         {
-            MessageBox.Show(this, error, "EBookMetaEditor", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, error, Strings.Get("app.name"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
 
         UpdateContextMenuButton();
@@ -161,15 +270,21 @@ internal sealed class SettingsForm : Form
     {
         bool registered = ShellRegistration.IsRegisteredForAny();
 
-        _contextMenu.Text = registered
-            ? "Remove from context menu"
-            : "Add to context menu";
+        _contextMenu.Text = Strings.Get(registered
+            ? "settings.contextMenu.remove"
+            : "settings.contextMenu.add");
 
         _extensions.Enabled = !registered;
     }
 
     private void Commit()
     {
+        // Language first: everything below it that produces text — a registration
+        // failure, the verb written into the registry — should come out in the
+        // language the user has just chosen, not the one they are leaving.
+        _settings.Language = _language.SelectedItem is Strings.Language chosen ? chosen.Code : string.Empty;
+        Strings.Use(_settings.Language);
+
         _settings.KeepBackupOnSave = _keepBackup.Checked;
         _settings.ValidateFullyOnOpen = _validateFully.Checked;
         _settings.RememberWindowGeometry = _rememberGeometry.Checked;
@@ -177,7 +292,8 @@ internal sealed class SettingsForm : Form
 
         // Keep the registry in step with the tick boxes, but only where the verb
         // is already in use — pressing OK should not silently register anything
-        // the user did not ask for with the button.
+        // the user did not ask for with the button. This is also what re-labels
+        // the Explorer entry when the language changed.
         if (ShellRegistration.IsRegisteredForAny())
         {
             ShellRegistration.Apply(_settings.RegisteredExtensions);
@@ -186,7 +302,7 @@ internal sealed class SettingsForm : Form
         string? error = _settings.TrySave();
         if (error is not null)
         {
-            MessageBox.Show(this, error, "EBookMetaEditor", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, error, Strings.Get("app.name"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }
 }

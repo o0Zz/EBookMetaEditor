@@ -42,6 +42,11 @@ internal static class Program
 
         AppSettings settings = AppSettings.Load();
 
+        // Before any window exists: every form reads its text in its constructor,
+        // so a language chosen after the first one is built would arrive too late
+        // for it.
+        Strings.Use(settings.Language);
+
         StartLogging(settings, args);
 
         // An unhandled exception is the one case the in-memory log cannot survive,
@@ -141,6 +146,9 @@ internal static class Program
 
         Log.Info($"EBookMetaEditor {version} starting on {Environment.OSVersion}.");
         Log.Debug($"Settings: {settings.Path}");
+        Log.Debug(settings.Language.Length == 0
+            ? $"Interface language: {Strings.Code} (following Windows)."
+            : $"Interface language: {Strings.Code} (chosen).");
         Log.Debug(args.Length > 0
             ? $"Launched with: {string.Join(" ", args)}"
             : "Launched with no arguments.");

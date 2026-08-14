@@ -34,6 +34,22 @@
     <EmbeddedResource Include="icon.ico" LogicalName="EBookMetaEditor.icon.ico" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Interface languages, one file each. A wildcard rather than a list: adding
+         a language is adding a file to Languages/, and Strings finds it by
+         enumerating what is embedded.
+
+         WithCulture=false because en.lang and de.lang otherwise look exactly like
+         culture-specific resources to MSBuild, which would build them into
+         satellite assemblies in subfolders — the opposite of the single file
+         everything else here is arranged around. -->
+    <EmbeddedResource Include="Languages\*.lang">
+      <!-- Must match Strings.Prefix. -->
+      <LogicalName>EBookMetaEditor.Languages.%(Filename)%(Extension)</LogicalName>
+      <WithCulture>false</WithCulture>
+    </EmbeddedResource>
+  </ItemGroup>
+
   <!-- WinForms on net48 is wired with classic references. UseWindowsForms is a
        modern-.NET property and does nothing here. -->
   <ItemGroup>

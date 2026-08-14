@@ -47,6 +47,21 @@ internal sealed class MainForm : Form, IPathReceiver
 
     private readonly StatusStrip _status = new();
     private readonly ToolStripStatusLabel _statusText = new() { Spring = true, TextAlign = ContentAlignment.MiddleLeft };
+
+    /// <summary>
+    /// How to re-label every piece of fixed prose in the window.
+    /// </summary>
+    /// <remarks>
+    /// Closures rather than a list of controls, because a menu item and a label
+    /// have no common base type worth casting to for the sake of one property.
+    /// Collected so <see cref="Localize"/> can run twice: once while building,
+    /// and again when the settings dialog changes the language, which would
+    /// otherwise leave the window labelled in the language the user just left.
+    /// Anything computed — the status line, the title once a file is open — is
+    /// not in here, because it is rebuilt from its own state instead.
+    /// </remarks>
+    private readonly List<Action> _relabel = [];
+
     private readonly ToolStripMenuItem _saveItem;
 
     /// <summary>
@@ -92,7 +107,7 @@ internal sealed class MainForm : Form, IPathReceiver
             (MetadataField.Description, _description),
         ];
 
-        Text = "EBookMetaEditor";
+        Text = Strings.Get("app.name");
         AppIcon.Apply(this);
         ClientSize = new Size(880, 560);
         MinimumSize = new Size(700, 480);
@@ -117,36 +132,24 @@ internal sealed class MainForm : Form, IPathReceiver
         _handover.Interval = 600;
         _handover.Tick += (_, _) => HandOverToBatch();
 
-        _saveItem = new ToolStripMenuItem("&Save", null, (_, _) => Save())
-        {
-            ShortcutKeys = Keys.Control | Keys.S,
-            Enabled = false,
-        };
+        _saveItem = Item("menu.file.save", () => Save(), Keys.Control | Keys.S);
+        _saveItem.Enabled = false;
 
-        var file = new ToolStripMenuItem("&File");
-        file.DropDownItems.Add(new ToolStripMenuItem("&Open…", null, (_, _) => OpenWithDialog())
-        {
-            ShortcutKeys = Keys.Control | Keys.O,
-        });
-        file.DropDownItems.Add(new ToolStripMenuItem("&Batch edit folder…", null, (_, _) => OpenFolder())
-        {
-            ShortcutKeys = Keys.Control | Keys.B,
-        });
+        ToolStripMenuItem file = Item("menu.file");
+        file.DropDownItems.Add(Item("menu.file.open", OpenWithDialog, Keys.Control | Keys.O));
+        file.DropDownItems.Add(Item("menu.file.batch", OpenFolder, Keys.Control | Keys.B));
         file.DropDownItems.Add(_saveItem);
         file.DropDownItems.Add(new ToolStripSeparator());
-        file.DropDownItems.Add(new ToolStripMenuItem("Se&ttings…", null, (_, _) => ShowSettings()));
+        file.DropDownItems.Add(Item("menu.file.settings", ShowSettings));
         file.DropDownItems.Add(new ToolStripSeparator());
-        file.DropDownItems.Add(new ToolStripMenuItem("E&xit", null, (_, _) => Close()));
+        file.DropDownItems.Add(Item("menu.file.exit", Close));
 
         // Labelled "?" as the help menu, the convention this app follows. Holds
         // the log and the About box.
-        var help = new ToolStripMenuItem("?");
-        help.DropDownItems.Add(new ToolStripMenuItem("&Log…", null, (_, _) => ShowLog())
-        {
-            ShortcutKeys = Keys.Control | Keys.L,
-        });
+        ToolStripMenuItem help = Item("menu.help");
+        help.DropDownItems.Add(Item("menu.help.log", ShowLog, Keys.Control | Keys.L));
         help.DropDownItems.Add(new ToolStripSeparator());
-        help.DropDownItems.Add(new ToolStripMenuItem("&About EBookMetaEditor…", null, (_, _) => ShowAbout()));
+        help.DropDownItems.Add(Item("menu.help.about", ShowAbout));
 
         var menu = new MenuStrip();
         menu.Items.Add(file);
@@ -180,6 +183,32 @@ internal sealed class MainForm : Form, IPathReceiver
         Open(path);
     }
 
+    /// <summary>
+    /// A menu item whose label follows the interface language.
+    /// </summary>
+    /// <remarks>
+    /// The text is set through <see cref="_relabel"/> rather than here, so that
+    /// building the menu and re-labelling it later are the same code and cannot
+    /// drift into disagreeing about which key an item uses.
+    /// </remarks>
+    private ToolStripMenuItem Item(string key, Action? action = null, Keys shortcut = Keys.None)
+    {
+        var item = new ToolStripMenuItem();
+
+        if (action is not null)
+        {
+            item.Click += (_, _) => action();
+        }
+
+        if (shortcut != Keys.None)
+        {
+            item.ShortcutKeys = shortcut;
+        }
+
+        _relabel.Add(() => item.Text = Strings.Get(key));
+        return item;
+    }
+
     private void BuildLayout(MenuStrip menu)
     {
         var fields = new TableLayoutPanel
@@ -190,23 +219,25 @@ internal sealed class MainForm : Form, IPathReceiver
             AutoScroll = true,
         };
 
-        fields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
+        // AutoSize rather than a fixed 110 px: "Series index" is "Nummer in der
+        // Reihe" in German, and a fixed label column would clip it.
+        fields.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         fields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
-        AddRow(fields, "Title", _title);
-        AddRow(fields, "Sort title", _sortTitle);
-        AddRow(fields, "Authors", _authors);
-        AddRow(fields, "Series", _series);
-        AddRow(fields, "Series index", _seriesIndex);
-        AddRow(fields, "Publisher", _publisher);
-        AddRow(fields, "Published", _published);
-        AddRow(fields, "Language", _language);
-        AddRow(fields, "Subjects", _subjects);
+        AddRow(fields, "field.title", _title);
+        AddRow(fields, "field.sortTitle", _sortTitle);
+        AddRow(fields, "field.authors", _authors);
+        AddRow(fields, "field.series", _series);
+        AddRow(fields, "field.seriesIndex", _seriesIndex);
+        AddRow(fields, "field.publisher", _publisher);
+        AddRow(fields, "field.published", _published);
+        AddRow(fields, "field.language", _language);
+        AddRow(fields, "field.subjects", _subjects);
 
         _description.Multiline = true;
         _description.ScrollBars = ScrollBars.Vertical;
         _description.Height = 90;
-        AddRow(fields, "Description", _description);
+        AddRow(fields, "field.description", _description);
 
         var right = new Panel { Dock = DockStyle.Right, Width = 220, Padding = new Padding(10) };
         _cover.Dock = DockStyle.Top;
@@ -222,14 +253,46 @@ internal sealed class MainForm : Form, IPathReceiver
         Controls.Add(menu);
         MainMenuStrip = menu;
 
-        SetStatus("Open a file to begin.");
+        Localize();
     }
 
-    private static void AddRow(TableLayoutPanel panel, string label, Control field)
+    /// <summary>
+    /// Puts every fixed label into the current language.
+    /// </summary>
+    /// <remarks>
+    /// Run again after the settings dialog closes, which is the only place the
+    /// language can change. The batch window is not reachable while that dialog
+    /// is open, so there is no second window to keep in step and no need for a
+    /// change notification anybody could forget to unsubscribe from.
+    /// </remarks>
+    private void Localize()
     {
+        foreach (Action relabel in _relabel)
+        {
+            relabel();
+        }
+
+        if (_path is null)
+        {
+            Text = Strings.Get("app.name");
+            SetStatus(Strings.Get("main.status.begin"));
+        }
+    }
+
+    private void AddRow(TableLayoutPanel panel, string key, Control field)
+    {
+        var label = new Label
+        {
+            AutoSize = true,
+            Anchor = AnchorStyles.Left,
+            Margin = new Padding(3, 7, 12, 3),
+        };
+
+        _relabel.Add(() => label.Text = Strings.Get(key));
+
         panel.RowCount++;
         panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        panel.Controls.Add(new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(3, 7, 3, 3) });
+        panel.Controls.Add(label);
         field.Dock = DockStyle.Fill;
         field.Margin = new Padding(3, 4, 3, 4);
         panel.Controls.Add(field);
@@ -241,9 +304,9 @@ internal sealed class MainForm : Form, IPathReceiver
     {
         using var dialog = new OpenFileDialog
         {
-            Title = "Open a book or comic",
+            Title = Strings.Get("dialog.open.title"),
             Multiselect = true,
-            Filter = "Supported files (*.epub;*.cbz)|*.epub;*.cbz|EPUB (*.epub)|*.epub|Comic archive (*.cbz)|*.cbz|All files (*.*)|*.*",
+            Filter = BookFilter(),
         };
 
         if (dialog.ShowDialog(this) != DialogResult.OK)
@@ -260,11 +323,26 @@ internal sealed class MainForm : Form, IPathReceiver
         OpenBatch(dialog.FileNames);
     }
 
+    /// <summary>
+    /// The file-dialog filter, assembled rather than translated whole.
+    /// </summary>
+    /// <remarks>
+    /// A filter string is descriptions and glob patterns separated by bars, and
+    /// handing that structure to a translator invites a misplaced bar that makes
+    /// the dialog show nothing. Only the descriptions are translated; the
+    /// patterns are built here.
+    /// </remarks>
+    internal static string BookFilter() =>
+        $"{Strings.Get("filter.supported")}|*.epub;*.cbz"
+        + $"|{Strings.Get("filter.epub")}|*.epub"
+        + $"|{Strings.Get("filter.cbz")}|*.cbz"
+        + $"|{Strings.Get("filter.all")}|*.*";
+
     private void OpenFolder()
     {
         using var dialog = new FolderBrowserDialog
         {
-            Description = "Edit the metadata of every book and comic in a folder",
+            Description = Strings.Get("dialog.folder.batch"),
         };
 
         if (dialog.ShowDialog(this) == DialogResult.OK)
@@ -358,13 +436,17 @@ internal sealed class MainForm : Form, IPathReceiver
                     $"'{path}' is {FormatIds.ToDisplayName(detected.Format)}, which this build cannot edit.");
 
                 // Naming the format precisely is the point: "this .cbz is really
-                // a RAR archive" is more useful than "unsupported file".
+                // a RAR archive" is more useful than "unsupported file". The
+                // format's own name is not translated — it is what the format is
+                // called everywhere.
+                string name = FormatIds.ToDisplayName(detected.Format);
+
                 MessageBox.Show(
                     this,
-                    $"This file is {FormatIds.ToDisplayName(detected.Format)}"
-                        + (detected.Detail is null ? "" : $" ({detected.Detail})") + ".\n\n"
-                        + "EBookMetaEditor cannot edit that format.",
-                    "EBookMetaEditor",
+                    Strings.Format(
+                        "main.unsupported",
+                        detected.Detail is null ? name : Strings.Format("main.formatWithDetail", name, detected.Detail)),
+                    Strings.Get("app.name"),
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Information);
 
@@ -383,8 +465,9 @@ internal sealed class MainForm : Form, IPathReceiver
             LogFindings(handler, container, _metadata);
 
             _saveItem.Enabled = _capabilities.CanWrite;
-            Text = $"{Path.GetFileName(path)} — EBookMetaEditor";
-            SetStatus($"{FormatIds.ToDisplayName(detected.Format)} · {container.Entries.Count} entries");
+            Text = Strings.Format("app.title.file", Path.GetFileName(path));
+            SetStatus(Strings.Format(
+                "main.status.format", FormatIds.ToDisplayName(detected.Format), container.Entries.Count));
             Log.Info($"Opened '{path}' — {container.Entries.Count} entries.");
         }
         catch (Exception ex) when (ex is BookFormatException or BookIoException)
@@ -392,7 +475,7 @@ internal sealed class MainForm : Form, IPathReceiver
             // Recoverable damage was already corrected on the way in, so reaching
             // here means the file is broken in a way this tool will not guess at.
             Log.Error($"Could not open '{path}'", ex);
-            MessageBox.Show(this, ex.Message, "EBookMetaEditor", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, ex.Message, Strings.Get("app.name"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
             SetStatus(ex.Message);
         }
     }
@@ -524,15 +607,15 @@ internal sealed class MainForm : Form, IPathReceiver
                 _settings.KeepBackupOnSave);
 
             SetStatus(_settings.KeepBackupOnSave
-                ? $"Saved. Previous version kept as {Path.GetFileName(source)}.bak"
-                : "Saved.");
+                ? Strings.Format("main.status.savedBackup", Path.GetFileName(source))
+                : Strings.Get("main.status.saved"));
 
             Log.Info($"Saved '{source}'.");
         }
         catch (Exception ex) when (ex is BookFormatException or BookIoException)
         {
             Log.Error($"Could not save '{_path}'", ex);
-            MessageBox.Show(this, ex.Message, "EBookMetaEditor", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, ex.Message, Strings.Get("app.name"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }
 
@@ -567,6 +650,10 @@ internal sealed class MainForm : Form, IPathReceiver
     {
         using var dialog = new SettingsForm(_settings);
         dialog.ShowDialog(this);
+
+        // The one place the language can change, so the one place this window has
+        // to re-read its own labels.
+        Localize();
     }
 
     private void SetStatus(string text) => _statusText.Text = text;

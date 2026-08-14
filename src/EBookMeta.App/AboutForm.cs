@@ -19,76 +19,104 @@ internal sealed class AboutForm : Form
         Assembly assembly = Assembly.GetExecutingAssembly();
         string version = assembly.GetName().Version?.ToString(3) ?? "0.0.0";
 
-        Text = "About EBookMetaEditor";
+        Text = Strings.Get("about.title");
         AppIcon.Apply(this);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         StartPosition = FormStartPosition.CenterParent;
         MinimizeBox = false;
         MaximizeBox = false;
         ShowInTaskbar = false;
-        ClientSize = new Size(430, 260);
+        AutoScaleMode = AutoScaleMode.Font;
+        ClientSize = new Size(460, 300);
+
+        // Stacked by a layout panel rather than placed at coordinates, so a
+        // translation that runs to four lines where English took three pushes
+        // what follows down instead of disappearing underneath it.
+        var body = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            Padding = new Padding(16, 14, 16, 8),
+            AutoScroll = true,
+        };
+
+        body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
         var name = new Label
         {
-            Text = "EBookMetaEditor",
+            Text = Strings.Get("app.name"),
             Font = new Font(Font.FontFamily, 13f, FontStyle.Bold),
-            Location = new Point(16, 16),
             AutoSize = true,
+            Margin = new Padding(0, 0, 0, 2),
         };
 
         var detail = new Label
         {
-            Text = $"Version {version}   ·   .NET Framework 4.8",
-            Location = new Point(18, 46),
+            Text = Strings.Format("about.version", version),
             AutoSize = true,
             ForeColor = SystemColors.GrayText,
+            Margin = new Padding(2, 0, 0, 12),
         };
 
-        var what = new Label
-        {
-            Text = "A fast metadata editor for ebooks and comics. Right-click a file, "
-                 + "fix the metadata, close. Broken XML is repaired on open; the file on "
-                 + "disk is only changed when you save.",
-            Location = new Point(18, 76),
-            Size = new Size(394, 56),
-        };
+        Label what = Paragraph(Strings.Get("about.what"), SystemColors.ControlText);
 
         var formatsLabel = new Label
         {
-            Text = "Editable formats:",
-            Location = new Point(18, 140),
+            Text = Strings.Get("about.formats"),
             AutoSize = true,
+            Margin = new Padding(2, 8, 0, 2),
         };
 
         var formats = new Label
         {
             Text = BookFormats.All.Count == 0
-                ? "(none registered)"
+                ? Strings.Get("about.formats.none")
                 : string.Join(", ", BookFormats.All.Select(h => FormatIds.ToDisplayName(h.Id)).OrderBy(n => n)),
-            Location = new Point(18, 160),
-            Size = new Size(394, 20),
+            AutoSize = true,
+            Margin = new Padding(2, 0, 0, 12),
         };
 
-        var note = new Label
-        {
-            Text = "Other formats are identified but not opened, so a .cbz that is "
-                 + "really a RAR archive is named rather than mangled.",
-            Location = new Point(18, 184),
-            Size = new Size(394, 34),
-            ForeColor = SystemColors.GrayText,
-        };
+        Label note = Paragraph(Strings.Get("about.note"), SystemColors.GrayText);
 
         var ok = new Button
         {
-            Text = "OK",
+            Text = Strings.Get("button.ok"),
             DialogResult = DialogResult.OK,
-            Location = new Point(337, 224),
-            Size = new Size(75, 26),
+            AutoSize = true,
+            MinimumSize = new Size(80, 27),
         };
 
-        Controls.AddRange([name, detail, what, formatsLabel, formats, note, ok]);
+        var buttons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Bottom,
+            FlowDirection = FlowDirection.RightToLeft,
+            AutoSize = true,
+            Padding = new Padding(8, 4, 16, 10),
+        };
+
+        buttons.Controls.Add(ok);
+
+        foreach (Control row in new Control[] { name, detail, what, formatsLabel, formats, note })
+        {
+            body.RowCount++;
+            body.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            body.Controls.Add(row);
+        }
+
+        Controls.Add(body);
+        Controls.Add(buttons);
 
         AcceptButton = ok;
         CancelButton = ok;
     }
+
+    /// <summary>A paragraph that wraps to the dialog's width and grows downwards.</summary>
+    private static Label Paragraph(string text, Color colour) => new()
+    {
+        Text = text,
+        AutoSize = true,
+        MaximumSize = new Size(424, 0),
+        ForeColor = colour,
+        Margin = new Padding(2, 0, 0, 4),
+    };
 }

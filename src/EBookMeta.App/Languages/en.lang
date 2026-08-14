@@ -1,0 +1,156 @@
+# EBookMetaEditor — English. The master file: every other language falls back to
+# this one key by key, so a line missing elsewhere shows in English rather than
+# showing its key.
+#
+# Format: one "key = value" per line, # for a comment, \n for a line break.
+# Everything after the first = is the text, so = needs no escaping.
+# @name is the language's name for itself, shown in the settings picker.
+
+@name = English
+
+app.name = EBookMetaEditor
+app.title.file = {0} — EBookMetaEditor
+
+button.ok = OK
+button.cancel = Cancel
+button.close = Close
+
+# Menus. & marks the keyboard accelerator; give it a letter that appears in the
+# translated word, and do not use the same letter twice in one menu.
+menu.file = &File
+menu.file.open = &Open…
+menu.file.batch = &Batch edit folder…
+menu.file.save = &Save
+menu.file.settings = Se&ttings…
+menu.file.exit = E&xit
+menu.file.addFiles = Add &files…
+menu.file.addFolder = Add f&older…
+menu.file.saveAll = &Save all
+menu.file.validateAll = &Validate all
+menu.file.close = &Close
+menu.help = ?
+menu.help.log = &Log…
+menu.help.about = &About EBookMetaEditor…
+menu.accessible = Main menu
+
+# Metadata fields. These name the same things the formats do, so keep them close
+# to the vocabulary a reader application in this language would use.
+field.title = Title
+field.sortTitle = Sort title
+field.authors = Authors
+field.series = Series
+field.seriesIndex = Series index
+field.seriesIndexShort = #
+field.publisher = Publisher
+field.published = Published
+field.language = Language
+field.subjects = Subjects
+field.description = Description
+
+main.status.begin = Open a file to begin.
+main.status.format = {0} · {1} entries
+main.status.saved = Saved.
+main.status.savedBackup = Saved. Previous version kept as {0}.bak
+main.unsupported = This file is {0}.\n\nEBookMetaEditor cannot edit that format.
+main.formatWithDetail = {0} ({1})
+
+dialog.open.title = Open a book or comic
+dialog.addFiles.title = Add books or comics
+dialog.folder.batch = Edit the metadata of every book and comic in a folder
+dialog.folder.add = Add every book and comic in a folder
+
+# File-dialog filters. Translate the description; leave the patterns in brackets
+# exactly as they are.
+filter.supported = Supported files (*.epub;*.cbz)
+filter.epub = EPUB (*.epub)
+filter.cbz = Comic archive (*.cbz)
+filter.all = All files (*.*)
+filter.log = Log file (*.log)
+filter.text = Text file (*.txt)
+
+settings.title = Settings
+settings.language = Language
+settings.language.auto = Automatic (system language)
+settings.keepBackup = Keep a .bak backup beside the file after saving
+settings.validateFully = Run all validation checks when a file opens
+settings.validateNote = Some checks must read every entry in the archive. Leaving this off keeps opening instant; those checks run when you view the findings.
+settings.rememberGeometry = Remember the window size and position
+settings.extensions = Show "Edit metadata" in the right-click menu for:
+settings.contextMenu.add = Add to context menu
+settings.contextMenu.remove = Remove from context menu
+settings.registrationNote = Registers under your account only. It does not change which application opens these files by default. On Windows 11 the entry appears under "Show more options".
+settings.saveFailed = Settings could not be saved to {0}: {1}
+
+# The right-click entry Explorer shows. Written into the registry, so it changes
+# when the language does — but only while the entry is registered.
+shell.verb = Edit metadata
+shell.updateFailed = The context menu could not be updated: {0}
+
+about.title = About EBookMetaEditor
+about.version = Version {0}   ·   .NET Framework 4.8
+about.what = A fast metadata editor for ebooks and comics. Right-click a file, fix the metadata, close. Broken XML is repaired on open; the file on disk is only changed when you save.
+about.formats = Editable formats:
+about.formats.none = (none registered)
+about.note = Other formats are identified but not opened, so a .cbz that is really a RAR archive is named rather than mangled.
+
+log.title = Log
+log.includeDebug = Include debug detail
+log.copy = Copy all
+log.saveAs = Save as…
+log.empty = (nothing logged yet)
+log.memoryOnly = Kept in memory only.
+log.written = Also written to {0}
+log.willWrite = Will be written to {0} if a warning occurs.
+log.save.title = Save the log
+log.saveFailed = The log could not be saved: {0}
+
+batch.title = Batch edit — EBookMetaEditor
+batch.bulk.set = Set
+batch.bulk.apply = Apply to selection
+batch.bulk.hint = …on every selected row.  Ctrl+D copies the current cell down the selection.
+batch.button.saveAll = &Save all
+batch.button.validateAll = &Validate all
+
+column.status = Status
+column.file = File
+column.format = Format
+column.findings = Findings
+
+batch.state.reading = Reading…
+batch.state.edited = Edited
+batch.state.saved = Saved
+batch.state.cannotEdit = Cannot edit
+batch.state.failed = Failed
+
+# Verbs for the progress line, used as "Saving 3 of 40 — book.epub".
+batch.verb.reading = Reading
+batch.verb.saving = Saving
+batch.verb.validating = Validating
+batch.busy = {0}…
+batch.progress = {0} {1} of {2} — {3}
+batch.cancelled = {0} cancelled.
+batch.failed = {0} failed: {1}
+
+# {0} is a phrase built from batch.what.*, so it arrives already translated.
+batch.applied.one = {0} on 1 row.
+batch.applied.many = {0} on {1} rows.
+batch.appliedSkipped.one = {0} on 1 row; {2} could not store it.
+batch.appliedSkipped.many = {0} on {1} rows; {2} could not store it.
+batch.what.copied = {0} copied
+batch.what.set = {0} set
+
+batch.selectRows = Select the rows to change first.
+batch.nothingEdited = Nothing has been edited.
+batch.rowDirty = Save this row before opening it on its own — it has unsaved edits here.
+batch.findings.one = 1 finding — see the log.
+batch.findings.many = {0} findings — see the log.
+
+batch.summary.files.one = 1 file
+batch.summary.files.many = {0} files
+batch.summary.unusable = {0} cannot be edited
+batch.summary.noEdits = no edits
+batch.summary.edited = {0} edited
+
+batch.close.busy = A batch operation is still running. Stop it and close?
+batch.close.dirty.one = 1 file has unsaved edits. Close without saving?
+batch.close.dirty.many = {0} files have unsaved edits. Close without saving?

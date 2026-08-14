@@ -103,7 +103,9 @@ src/
     Model/             BookMetadata, Creator, Identifier, SeriesInfo, CoverImage
   EBookMeta.App/        net48          — WinForms, single instance, argv = paths
                        MainForm, BatchForm, SettingsForm, LogForm, AboutForm,
-                       ShellRegistration, SingleInstance, AppIcon
+                       ShellRegistration, SingleInstance, AppIcon,
+                       Strings, EmbeddedAssemblies
+    Languages/         one key = value file per interface language
 tests/
   EBookMeta.Core.Tests/ net48
     Fixtures/          golden expected-byte files only
@@ -443,6 +445,33 @@ IDs are namespaced by format. `F` = fatal (cannot edit), `E` = error,
 | CBZ-W032 | warn | `LanguageISO` not a valid ISO 639-1 code |
 
 When adding a rule, add a fixture that triggers it in isolation.
+
+## Interface language
+
+`Strings` serves every piece of text the windows show, out of one
+`key = value` file per language in `src/EBookMeta.App/Languages/`, embedded in
+the exe. English (`en.lang`) is the master and the per-key fallback, so a
+half-finished translation shows English lines rather than raw key names.
+
+- **Not .resx.** Satellite assemblies are DLLs in subfolders, and this
+  application is one file. A plain text file is also something a translator can
+  open, which a `.resx` is not.
+- **Adding a language is adding a file.** Nothing lists them: the picker is
+  built from what is embedded, and the csproj globs `Languages\*.lang`.
+  `WithCulture=false` on that item is load-bearing — without it MSBuild reads
+  `de.lang` as a culture-specific resource and builds a satellite.
+- **The log and every `Finding` stay English.** They are diagnostics, pasted
+  into bug reports, and keyed by stable rule IDs. Core knows nothing about the
+  interface language and must not learn.
+- **`Strings.Use` sets `CurrentUICulture`, never `CurrentCulture`.** Metadata is
+  parsed and written by Core using the latter; a series index or a date that
+  round-tripped differently because the window is in German would be the
+  interface reaching the user's file.
+- **Two plural forms**, `key.one` and `key.many`, via `Strings.Plural`. Enough
+  for the languages shipped, and honestly not enough in general.
+- **Lay windows out with panels, not coordinates.** German runs about a third
+  longer than English; a fixed `Size` on a label turns that into a truncated
+  sentence.
 
 ## Test corpus
 

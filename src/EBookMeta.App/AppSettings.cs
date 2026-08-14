@@ -24,6 +24,17 @@ internal sealed class AppSettings
 {
     private const string FileName = "settings.json";
 
+    /// <summary>
+    /// The interface language, as a two-letter code, or empty to follow Windows.
+    /// </summary>
+    /// <remarks>
+    /// Empty by default, which is the answer that is right without being asked:
+    /// a French user's first launch is in French. An explicit choice is for the
+    /// case the default gets wrong — an English interface on a German Windows,
+    /// which is a preference no amount of detection can guess.
+    /// </remarks>
+    internal string Language { get; set; } = string.Empty;
+
     /// <summary>Whether a <c>.bak</c> is left beside a file after saving.</summary>
     internal bool KeepBackupOnSave { get; set; } = true;
 
@@ -103,6 +114,7 @@ internal sealed class AppSettings
     {
         var json = new StringBuilder();
         json.Append("{\n");
+        Append(json, "language", Language, quote: true);
         Append(json, "keepBackupOnSave", KeepBackupOnSave ? "true" : "false", quote: false);
         Append(json, "validateFullyOnOpen", ValidateFullyOnOpen ? "true" : "false", quote: false);
         Append(json, "rememberWindowGeometry", RememberWindowGeometry ? "true" : "false", quote: false);
@@ -121,7 +133,7 @@ internal sealed class AppSettings
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return $"Settings could not be saved to {Path}: {ex.Message}";
+            return Strings.Format("settings.saveFailed", Path, ex.Message);
         }
     }
 
@@ -129,6 +141,9 @@ internal sealed class AppSettings
     {
         switch (key)
         {
+            case "language":
+                settings.Language = value.Trim().ToLowerInvariant();
+                break;
             case "keepBackupOnSave":
                 settings.KeepBackupOnSave = value == "true";
                 break;

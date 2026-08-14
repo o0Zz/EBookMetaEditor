@@ -1,0 +1,141 @@
+# EBookMetaEditor — Français.
+# Toute ligne absente ici est affichée en anglais (voir en.lang).
+
+@name = Français
+
+app.name = EBookMetaEditor
+app.title.file = {0} — EBookMetaEditor
+
+button.ok = OK
+button.cancel = Annuler
+button.close = Fermer
+
+menu.file = &Fichier
+menu.file.open = &Ouvrir…
+menu.file.batch = Édition par &lot…
+menu.file.save = &Enregistrer
+menu.file.settings = Para&mètres…
+menu.file.exit = &Quitter
+menu.file.addFiles = Ajouter des &fichiers…
+menu.file.addFolder = Ajouter un d&ossier…
+menu.file.saveAll = &Enregistrer tout
+menu.file.validateAll = &Valider tout
+menu.file.close = Fe&rmer
+menu.help = ?
+menu.help.log = &Journal…
+menu.help.about = À &propos d'EBookMetaEditor…
+menu.accessible = Menu principal
+
+field.title = Titre
+field.sortTitle = Titre de tri
+field.authors = Auteurs
+field.series = Série
+field.seriesIndex = N° dans la série
+field.seriesIndexShort = #
+field.publisher = Éditeur
+field.published = Publié le
+field.language = Langue
+field.subjects = Sujets
+field.description = Description
+
+main.status.begin = Ouvrez un fichier pour commencer.
+main.status.format = {0} · {1} entrées
+main.status.saved = Enregistré.
+main.status.savedBackup = Enregistré. Version précédente conservée sous {0}.bak
+main.unsupported = Ce fichier est au format {0}.\n\nEBookMetaEditor ne peut pas modifier ce format.
+main.formatWithDetail = {0} ({1})
+
+dialog.open.title = Ouvrir un livre ou une bande dessinée
+dialog.addFiles.title = Ajouter des livres ou des bandes dessinées
+dialog.folder.batch = Modifier les métadonnées de tous les livres et bandes dessinées d'un dossier
+dialog.folder.add = Ajouter tous les livres et bandes dessinées d'un dossier
+
+filter.supported = Fichiers pris en charge (*.epub;*.cbz)
+filter.epub = EPUB (*.epub)
+filter.cbz = Archive de bande dessinée (*.cbz)
+filter.all = Tous les fichiers (*.*)
+filter.log = Fichier journal (*.log)
+filter.text = Fichier texte (*.txt)
+
+settings.title = Paramètres
+settings.language = Langue
+settings.language.auto = Automatique (langue du système)
+settings.keepBackup = Conserver une sauvegarde .bak à côté du fichier après l'enregistrement
+settings.validateFully = Exécuter toutes les vérifications à l'ouverture d'un fichier
+settings.validateNote = Certaines vérifications doivent lire toutes les entrées de l'archive. Laisser cette option désactivée garde l'ouverture instantanée ; ces vérifications s'exécutent lorsque vous consultez les résultats.
+settings.rememberGeometry = Mémoriser la taille et la position de la fenêtre
+settings.extensions = Afficher « Modifier les métadonnées » dans le menu contextuel pour :
+settings.contextMenu.add = Ajouter au menu contextuel
+settings.contextMenu.remove = Retirer du menu contextuel
+settings.registrationNote = L'inscription se fait uniquement pour votre compte. Elle ne change pas l'application qui ouvre ces fichiers par défaut. Sous Windows 11, l'entrée apparaît sous « Afficher plus d'options ».
+settings.saveFailed = Impossible d'enregistrer les paramètres dans {0} : {1}
+
+shell.verb = Modifier les métadonnées
+shell.updateFailed = Impossible de mettre à jour le menu contextuel : {0}
+
+about.title = À propos d'EBookMetaEditor
+about.version = Version {0}   ·   .NET Framework 4.8
+about.what = Un éditeur de métadonnées rapide pour livres numériques et bandes dessinées. Clic droit sur un fichier, correction des métadonnées, fermeture. Le XML endommagé est réparé à l'ouverture ; le fichier sur le disque n'est modifié qu'à l'enregistrement.
+about.formats = Formats modifiables :
+about.formats.none = (aucun enregistré)
+about.note = Les autres formats sont identifiés mais pas ouverts : un .cbz qui est en réalité une archive RAR est donc nommé plutôt qu'abîmé.
+
+log.title = Journal
+log.includeDebug = Inclure les détails de débogage
+log.copy = Tout copier
+log.saveAs = Enregistrer sous…
+log.empty = (rien dans le journal pour l'instant)
+log.memoryOnly = Conservé en mémoire uniquement.
+log.written = Également écrit dans {0}
+log.willWrite = Sera écrit dans {0} en cas d'avertissement.
+log.save.title = Enregistrer le journal
+log.saveFailed = Impossible d'enregistrer le journal : {0}
+
+batch.title = Édition par lot — EBookMetaEditor
+batch.bulk.set = Définir
+batch.bulk.apply = Appliquer à la sélection
+batch.bulk.hint = …sur chaque ligne sélectionnée.  Ctrl+D recopie la cellule courante vers le bas.
+batch.button.saveAll = &Enregistrer tout
+batch.button.validateAll = &Valider tout
+
+column.status = État
+column.file = Fichier
+column.format = Format
+column.findings = Résultats
+
+batch.state.reading = Lecture…
+batch.state.edited = Modifié
+batch.state.saved = Enregistré
+batch.state.cannotEdit = Non modifiable
+batch.state.failed = Échec
+
+batch.verb.reading = Lecture
+batch.verb.saving = Enregistrement
+batch.verb.validating = Vérification
+batch.busy = {0}…
+batch.progress = {0} {1} sur {2} — {3}
+batch.cancelled = {0} annulée.
+batch.failed = {0} échouée : {1}
+
+batch.applied.one = {0} sur 1 ligne.
+batch.applied.many = {0} sur {1} lignes.
+batch.appliedSkipped.one = {0} sur 1 ligne ; {2} n'a pas pu le stocker.
+batch.appliedSkipped.many = {0} sur {1} lignes ; {2} n'ont pas pu le stocker.
+batch.what.copied = {0} recopié
+batch.what.set = {0} défini
+
+batch.selectRows = Sélectionnez d'abord les lignes à modifier.
+batch.nothingEdited = Aucune modification.
+batch.rowDirty = Enregistrez cette ligne avant de l'ouvrir séparément : elle contient des modifications non enregistrées.
+batch.findings.one = 1 résultat — voir le journal.
+batch.findings.many = {0} résultats — voir le journal.
+
+batch.summary.files.one = 1 fichier
+batch.summary.files.many = {0} fichiers
+batch.summary.unusable = {0} non modifiable(s)
+batch.summary.noEdits = aucune modification
+batch.summary.edited = {0} modifié(s)
+
+batch.close.busy = Une opération par lot est encore en cours. L'arrêter et fermer ?
+batch.close.dirty.one = 1 fichier contient des modifications non enregistrées. Fermer sans enregistrer ?
+batch.close.dirty.many = {0} fichiers contiennent des modifications non enregistrées. Fermer sans enregistrer ?

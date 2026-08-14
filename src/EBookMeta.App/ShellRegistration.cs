@@ -32,7 +32,6 @@ namespace EBookMeta.App;
 internal static class ShellRegistration
 {
     private const string VerbKeyName = "EBookMetaEditorEdit";
-    private const string VerbLabel = "Edit metadata";
 
     /// <summary>The extensions EBookMetaEditor can actually open.</summary>
     /// <remarks>
@@ -67,7 +66,7 @@ internal static class ShellRegistration
         }
         catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or System.Security.SecurityException)
         {
-            return $"The context menu could not be updated: {ex.Message}";
+            return Strings.Format("shell.updateFailed", ex.Message);
         }
     }
 
@@ -103,7 +102,11 @@ internal static class ShellRegistration
         using RegistryKey verb = Registry.CurrentUser.CreateSubKey(VerbPath(extension))
             ?? throw new IOException($"Could not create the registry key for {extension}.");
 
-        verb.SetValue(null, VerbLabel);
+        // Written in the interface language, because Explorer shows this text and
+        // has no way to ask what it should say. It is a stored string rather than
+        // a live lookup, so changing language re-registers rather than repainting:
+        // that happens in SettingsForm.Commit, and only while the entry exists.
+        verb.SetValue(null, Strings.Get("shell.verb"));
         verb.SetValue("Icon", exe + ",0");
 
         // Asks Explorer to invoke the verb once with the whole selection rather

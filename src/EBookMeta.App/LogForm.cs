@@ -34,7 +34,7 @@ internal sealed class LogForm : Form
 
     private readonly CheckBox _includeDebug = new()
     {
-        Text = "Include debug detail",
+        Text = Strings.Get("log.includeDebug"),
         AutoSize = true,
         Checked = true,
     };
@@ -53,7 +53,7 @@ internal sealed class LogForm : Form
     /// <summary>Creates the log window.</summary>
     internal LogForm()
     {
-        Text = "Log";
+        Text = Strings.Get("log.title");
         AppIcon.Apply(this);
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(860, 480);
@@ -68,9 +68,13 @@ internal sealed class LogForm : Form
             Padding = new Padding(8, 6, 8, 6),
         };
 
-        var close = new Button { Text = "Close", Size = new Size(80, 26), DialogResult = DialogResult.OK };
-        var save = new Button { Text = "Save as…", Size = new Size(90, 26) };
-        var copy = new Button { Text = "Copy all", Size = new Size(90, 26) };
+        // AutoSize with a floor rather than a fixed size: "Speichern unter…" does
+        // not fit in the 90 px that "Save as…" needed.
+        var close = Action("button.close");
+        var save = Action("log.saveAs");
+        var copy = Action("log.copy");
+
+        close.DialogResult = DialogResult.OK;
 
         save.Click += (_, _) => SaveAs();
         copy.Click += (_, _) => CopyAll();
@@ -106,6 +110,15 @@ internal sealed class LogForm : Form
 
         Reload();
     }
+
+    private static Button Action(string key) => new()
+    {
+        Text = Strings.Get(key),
+        AutoSize = true,
+        AutoSizeMode = AutoSizeMode.GrowAndShrink,
+        MinimumSize = new Size(84, 27),
+        Margin = new Padding(4, 3, 4, 3),
+    };
 
     /// <inheritdoc/>
     protected override void OnFormClosed(FormClosedEventArgs e)
@@ -155,19 +168,22 @@ internal sealed class LogForm : Form
             }
         }
 
-        _text.Text = builder.Length == 0 ? "(nothing logged yet)" : builder.ToString();
+        _text.Text = builder.Length == 0 ? Strings.Get("log.empty") : builder.ToString();
         ScrollToEnd();
 
         _fileNote.Text = Log.FilePath is null
-            ? "Kept in memory only."
+            ? Strings.Get("log.memoryOnly")
             : Log.FileWritten
-                ? $"Also written to {Log.FilePath}"
-                : $"Will be written to {Log.FilePath} if a warning occurs.";
+                ? Strings.Format("log.written", Log.FilePath)
+                : Strings.Format("log.willWrite", Log.FilePath);
     }
 
     private void Append(LogEntry entry)
     {
-        if (_text.Text.StartsWith("(nothing", StringComparison.Ordinal))
+        // Compared against the placeholder itself rather than against a prefix of
+        // the English one, which stopped being a safe assumption the moment the
+        // window learned to speak anything else.
+        if (_text.Text == Strings.Get("log.empty"))
         {
             _text.Clear();
         }
@@ -205,8 +221,10 @@ internal sealed class LogForm : Form
     {
         using var dialog = new SaveFileDialog
         {
-            Title = "Save the log",
-            Filter = "Log file (*.log)|*.log|Text file (*.txt)|*.txt|All files (*.*)|*.*",
+            Title = Strings.Get("log.save.title"),
+            Filter = $"{Strings.Get("filter.log")}|*.log"
+                + $"|{Strings.Get("filter.text")}|*.txt"
+                + $"|{Strings.Get("filter.all")}|*.*",
             FileName = "ebookmetaeditor.log",
         };
 
@@ -224,8 +242,8 @@ internal sealed class LogForm : Form
         {
             MessageBox.Show(
                 this,
-                $"The log could not be saved: {ex.Message}",
-                "EBookMetaEditor",
+                Strings.Format("log.saveFailed", ex.Message),
+                Strings.Get("app.name"),
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Warning);
         }
