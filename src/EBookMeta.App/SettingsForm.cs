@@ -24,6 +24,7 @@ internal sealed class SettingsForm : Form
         _settings = settings;
 
         Text = "Settings";
+        AppIcon.Apply(this);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         StartPosition = FormStartPosition.CenterParent;
         MinimizeBox = false;

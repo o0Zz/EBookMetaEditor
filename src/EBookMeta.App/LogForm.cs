@@ -54,6 +54,7 @@ internal sealed class LogForm : Form
     internal LogForm()
     {
         Text = "Log";
+        AppIcon.Apply(this);
         StartPosition = FormStartPosition.CenterParent;
         ClientSize = new Size(860, 480);
         MinimumSize = new Size(520, 300);

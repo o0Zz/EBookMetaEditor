@@ -9,11 +9,21 @@
     <Description>EBookMetaEditor — ebook and comic metadata editor.</Description>
 
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <ApplicationIcon></ApplicationIcon>
+    <ApplicationIcon>icon.ico</ApplicationIcon>
 
     <!-- The only executable in the product. There is no CLI and no separate
          setup program: context-menu registration lives in the Settings form. -->
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The same .ico twice, deliberately. ApplicationIcon above puts it in the
+         exe's Win32 resources, which is what Explorer draws and what the
+         context-menu verb refers to as "<exe>,0"; Windows cannot read a managed
+         resource. This copy is what Form.Icon needs, because WinForms picks the
+         16 px title-bar and 32 px Alt+Tab frames out of a multi-frame Icon
+         object, and only the managed stream gives it all five. -->
+    <EmbeddedResource Include="icon.ico" LogicalName="EBookMetaEditor.icon.ico" />
+  </ItemGroup>
 
   <!-- WinForms on net48 is wired with classic references. UseWindowsForms is a
        modern-.NET property and does nothing here. -->

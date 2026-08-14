@@ -52,6 +52,7 @@ internal sealed class MainForm : Form
         _settings = settings;
 
         Text = "EBookMetaEditor";
+        AppIcon.Apply(this);
         ClientSize = new Size(880, 560);
         MinimumSize = new Size(700, 480);
 

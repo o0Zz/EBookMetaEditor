@@ -20,6 +20,7 @@ internal sealed class AboutForm : Form
         string version = assembly.GetName().Version?.ToString(3) ?? "0.0.0";
 
         Text = "About EBookMetaEditor";
+        AppIcon.Apply(this);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         StartPosition = FormStartPosition.CenterParent;
         MinimizeBox = false;
