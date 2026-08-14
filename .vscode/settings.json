@@ -1,0 +1,39 @@
+{
+  "files.eol": "\n",
+  "files.encoding": "utf8",
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+  "[markdown]": {
+    "files.trimTrailingWhitespace": false
+  },
+
+  "files.exclude": {
+    "**/bin": true,
+    "**/obj": true,
+    "**/.vs": true
+  },
+  "files.watcherExclude": {
+    "**/bin/**": true,
+    "**/obj/**": true,
+    "**/.vs/**": true,
+    "**/scratch/**": true
+  },
+  "search.exclude": {
+    "**/bin": true,
+    "**/obj": true,
+    "**/scratch": true
+  },
+
+  "explorer.fileNesting.enabled": true,
+  "explorer.fileNesting.patterns": {
+    "*.csproj": "*.config, *.manifest",
+    "EBookMeta.sln": "Directory.Build.props, .editorconfig, .gitattributes"
+  },
+
+  // Core sets TreatWarningsAsErrors and EnforceCodeStyleInBuild is on
+  // solution-wide, so surface analyser and style diagnostics live in the editor
+  // instead of finding out at build time. Roslyn language server, not OmniSharp.
+  "dotnet.server.useOmnisharp": false,
+  "dotnet.backgroundAnalysis.analyzerDiagnosticsScope": "fullSolution",
+  "dotnet.backgroundAnalysis.compilerDiagnosticsScope": "fullSolution"
+}

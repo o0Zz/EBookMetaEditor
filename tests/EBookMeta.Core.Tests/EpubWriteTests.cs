@@ -1,0 +1,302 @@
+using System.Text;
+using EBookMeta.Containers;
+using EBookMeta.Formats;
+using EBookMeta.Model;
+using EBookMeta.Tests.Builders;
+using Xunit;
+
+namespace EBookMeta.Tests;
+
+/// <summary>
+/// Tests for the write path — the part that destroys libraries when it is
+/// wrong.
+/// </summary>
+public sealed class EpubWriteTests
+{
+    private static BookMetadata Read(string path)
+    {
+        using ZipContainer container = ZipContainer.Open(path);
+        return new EpubHandler().Read(container);
+    }
+
+    private static void Write(string source, string target, Action<BookMetadata> edit)
+    {
+        using ZipContainer container = ZipContainer.Open(source);
+        var handler = new EpubHandler();
+        BookMetadata metadata = handler.Read(container);
+        edit(metadata);
+        handler.Write(container, metadata, target);
+    }
+
+    /// <summary>
+    /// Hard invariant 6. Open a file, save it without editing, get identical
+    /// bytes back.
+    /// </summary>
+    [Fact]
+    public void Saving_without_editing_is_byte_identical()
+    {
+        using var temp = new TempDir();
+        string source = new EpubBuilder().WriteTo(temp.File("valid-epub3.epub"));
+        string target = temp.File("saved.epub");
+
+        Write(source, target, _ => { });
+
+        Assert.Equal(File.ReadAllBytes(source), File.ReadAllBytes(target));
+    }
+
+    [Fact]
+    public void Saving_without_editing_is_byte_identical_for_epub2()
+    {
+        using var temp = new TempDir();
+        string source = new EpubBuilder()
+            .WithOpf(EpubBuilder.Epub2Opf)
+            .WriteTo(temp.File("valid-epub2.epub"));
+        string target = temp.File("saved.epub");
+
+        Write(source, target, _ => { });
+
+        Assert.Equal(File.ReadAllBytes(source), File.ReadAllBytes(target));
+    }
+
+    /// <summary>
+    /// Hard invariant 7. Readers reject an EPUB whose <c>mimetype</c> is not the
+    /// first entry, stored uncompressed, with exactly the right content.
+    /// </summary>
+    [Fact]
+    public void Mimetype_stays_first_stored_and_exact()
+    {
+        using var temp = new TempDir();
+        string source = new EpubBuilder().WriteTo(temp.File("valid-epub3.epub"));
+        string target = temp.File("saved.epub");
+
+        Write(source, target, m => m.Title = "Something Else");
+
+        using ZipContainer container = ZipContainer.Open(target);
+        ContainerEntry mimetype = container.Entries[0];
+
+        Assert.Equal("mimetype", mimetype.Name);
+        Assert.Equal(ZipCompressionMethods.Stored, mimetype.CompressionMethod);
+
+        using Stream stream = container.OpenRead(mimetype);
+        using var buffer = new MemoryStream();
+        stream.CopyTo(buffer);
+
+        byte[] content = buffer.ToArray();
+        Assert.Equal("application/epub+zip", Encoding.UTF8.GetString(content));
+        Assert.Equal(20, content.Length); // no BOM, no trailing newline
+    }
+
+    /// <summary>
+    /// Hard invariant 9. A title edit must produce a one-line diff, not a
+    /// reformat that buries the change.
+    /// </summary>
+    [Fact]
+    public void Editing_one_field_changes_one_line_of_the_opf()
+    {
+        using var temp = new TempDir();
+        string source = new EpubBuilder().WriteTo(temp.File("valid-epub3.epub"));
+        string target = temp.File("saved.epub");
+
+        Write(source, target, m => m.Title = "A Completely Different Title");
+
+        string[] before = ReadOpfLines(source);
+        string[] after = ReadOpfLines(target);
+
+        Assert.Equal(before.Length, after.Length);
+
+        int changed = before.Zip(after, (a, b) => a == b ? 0 : 1).Sum();
+        Assert.Equal(1, changed);
+        Assert.Contains("A Completely Different Title", after[Array.FindIndex(after, l => l != before[Array.IndexOf(after, l)])]);
+    }
+
+    [Fact]
+    public void Entry_order_and_compression_survive_a_write()
+    {
+        using var temp = new TempDir();
+        string source = new EpubBuilder().WriteTo(temp.File("valid-epub3.epub"));
+        string target = temp.File("saved.epub");
+
+        string[] namesBefore;
+        ushort[] methodsBefore;
+
+        using (ZipContainer container = ZipContainer.Open(source))
+        {
+            namesBefore = container.Entries.Select(e => e.Name).ToArray();
+            methodsBefore = container.Entries.Select(e => e.CompressionMethod).ToArray();
+        }
+
+        Write(source, target, m => m.Publisher = "New Publisher");
+
+        using ZipContainer written = ZipContainer.Open(target);
+
+        Assert.Equal(namesBefore, written.Entries.Select(e => e.Name).ToArray());
+        Assert.Equal(methodsBefore, written.Entries.Select(e => e.CompressionMethod).ToArray());
+    }
+
+    /// <summary>
+    /// The "never lose a field you do not understand" invariant. An unknown
+    /// <c>&lt;meta&gt;</c> survives because nothing goes near it.
+    /// </summary>
+    [Fact]
+    public void Unrecognised_metadata_survives_a_write_verbatim()
+    {
+        using var temp = new TempDir();
+        string source = new EpubBuilder().WriteTo(temp.File("valid-epub3.epub"));
+        string target = temp.File("saved.epub");
+
+        Write(source, target, m => m.Title = "Changed");
+
+        Assert.Contains("""<meta property="custom:mood">wistful</meta>""", ReadOpfText(target));
+    }
+
+    /// <summary>
+    /// Both conventions are written regardless of declared version, because old
+    /// and new readers honour different ones.
+    /// </summary>
+    [Fact]
+    public void Series_is_written_in_both_epub2_and_epub3_conventions()
+    {
+        using var temp = new TempDir();
+        string source = new EpubBuilder()
+            .WithOpf(EpubBuilder.Epub2Opf)
+            .WriteTo(temp.File("valid-epub2.epub"));
+        string target = temp.File("saved.epub");
+
+        Write(source, target, m => m.Series = new SeriesInfo { Name = "New Series", Index = 3.5m });
+
+        string opf = ReadOpfText(target);
+
+        Assert.Contains("""<meta name="calibre:series" content="New Series"/>""", opf);
+        Assert.Contains("""<meta name="calibre:series_index" content="3.5"/>""", opf);
+        Assert.Contains("belongs-to-collection", opf);
+        Assert.Contains("group-position", opf);
+
+        SeriesInfo? reread = Read(target).Series;
+        Assert.Equal("New Series", reread?.Name);
+        Assert.Equal(3.5m, reread?.Index);
+    }
+
+    [Fact]
+    public void Sort_name_and_role_are_written_in_both_conventions()
+    {
+        using var temp = new TempDir();
+        string source = new EpubBuilder()
+            .WithOpf(EpubBuilder.Epub2Opf)
+            .WriteTo(temp.File("valid-epub2.epub"));
+        string target = temp.File("saved.epub");
+
+        Write(source, target, m =>
+        {
+            m.Creators.Clear();
+            m.Creators.Add(new Creator
+            {
+                Name = "Terry Pratchett",
+                SortName = "Pratchett, Terry",
+                NativeRole = "aut",
+            });
+        });
+
+        string opf = ReadOpfText(target);
+
+        Assert.Contains("""opf:file-as="Pratchett, Terry" """.TrimEnd(), opf);
+        Assert.Contains("""opf:role="aut" """.TrimEnd(), opf);
+        Assert.Contains("""property="file-as" """.TrimEnd(), opf);
+        Assert.Contains("""property="role" """.TrimEnd(), opf);
+    }
+
+    /// <summary>
+    /// A French locale writes 2,5 for two-and-a-half, which no reader parses.
+    /// </summary>
+    [Fact]
+    public void Fractional_series_index_is_written_with_an_invariant_decimal_point()
+    {
+        using var temp = new TempDir();
+        string source = new EpubBuilder().WriteTo(temp.File("valid-epub3.epub"));
+        string target = temp.File("saved.epub");
+
+        Write(source, target, m => m.Series = new SeriesInfo { Name = "S", Index = 2.5m });
+
+        Assert.Contains("2.5", ReadOpfText(target));
+        Assert.DoesNotContain("2,5", ReadOpfText(target));
+    }
+
+    [Fact]
+    public void Edits_survive_a_read_back()
+    {
+        using var temp = new TempDir();
+        string source = new EpubBuilder().WriteTo(temp.File("valid-epub3.epub"));
+        string target = temp.File("saved.epub");
+
+        Write(source, target, m =>
+        {
+            m.Title = "Edited Title";
+            m.SortTitle = "Edited Title, The";
+            m.Publisher = "Gollancz";
+            m.Language = "fr";
+            m.Description = "A new description.";
+        });
+
+        BookMetadata reread = Read(target);
+
+        Assert.Equal("Edited Title", reread.Title);
+        Assert.Equal("Edited Title, The", reread.SortTitle);
+        Assert.Equal("Gollancz", reread.Publisher);
+        Assert.Equal("fr", reread.Language);
+        Assert.Equal("A new description.", reread.Description);
+    }
+
+    [Fact]
+    public void Atomic_writer_leaves_the_original_untouched_when_writing_fails()
+    {
+        using var temp = new TempDir();
+        string path = new EpubBuilder().WriteTo(temp.File("valid-epub3.epub"));
+        byte[] before = File.ReadAllBytes(path);
+
+        Assert.ThrowsAny<Exception>(() =>
+            AtomicFileWriter.Write(path, _ => throw new InvalidOperationException("boom")));
+
+        Assert.Equal(before, File.ReadAllBytes(path));
+        Assert.False(File.Exists(path + ".tmp"), "the temporary file should be cleaned up");
+    }
+
+    [Fact]
+    public void Atomic_writer_swaps_in_the_new_file_and_can_keep_a_backup()
+    {
+        using var temp = new TempDir();
+        string path = new EpubBuilder().WriteTo(temp.File("valid-epub3.epub"));
+        byte[] original = File.ReadAllBytes(path);
+
+        string? backup = AtomicFileWriter.Write(
+            path, tmp => File.WriteAllBytes(tmp, new byte[] { 1, 2, 3 }), keepBackup: true);
+
+        Assert.Equal(new byte[] { 1, 2, 3 }, File.ReadAllBytes(path));
+        Assert.NotNull(backup);
+        Assert.Equal(original, File.ReadAllBytes(backup!));
+    }
+
+    [Fact]
+    public void Atomic_writer_can_discard_the_backup()
+    {
+        using var temp = new TempDir();
+        string path = new EpubBuilder().WriteTo(temp.File("valid-epub3.epub"));
+
+        string? backup = AtomicFileWriter.Write(
+            path, tmp => File.WriteAllBytes(tmp, new byte[] { 9 }), keepBackup: false);
+
+        Assert.Null(backup);
+        Assert.False(File.Exists(path + ".bak"));
+    }
+
+    private static string ReadOpfText(string epubPath)
+    {
+        using ZipContainer container = ZipContainer.Open(epubPath);
+        ContainerEntry entry = container.Entries.Single(e => e.Name.EndsWith(".opf", StringComparison.Ordinal));
+
+        using Stream stream = container.OpenRead(entry);
+        using var reader = new StreamReader(stream, Encoding.UTF8);
+        return reader.ReadToEnd();
+    }
+
+    private static string[] ReadOpfLines(string epubPath) =>
+        ReadOpfText(epubPath).Replace("\r\n", "\n").Split('\n');
+}

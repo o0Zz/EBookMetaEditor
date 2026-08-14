@@ -1,0 +1,36 @@
+<Project>
+
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+
+    <!-- .NET Framework 4.8 ships with Windows 10 1903+ and Windows 11, so
+         EBookMetaEditor.exe runs on a clean machine with nothing to install. That is
+         the whole reason for this target: no version of Windows preinstalls the
+         .NET 5+ runtime, so a framework-dependent modern build would fail to
+         launch, and a self-contained one would cost ~150 MB for a utility whose
+         entire point is right-click, fix, close.
+
+         Never add PublishAot or PublishTrimmed. -->
+    <TargetFramework>net48</TargetFramework>
+
+    <Product>EBookMetaEditor</Product>
+    <Company>EBookMetaEditor</Company>
+    <Copyright>Copyright (c) EBookMetaEditor contributors</Copyright>
+    <NeutralLanguage>en</NeutralLanguage>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Build-time only. Supplies the net48 reference assemblies so the repo
+         builds with any recent .NET SDK, with no Visual Studio and no targeting
+         pack installed. Contributes nothing at runtime. -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+</Project>

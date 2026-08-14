@@ -1,0 +1,92 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- TargetFramework comes from Directory.Build.props (net48). -->
+
+    <!-- CLAUDE.md scopes both of these to Core specifically: it is the part
+         that must not rot, and its public API is documented. GenerateDocumentationFile
+         plus TreatWarningsAsErrors means a missing XML doc fails the build. -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+    <RootNamespace>EBookMeta</RootNamespace>
+    <AssemblyName>EBookMeta.Core</AssemblyName>
+    <Description>Container, format, validation and repair logic for EBookMetaEditor. No UI dependencies.</Description>
+
+    <!-- The net48 SDK otherwise auto-references System.Drawing, which would put
+         Bitmap one using-statement away from Core and make the zero-UI rule
+         enforceable only by review. Turning the implicit set off and listing
+         what Core actually needs makes the boundary real rather than nominal. -->
+    <DisableImplicitFrameworkReferences>true</DisableImplicitFrameworkReferences>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="mscorlib" />
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Xml" />
+    <Reference Include="System.Xml.Linq" />
+    <Reference Include="System.IO.Compression" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Span<T> and BinaryPrimitives, which net48 does not have in the box.
+         Used by the ZIP central-directory reader and the sniffer. -->
+    <PackageReference Include="System.Memory" Version="4.6.3" />
+
+    <!-- Writing only. .NET Framework's System.IO.Compression cannot emit a
+         stored ZIP entry at all — CompressionLevel.NoCompression produces
+         deflate at level 0 (method 8), not method 0 — which makes a
+         spec-compliant EPUB impossible, since `mimetype` must be stored or
+         readers reject the file. SharpCompress's ZipWriter takes the
+         compression type per entry, which is precisely the missing capability.
+         Reading stays on ZipArchive. -->
+    <PackageReference Include="SharpCompress" Version="1.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Makes the net48 BCL shims visible everywhere without an explicit using,
+         so call sites read as if the modern APIs existed. -->
+    <Using Include="EBookMeta.Compat" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="EBookMeta.Core.Tests" />
+  </ItemGroup>
+
+  <!--
+    CLAUDE.md: "EBookMeta.Core referencing System.Windows.Forms, System.Drawing
+    or any UI package is a build-breaking error."
+
+    That is a rule a reviewer has to remember, so make the build remember it
+    instead. Cover art crosses the boundary as byte[] plus a media type string,
+    never as a Bitmap; a future port to Avalonia or Rust must not have to touch
+    this project.
+
+    This matters more on net48 than it did on modern .NET: WinForms here is
+    wired with plain <Reference Include="System.Windows.Forms" /> items, which
+    are one careless line away.
+  -->
+  <Target Name="GuardCoreHasNoUiDependencies" BeforeTargets="CoreCompile">
+
+    <ItemGroup>
+      <_EBookMetaRefCandidate Include="@(PackageReference);@(Reference);@(ProjectReference)" />
+      <_EBookMetaForbiddenUiRef Include="@(_EBookMetaRefCandidate)"
+                               Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('%(Identity)', '(?i)(System\.Windows\.Forms|System\.Drawing|WinForms|WindowsForms|PresentationFramework|PresentationCore|Avalonia|Microsoft\.Maui|Eto\.Forms)'))" />
+    </ItemGroup>
+
+    <Error Condition="'@(_EBookMetaForbiddenUiRef)' != ''"
+           Code="EBM0001"
+           Text="EBookMeta.Core must have zero UI dependencies, but references: @(_EBookMetaForbiddenUiRef, ', '). Cover art crosses the boundary as byte[] plus a media type string, never as a Bitmap. See CLAUDE.md, 'Layout'." />
+
+    <Error Condition="'$(UseWindowsForms)' == 'true' or '$(UseWPF)' == 'true'"
+           Code="EBM0002"
+           Text="EBookMeta.Core must not set UseWindowsForms or UseWPF. See CLAUDE.md, 'Layout'." />
+
+    <Error Condition="'$(PublishAot)' == 'true' or '$(PublishTrimmed)' == 'true'"
+           Code="EBM0003"
+           Text="Never set PublishAot or PublishTrimmed. See CLAUDE.md, 'Target and deployment'." />
+
+  </Target>
+
+</Project>

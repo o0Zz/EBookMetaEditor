@@ -1,0 +1,126 @@
+{
+  // "type": "process" runs dotnet directly rather than through PowerShell, so
+  // paths with spaces need no quoting games.
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build",
+      "detail": "dotnet build EBookMeta.sln",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["build", "${workspaceFolder}/EBookMeta.sln", "-v", "m"],
+      "problemMatcher": "$msCompile",
+      "group": { "kind": "build", "isDefault": true }
+    },
+    {
+      // preLaunchTask for the Debug configurations. Builds only App + Core, so
+      // F5 does not wait on the test project.
+      "label": "build app (Debug)",
+      "detail": "dotnet build src/EBookMeta.App -c Debug",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/src/EBookMeta.App/EBookMeta.App.csproj",
+        "-c",
+        "Debug",
+        "-v",
+        "m"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": "build"
+    },
+    {
+      "label": "build app (Release)",
+      "detail": "dotnet build src/EBookMeta.App -c Release",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/src/EBookMeta.App/EBookMeta.App.csproj",
+        "-c",
+        "Release",
+        "-v",
+        "m"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": "build"
+    },
+    {
+      "label": "rebuild",
+      "detail": "clean + build the whole solution",
+      "dependsOrder": "sequence",
+      "dependsOn": ["clean", "build"],
+      "problemMatcher": []
+    },
+    {
+      "label": "clean",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["clean", "${workspaceFolder}/EBookMeta.sln", "-v", "m"],
+      "problemMatcher": "$msCompile"
+    },
+    {
+      // The xunit corpus is the verification surface — there is no CLI to poke
+      // at, so this is the task to run after any serialisation change.
+      "label": "test",
+      "detail": "dotnet test EBookMeta.sln",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["test", "${workspaceFolder}/EBookMeta.sln", "--nologo"],
+      "problemMatcher": "$msCompile",
+      "group": { "kind": "test", "isDefault": true },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    },
+    {
+      "label": "test (filter…)",
+      "detail": "dotnet test --filter <expression>",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "test",
+        "${workspaceFolder}/EBookMeta.sln",
+        "--nologo",
+        "--filter",
+        "${input:testFilter}"
+      ],
+      "problemMatcher": "$msCompile",
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    },
+    {
+      // VSTEST_HOST_DEBUG=1 makes the test host print its PID and wait. Attach
+      // with the "Attach to test host" launch configuration; net48 tests cannot
+      // be launched under the debugger directly the way coreclr ones can.
+      "label": "test (wait for debugger)",
+      "detail": "VSTEST_HOST_DEBUG=1 dotnet test — prints a PID, then blocks",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "test",
+        "${workspaceFolder}/EBookMeta.sln",
+        "--nologo",
+        "--filter",
+        "${input:testFilter}"
+      ],
+      "options": { "env": { "VSTEST_HOST_DEBUG": "1" } },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+    },
+    {
+      // The shipping artefact: EBookMetaEditor.exe and nothing else. No publish step,
+      // no setup program — see CLAUDE.md, "Target and deployment".
+      "label": "build Release exe",
+      "detail": "dotnet build src/EBookMeta.App -c Release",
+      "dependsOn": ["build app (Release)"],
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "testFilter",
+      "type": "promptString",
+      "description": "xunit --filter expression (e.g. FullyQualifiedName~RoundTrip)",
+      "default": "FullyQualifiedName~RoundTrip"
+    }
+  ]
+}

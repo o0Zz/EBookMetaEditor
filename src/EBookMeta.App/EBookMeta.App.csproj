@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <!-- TargetFramework comes from Directory.Build.props (net48). -->
+
+    <RootNamespace>EBookMeta.App</RootNamespace>
+    <AssemblyName>EBookMetaEditor</AssemblyName>
+    <Description>EBookMetaEditor — ebook and comic metadata editor.</Description>
+
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon></ApplicationIcon>
+
+    <!-- The only executable in the product. There is no CLI and no separate
+         setup program: context-menu registration lives in the Settings form. -->
+  </PropertyGroup>
+
+  <!-- WinForms on net48 is wired with classic references. UseWindowsForms is a
+       modern-.NET property and does nothing here. -->
+  <ItemGroup>
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Configuration" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- net48 has no WinForms implicit usings, so declare them once here rather
+         than at the top of every form. -->
+    <Using Include="System.Windows.Forms" />
+    <Using Include="System.Drawing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\EBookMeta.Core\EBookMeta.Core.csproj" />
+  </ItemGroup>
+
+</Project>

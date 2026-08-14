@@ -1,0 +1,15 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "EBookMetaEditor",
+      "type": "clr",
+      "request": "launch",
+      "preLaunchTask": "build app (Debug)",
+      "program": "${workspaceFolder}/src/EBookMeta.App/bin/Debug/net48/EBookMetaEditor.exe",
+      "args": [],
+      "cwd": "${workspaceFolder}/src/EBookMeta.App/bin/Debug/net48",
+      "stopAtEntry": false,
+      "internalConsoleOptions": "neverOpen"
+    }
+}

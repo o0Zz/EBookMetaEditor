@@ -1,0 +1,33 @@
+# Normalise text by default, but never touch the corpus.
+#
+# eol=lf is explicit rather than left to core.eol, which defaults to "native" and
+# would hand a Windows checkout CRLF — contradicting .editorconfig's
+# end_of_line = lf and .vscode/settings.json's files.eol. The .sln below is the
+# one deliberate exception.
+* text=auto eol=lf
+
+*.cs        text diff=csharp
+*.csproj    text
+*.sln       text eol=crlf
+*.props     text
+*.md        text
+*.json      text
+*.xml       text
+*.opf       text
+*.xhtml     text
+
+# Golden-file tests assert on exact bytes. Any line-ending translation here
+# would silently break them, so every fixture and golden artefact is binary.
+tests/EBookMeta.Core.Tests/Fixtures/** -text binary
+*.epub      binary
+*.cbz       binary
+*.cbr       binary
+*.cb7       binary
+*.cbt       binary
+*.mobi      binary
+*.azw       binary
+*.azw3      binary
+*.prc       binary
+*.pdf       binary
+*.png       binary
+*.ico       binary

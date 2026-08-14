@@ -1,0 +1,9 @@
+{
+  "recommendations": [
+    // ms-dotnettools.csharp is what supplies the "clr" debug type used by
+    // launch.json — .NET Framework 4.8 cannot be debugged without it.
+    "ms-dotnettools.csharp",
+    "ms-dotnettools.csdevkit",
+    "editorconfig.editorconfig"
+  ]
+}
