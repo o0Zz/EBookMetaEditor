@@ -177,4 +177,86 @@ public sealed class RepairWriteTests
         // The backup is the file as it was: still missing the declaration.
         Assert.DoesNotContain("xmlns:opf", OpfTextOf(path + ".bak"), StringComparison.Ordinal);
     }
+
+    // --- EPUB-E041, a dangling unique-identifier --------------------------
+
+    private static string DanglingEpub(TempDir temp, string opf) =>
+        new EpubBuilder()
+            .WithOpf(opf)
+            .WriteTo(temp.File("broken-epub-e041-dangling-unique-identifier.epub"));
+
+    [Fact]
+    public void A_dangling_unique_identifier_is_pointed_at_the_only_identifier()
+    {
+        using var temp = new TempDir();
+        string source = DanglingEpub(temp, EpubBuilder.Epub2OpfDanglingUniqueIdentifier);
+        string target = temp.File("saved.epub");
+
+        // Nothing carries id="uuid_id", so the book reads as having no identity.
+        using (ZipContainer before = ZipContainer.Open(source))
+        {
+            Assert.Null(new EpubFormat().Read(before).UniqueIdentifier);
+        }
+
+        SaveTo(source, target);
+
+        Assert.Contains(@"unique-identifier=""calibre-uuid""", OpfTextOf(target), StringComparison.Ordinal);
+        Assert.DoesNotContain(@"unique-identifier=""uuid_id""", OpfTextOf(target), StringComparison.Ordinal);
+
+        // The identifier element keeps its own id, so any meta refines="#calibre-uuid"
+        // still resolves. Only the reference moved.
+        Assert.Contains(@"<dc:identifier id=""calibre-uuid"">", OpfTextOf(target), StringComparison.Ordinal);
+
+        using ZipContainer saved = ZipContainer.Open(target);
+        Identifier? unique = new EpubFormat().Read(saved).UniqueIdentifier;
+        Assert.Equal("urn:uuid:1234", unique?.Value);
+    }
+
+    [Fact]
+    public void An_unlabelled_identifier_is_labelled_rather_than_the_reference_moved()
+    {
+        using var temp = new TempDir();
+        string source = DanglingEpub(temp, EpubBuilder.Epub2OpfUnlabelledUniqueIdentifier);
+        string target = temp.File("saved.epub");
+
+        SaveTo(source, target);
+
+        // There is no reference to break, so the name the package already declares
+        // is the one used and the package attribute is left alone.
+        Assert.Contains(@"unique-identifier=""uuid_id""", OpfTextOf(target), StringComparison.Ordinal);
+        Assert.Contains(@"<dc:identifier id=""uuid_id"">", OpfTextOf(target), StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The "provable, or merely likely?" line: two candidates, so the file says
+    /// nothing about which was meant and nothing is changed.
+    /// </summary>
+    [Fact]
+    public void An_ambiguous_dangling_unique_identifier_is_left_alone()
+    {
+        using var temp = new TempDir();
+        string source = DanglingEpub(temp, EpubBuilder.Epub2OpfDanglingUniqueIdentifierAmbiguous);
+        string target = temp.File("saved.epub");
+
+        SaveTo(source, target);
+
+        Assert.Equal(OpfTextOf(source), OpfTextOf(target));
+    }
+
+    /// <summary>
+    /// Hard invariant 5: a file whose reference already resolves is not touched.
+    /// </summary>
+    [Fact]
+    public void A_resolving_unique_identifier_is_not_rewritten()
+    {
+        using var temp = new TempDir();
+        string source = new EpubBuilder()
+            .WithOpf(EpubBuilder.Epub2Opf)
+            .WriteTo(temp.File("valid.epub"));
+        string target = temp.File("saved.epub");
+
+        SaveTo(source, target);
+
+        Assert.Equal(ReadAllEntries(source), ReadAllEntries(target));
+    }
 }

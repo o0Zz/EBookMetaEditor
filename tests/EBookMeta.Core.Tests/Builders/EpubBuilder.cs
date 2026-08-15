@@ -306,6 +306,60 @@ internal sealed class EpubBuilder
         """;
 
     /// <summary>
+    /// <see cref="Epub2Opf"/> whose <c>unique-identifier</c> names an id no
+    /// <c>dc:identifier</c> carries, with exactly one identifier present, so the
+    /// correction is unambiguous (EPUB-E041). This is the shape calibre leaves
+    /// behind when it renames the identifier and not the reference.
+    /// </summary>
+    internal const string Epub2OpfDanglingUniqueIdentifier = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <package xmlns="http://www.idpf.org/2007/opf" version="2.0" unique-identifier="uuid_id">
+          <metadata xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf">
+            <dc:title>Neverwhere</dc:title>
+            <dc:identifier id="calibre-uuid">urn:uuid:1234</dc:identifier>
+            <dc:language>en</dc:language>
+          </metadata>
+          <manifest><item id="ch1" href="text/chapter1.xhtml" media-type="application/xhtml+xml"/></manifest>
+          <spine><itemref idref="ch1"/></spine>
+        </package>
+        """;
+
+    /// <summary>
+    /// A dangling <c>unique-identifier</c> with two identifiers present, so nothing
+    /// in the file says which was meant and EPUB-E041 must leave it alone.
+    /// </summary>
+    internal const string Epub2OpfDanglingUniqueIdentifierAmbiguous = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <package xmlns="http://www.idpf.org/2007/opf" version="2.0" unique-identifier="uuid_id">
+          <metadata xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf">
+            <dc:title>Neverwhere</dc:title>
+            <dc:identifier id="calibre-uuid">urn:uuid:1234</dc:identifier>
+            <dc:identifier id="isbn-id" opf:scheme="ISBN">9782702421659</dc:identifier>
+            <dc:language>en</dc:language>
+          </metadata>
+          <manifest><item id="ch1" href="text/chapter1.xhtml" media-type="application/xhtml+xml"/></manifest>
+          <spine><itemref idref="ch1"/></spine>
+        </package>
+        """;
+
+    /// <summary>
+    /// A dangling <c>unique-identifier</c> whose sole <c>dc:identifier</c> carries no
+    /// <c>id</c> at all, so the element is labelled rather than the reference moved.
+    /// </summary>
+    internal const string Epub2OpfUnlabelledUniqueIdentifier = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <package xmlns="http://www.idpf.org/2007/opf" version="2.0" unique-identifier="uuid_id">
+          <metadata xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf">
+            <dc:title>Neverwhere</dc:title>
+            <dc:identifier>urn:uuid:1234</dc:identifier>
+            <dc:language>en</dc:language>
+          </metadata>
+          <manifest><item id="ch1" href="text/chapter1.xhtml" media-type="application/xhtml+xml"/></manifest>
+          <spine><itemref idref="ch1"/></spine>
+        </package>
+        """;
+
+    /// <summary>
     /// Uses a prefix no specification defines, so it is detectable but must not
     /// be repaired — the "report, never guess" boundary.
     /// </summary>

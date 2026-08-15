@@ -391,6 +391,7 @@ Provable from the file alone, and logged as a warning through `Log.Rule`.
 |---|---|---|
 | EPUB-W070 | The OPF uses a namespace prefix it never declares | Recovered in memory on open, persisted on save |
 | EPUB-E040 | `mimetype` missing, compressed, or not first | Written back as the first entry, stored |
+| EPUB-E041 | `package/@unique-identifier` names an id no `dc:identifier` carries, and exactly one identifier is present | The reference is pointed at that identifier — or, when it has no `id`, the element is labelled with the name the package already declares |
 | EPUB-W062 | EPUB 2 only: the NCX's `dtb:uid` disagrees with the package identifier | The NCX is spliced back into line |
 | CBZ-W010 | The archive carries no `ComicInfo.xml` | One is created |
 | CBZ-E011 | `ComicInfo.xml` sits below the archive root | Moved up to the root |
@@ -429,6 +430,14 @@ Applying the edited `BookMetadata` wholesale to both headers is the obvious
 implementation and is wrong — it turns an unedited save of a mismatched file into
 data loss, which
 `MobiTests.Saving_a_joint_file_does_not_overwrite_one_half_with_the_other` catches.
+
+EPUB-E041 stops at **exactly one** `dc:identifier` on purpose. With two or more,
+nothing in the file says which one the package meant, so it is left alone — the
+provable/likely line again. It also moves the *reference*, never the identifier's
+`id`: `unique-identifier` is pointed at by nothing, while an `id` may be the target
+of a `meta refines="#…"`. Note what it unblocks — `RepairNcxIdentifier` resolves
+through this reference and does nothing while it dangles, so EPUB-W062 was disabled
+on precisely the files already broken.
 
 **Where a repair lives:** in the format's own file, in `Write`, next to the other
 corrections — `RepairMimetype` and `RepairNcxIdentifier` are the models to copy.

@@ -268,6 +268,11 @@ public sealed partial class EpubFormat : IBookFormat
         OpfDocument opf = OpenPackageDocument(container);
         opf.ApplyMetadata(metadata);
 
+        // After the edit, so it judges the identifiers the file is about to have,
+        // and before RepairNcxIdentifier, which resolves through the reference this
+        // puts right and would otherwise do nothing.
+        RepairUniqueIdentifier(opf);
+
         byte[]? coverBytes = ApplyCover(opf, metadata, out string? coverEntryName);
         byte[] opfBytes = opf.Serialize();
 
@@ -378,6 +383,90 @@ public sealed partial class EpubFormat : IBookFormat
                     ? $"'{MimetypeEntryName}' was not the first entry; moved to the front on save."
                     : $"'{MimetypeEntryName}' was compressed; stored on save.",
             MimetypeEntryName);
+    }
+
+    /// <summary>
+    /// Points <c>package/@unique-identifier</c> back at a <c>dc:identifier</c> that
+    /// exists, when it names one that does not.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The attribute is a reference: it carries the <c>id</c> of the
+    /// <c>dc:identifier</c> that is the book's identity. Converters drop the target
+    /// or rename it and leave the reference behind, and the result reads as a book
+    /// with no identity at all. It is a silent failure with a long tail —
+    /// <see cref="RepairNcxIdentifier"/> resolves through this attribute and does
+    /// nothing when it dangles, so EPUB-W062 is disabled on exactly the files that
+    /// are already broken, and <see cref="BookMetadata.UniqueIdentifier"/> is null.
+    /// </para>
+    /// <para>
+    /// Provable only when the document holds exactly one <c>dc:identifier</c>: there
+    /// is then one candidate and no choice to make. With two or more, nothing in the
+    /// file says which one the package meant, so this returns and the file is left
+    /// as it is — the "provable, or merely likely?" line.
+    /// </para>
+    /// <para>
+    /// The reference is moved to the identifier, never the identifier's <c>id</c> to
+    /// the reference, because <c>unique-identifier</c> is pointed at by nothing while
+    /// an identifier's <c>id</c> may be the target of a <c>meta refines="#…"</c>.
+    /// Retargeting the attribute cannot break another reference; renaming the element
+    /// can. The one exception is an identifier carrying no <c>id</c>, where there is
+    /// no reference to break and the name the package already declares is the only
+    /// one available.
+    /// </para>
+    /// </remarks>
+    private static void RepairUniqueIdentifier(OpfDocument opf)
+    {
+        if (opf.Package is not { } package || opf.Metadata is not { } metadata)
+        {
+            return;
+        }
+
+        // A missing attribute is a different defect, and not this one: nothing in
+        // the file says which identifier should have been named.
+        if (opf.UniqueIdentifierRef is not { Length: > 0 } reference)
+        {
+            return;
+        }
+
+        List<XElement> identifiers = metadata.Elements(OpfDocument.DcNs + "identifier").ToList();
+
+        if (identifiers.Any(e => string.Equals((string?)e.Attribute("id"), reference, StringComparison.Ordinal)))
+        {
+            return;
+        }
+
+        if (identifiers.Count != 1)
+        {
+            return;
+        }
+
+        XElement sole = identifiers[0];
+
+        if ((string?)sole.Attribute("id") is { Length: > 0 } soleId)
+        {
+            package.SetAttributeValue("unique-identifier", soleId);
+
+            Log.Rule(
+                LogLevel.Warning,
+                "EPUB-E041",
+                $"The package named '{reference}' as the book's identifier but no "
+                    + $"identifier carries that id; pointed at '{soleId}', the only one "
+                    + "present, so the book has an identity again.",
+                opf.EntryName);
+
+            return;
+        }
+
+        sole.SetAttributeValue("id", reference);
+
+        Log.Rule(
+            LogLevel.Warning,
+            "EPUB-E041",
+            $"The package named '{reference}' as the book's identifier but the only "
+                + $"identifier present had no id; labelled it '{reference}' so the book "
+                + "has an identity again.",
+            opf.EntryName);
     }
 
     /// <summary>The NCX media type, which is how the table of contents is found.</summary>
