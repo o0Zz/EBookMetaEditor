@@ -360,7 +360,9 @@ internal sealed class MainForm : Form, IPathReceiver
         // places, last save winning.
         Release();
 
-        OpenBatch(all);
+        // The grid *is* what the user right-clicked for, so this window has nothing
+        // left to do once they close it.
+        OpenBatch(all, thenClose: true);
     }
 
     /// <summary>Lets go of the open file, leaving the window as it starts up.</summary>
@@ -385,20 +387,42 @@ internal sealed class MainForm : Form, IPathReceiver
     /// <summary>
     /// Opens the batch grid over the given paths and steps out of its way.
     /// </summary>
-    private void OpenBatch(IEnumerable<string> paths)
+    /// <param name="paths">The files to edit.</param>
+    /// <param name="thenClose">
+    /// Whether closing the grid ends the session. True when the grid is the whole
+    /// reason the app started: this window was an artifact of Explorer launching
+    /// one process per file, and reappearing empty afterwards is a window nobody
+    /// asked for. False when the user opened the grid from a window they were
+    /// already working in, which they get back.
+    /// </param>
+    private void OpenBatch(IEnumerable<string> paths, bool thenClose = false)
     {
         var batch = new BatchForm(_settings, paths);
 
         batch.FormClosed += (closed, _) =>
         {
-            // Only when this was the last grid. Coming back while another one is
-            // still open would put a closable window under the user's mouse whose
-            // closing ends the process — taking that grid's unsaved edits with it.
-            if (!IsDisposed && !AnyBatchOpen(closed))
+            // Never while another grid is still open: this window is what
+            // Application.Run was handed, so both coming back and closing would be
+            // wrong — one puts a window under the user's mouse whose closing ends
+            // the process, the other ends it outright, and either way that grid's
+            // unsaved edits go with it.
+            if (IsDisposed || AnyBatchOpen(closed))
             {
-                Show();
-                Activate();
+                return;
             }
+
+            // Not if a file was opened here in the meantime: the window has become
+            // something of its own again, and closing it would discard that.
+            if (thenClose && _book is null)
+            {
+                // Posted rather than called: this runs inside the grid's own close,
+                // and ending the message loop from there ends it too.
+                BeginInvoke(new Action(Close));
+                return;
+            }
+
+            Show();
+            Activate();
         };
 
         Hide();
@@ -425,7 +449,10 @@ internal sealed class MainForm : Form, IPathReceiver
         // lifetime: closing it while a grid is open ends the message loop and
         // disposes that grid without ever asking about its unsaved edits. Step
         // aside instead — it comes back when the last grid closes.
-        if (e.CloseReason == CloseReason.UserClosing && AnyBatchOpen(null))
+        //
+        // Only when it is on screen. Hidden means a grid is closing and asked this
+        // window to end the session, which is the one close that must go through.
+        if (e.CloseReason == CloseReason.UserClosing && Visible && AnyBatchOpen(null))
         {
             e.Cancel = true;
             Release();
