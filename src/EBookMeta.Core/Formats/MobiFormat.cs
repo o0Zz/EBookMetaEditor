@@ -21,10 +21,6 @@ namespace EBookMeta.Formats;
 /// are written — a file whose two halves disagree about its title is a file that
 /// shows the old one on half the devices that open it.
 /// </para>
-/// <para>
-/// The rules live beside this in <c>MobiFormat.Rules.cs</c>, which is the same
-/// class.
-/// </para>
 /// </remarks>
 public sealed partial class MobiFormat : IBookFormat
 {

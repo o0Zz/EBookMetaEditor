@@ -43,8 +43,7 @@ public sealed class RepairWriteTests
     private static string OpfTextOf(string path)
     {
         using ZipContainer container = ZipContainer.Open(path);
-        RawPackageDocument raw = EpubFormat.ReadRawPackageDocument(container);
-        return new UTF8Encoding(false).GetString(raw.Bytes);
+        return new UTF8Encoding(false).GetString(EpubFormat.ReadRawPackageDocument(container).Bytes);
     }
 
     private static void SaveTo(string source, string target, Action<BookMetadata>? edit = null)

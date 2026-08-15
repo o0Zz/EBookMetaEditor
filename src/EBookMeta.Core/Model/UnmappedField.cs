@@ -32,18 +32,6 @@ public sealed record UnmappedField
     /// </summary>
     public byte[]? Bytes { get; init; }
 
-    /// <summary>
-    /// One-based line in the source document, or 0 where the format has no
-    /// meaningful line numbers.
-    /// </summary>
-    public int Line { get; init; }
-
-    /// <summary>
-    /// One-based column in the source document, or 0 where the format has no
-    /// meaningful columns.
-    /// </summary>
-    public int Column { get; init; }
-
     /// <summary>Returns "Source/Key = Text", for diagnostics.</summary>
     public override string ToString() =>
         $"{Source}/{Key}{(Text is null ? "" : $" = {Text}")}";

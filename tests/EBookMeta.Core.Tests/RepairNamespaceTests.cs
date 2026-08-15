@@ -33,15 +33,6 @@ public sealed class RepairNamespaceTests
     }
 
     [Fact]
-    public void Repair_reports_where_the_prefix_was_first_used()
-    {
-        NamespaceRepairResult result = Repair(EpubBuilder.Epub2OpfUndeclaredOpfPrefix);
-
-        Assert.Equal(4, result.Line);
-        Assert.Equal(15, result.Column);
-    }
-
-    [Fact]
     public void A_document_that_needs_no_repair_is_left_alone()
     {
         Assert.Null(EpubFormat.RepairNamespaces(Utf8(EpubBuilder.Epub2Opf)));
@@ -256,13 +247,16 @@ public sealed class RepairNamespaceTests
     }
 
     [Fact]
-    public void A_self_closing_root_gets_the_declaration_before_the_slash()
+    public void A_self_closing_root_survives_the_insertion()
     {
+        // The declaration goes immediately after the root's name, so a root with
+        // no attributes and one that closes itself are the same case — nothing
+        // has to know where the tag ends.
         NamespaceRepairResult result = Repair("""<root dc:x="1"/>""");
-        string repaired = Text(result.RepairedBytes);
 
         Assert.True(result.IsComplete);
-        Assert.EndsWith("/>", repaired, StringComparison.Ordinal);
-        Assert.Contains(@"xmlns:dc=""http://purl.org/dc/elements/1.1/""/>", repaired, StringComparison.Ordinal);
+        Assert.Equal(
+            """<root xmlns:dc="http://purl.org/dc/elements/1.1/" dc:x="1"/>""",
+            Text(result.RepairedBytes));
     }
 }

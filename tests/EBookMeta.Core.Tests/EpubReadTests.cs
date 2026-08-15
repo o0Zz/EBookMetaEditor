@@ -122,14 +122,13 @@ public sealed class EpubReadTests
     }
 
     [Fact]
-    public void Unrecognised_meta_is_reported_with_its_line_number()
+    public void Unrecognised_meta_is_reported()
     {
         using var temp = new TempDir();
         UnmappedField mood = Epub3(temp).UnmappedFields.Single(f => f.Key == "custom:mood");
 
         Assert.Equal("wistful", mood.Text);
         Assert.Equal("OPF", mood.Source);
-        Assert.True(mood.Line > 0, "line info should survive parsing");
     }
 
     /// <summary>

@@ -11,11 +11,10 @@ namespace EBookMeta.Formats;
 /// Reads and writes EPUB 2 and EPUB 3 metadata.
 /// </summary>
 /// <remarks>
-/// This file is the <see cref="IBookFormat"/> implementation — reading, writing,
-/// and the corrections a write can prove. The validation rules live beside it in
-/// <c>EpubFormat.Rules.cs</c>, which is the same class: they are half the code
-/// and none of the interface, so keeping them here would bury what this type
-/// actually is.
+/// One file, as the layout rule requires: detection, the OPF document, the
+/// corrections a write can prove, and the namespace repair an open performs. The
+/// second half of the class — <see cref="RepairNamespaces"/> and its scanner —
+/// is below <see cref="NamespaceRepairResult"/>.
 /// </remarks>
 public sealed partial class EpubFormat : IBookFormat
 {
@@ -24,6 +23,9 @@ public sealed partial class EpubFormat : IBookFormat
 
     /// <summary>Its exact required content — no BOM, no trailing newline.</summary>
     private const string EpubMediaType = "application/epub+zip";
+
+    /// <summary>The file that says where the package document lives, fixed by spec.</summary>
+    private const string ContainerEntryName = "META-INF/container.xml";
 
     /// <inheritdoc />
     public FormatId Id => FormatId.Epub;
@@ -91,18 +93,14 @@ public sealed partial class EpubFormat : IBookFormat
     }
 
     /// <summary>
-    /// Opens the package document referenced by <c>META-INF/container.xml</c>.
+    /// Opens the package document referenced by <c>META-INF/container.xml</c>,
+    /// repairing missing namespace declarations on the way in.
     /// </summary>
-    /// <param name="container">The open EPUB container.</param>
-    /// <returns>The parsed package document and the entry it came from.</returns>
     /// <exception cref="BookFormatException">
     /// The container file or the package document is missing or malformed.
     /// </exception>
-    public static OpfDocument OpenPackageDocument(
-        IContainer container)
+    private static OpfDocument OpenPackageDocument(IContainer container)
     {
-        Throw.IfNull(container);
-
         ContainerEntry entry = LocatePackageDocument(container);
         byte[] bytes = container.ReadAllBytes(entry);
 
@@ -154,12 +152,6 @@ public sealed partial class EpubFormat : IBookFormat
     /// <summary>
     /// Locates the package document and returns its bytes without parsing them.
     /// </summary>
-    /// <param name="container">The EPUB container.</param>
-    /// <returns>The entry name and its raw bytes.</returns>
-    /// <exception cref="BookFormatException">
-    /// <c>container.xml</c> is missing, declares no rootfile, or points at an
-    /// entry that is not in the archive.
-    /// </exception>
     /// <remarks>
     /// The repair path needs this. <see cref="OpenPackageDocument"/> parses, and
     /// therefore throws on exactly the documents a repair exists to fix — so the
@@ -167,40 +159,58 @@ public sealed partial class EpubFormat : IBookFormat
     /// it. Resolving the rootfile only requires <c>container.xml</c>, which is a
     /// separate document and usually intact.
     /// </remarks>
-    public static RawPackageDocument ReadRawPackageDocument(IContainer container)
+    internal static (string EntryName, byte[] Bytes) ReadRawPackageDocument(IContainer container)
     {
-        Throw.IfNull(container);
-
         ContainerEntry entry = LocatePackageDocument(container);
-
-        return new RawPackageDocument
-        {
-            EntryName = entry.Name,
-            Bytes = container.ReadAllBytes(entry),
-        };
+        return (entry.Name, container.ReadAllBytes(entry));
     }
 
     /// <summary>
-    /// Resolves <c>container.xml</c>'s rootfile to the entry holding it.
+    /// Resolves <c>container.xml</c>'s first rootfile to the entry holding it.
     /// </summary>
     /// <exception cref="BookFormatException">
-    /// <c>container.xml</c> is missing, declares no rootfile, or points at an
-    /// entry that is not in the archive.
+    /// <c>container.xml</c> is missing or malformed, declares no rootfile, or
+    /// points at an entry that is not in the archive. Surfaced as EPUB-F002.
     /// </exception>
     private static ContainerEntry LocatePackageDocument(IContainer container)
     {
-        string? opfPath = ContainerXml.Read(container).PrimaryRootfilePath;
+        ContainerEntry? entry = FindEntry(container, ContainerEntryName)
+            ?? throw new BookFormatException($"'{ContainerEntryName}' is missing.", ContainerEntryName);
+
+        byte[] bytes = container.ReadAllBytes(entry);
+
+        XDocument document;
+        try
+        {
+            document = XDocument.Parse(
+                XmlEncodingDetector.Decode(bytes, XmlEncodingDetector.Detect(bytes)));
+        }
+        catch (XmlException ex)
+        {
+            throw new BookFormatException(
+                $"'{ContainerEntryName}' is not well-formed XML: {ex.Message}", ContainerEntryName, ex);
+        }
+
+        // Matched namespace-agnostically. The container namespace is fixed by
+        // spec, but files that omit or misspell it are still readable and
+        // refusing them would help nobody. Only the first rootfile is ever
+        // edited — a multiple-rendition EPUB is opened through its default.
+        string? opfPath = document
+            .Descendants()
+            .Where(e => e.Name.LocalName == "rootfile")
+            .Select(e => (string?)e.Attribute("full-path"))
+            .FirstOrDefault(p => !string.IsNullOrWhiteSpace(p));
 
         if (opfPath is null)
         {
             throw new BookFormatException(
-                $"'{ContainerXml.EntryName}' declares no rootfile.", ContainerXml.EntryName);
+                $"'{ContainerEntryName}' declares no rootfile.", ContainerEntryName);
         }
 
         return FindEntry(container, opfPath)
             ?? throw new BookFormatException(
-                $"'{ContainerXml.EntryName}' points at '{opfPath}', which is not in the archive.",
-                ContainerXml.EntryName);
+                $"'{ContainerEntryName}' points at '{opfPath}', which is not in the archive.",
+                ContainerEntryName);
     }
 
     /// <inheritdoc />
@@ -523,8 +533,9 @@ public sealed partial class EpubFormat : IBookFormat
 
         if (entry is null)
         {
-            // A cover declaration pointing at nothing is EPUB-E030's business.
-            // Reading is not the place to complain, only to not crash.
+            // A declared cover that is not in the archive. Nothing here can
+            // prove what it should have been, so there is no rule to raise —
+            // reading's only job is to not crash.
             return;
         }
 
@@ -544,8 +555,8 @@ public sealed partial class EpubFormat : IBookFormat
     /// Hrefs are URL-encoded, so a file called <c>my cover.jpg</c> appears as
     /// <c>my%20cover.jpg</c> and will not match any entry name until decoded.
     /// Traversal is not resolved here: an href containing <c>..</c> is left as
-    /// found so rule GEN-E003 can report it rather than the reader silently
-    /// following it out of the archive.
+    /// found, so it simply matches no entry rather than the reader silently
+    /// following it out of the archive. GEN-E003 reports entry names that do it.
     /// </remarks>
     internal static string ResolveHref(string opfEntryName, string href)
     {
@@ -608,22 +619,9 @@ public sealed partial class EpubFormat : IBookFormat
 }
 
 /// <summary>
-/// A package document as bytes, before any attempt to parse it.
-/// </summary>
-/// <seealso cref="EpubFormat.ReadRawPackageDocument" />
-public sealed record RawPackageDocument
-{
-    /// <summary>The container entry the document came from — <c>OEBPS/content.opf</c>.</summary>
-    public required string EntryName { get; init; }
-
-    /// <summary>The document's bytes, exactly as stored.</summary>
-    public required byte[] Bytes { get; init; }
-}
-
-/// <summary>
 /// What repairing a package document's namespace declarations would produce.
 /// </summary>
-public sealed record NamespaceRepairResult
+internal sealed record NamespaceRepairResult
 {
     /// <summary>The document's bytes with the missing declarations added.</summary>
     public required byte[] RepairedBytes { get; init; }
@@ -635,12 +633,6 @@ public sealed record NamespaceRepairResult
 
     /// <summary>Prefixes that were declared, in first-use order.</summary>
     public required IReadOnlyList<string> Added { get; init; }
-
-    /// <summary>The line of the first undeclared prefix, 1-based.</summary>
-    public int Line { get; init; }
-
-    /// <summary>The column of the first undeclared prefix, 1-based.</summary>
-    public int Column { get; init; }
 
     /// <summary>
     /// Prefixes left alone because no specification says what they mean.
@@ -662,12 +654,10 @@ public sealed record NamespaceRepairResult
 /// package document uses but never declares (EPUB-W070).
 /// </summary>
 /// <remarks>
-/// The third face of <see cref="EpubFormat"/>, beside <c>EpubFormat.cs</c> and
-/// <c>EpubFormat.Rules.cs</c> and the same class as both. It lives here rather
-/// than at the Core root because every prefix it knows how to bind is an EPUB
-/// prefix, the rule it answers is an <c>EPUB-</c> rule, and nothing outside this
-/// format has ever called it — a general-purpose XML repair is what it looked
-/// like, not what it is.
+/// It lives in this file rather than at the Core root because every prefix it
+/// knows how to bind is an EPUB prefix and the rule it answers is an
+/// <c>EPUB-</c> rule — a general-purpose XML repair is what it looks like, not
+/// what it is.
 /// <para>
 /// The repair is an insertion into the original text, never a reserialisation.
 /// Parsing permissively and re-emitting through a strict writer would fix the
@@ -703,7 +693,7 @@ public sealed partial class EpubFormat
     /// <summary>Whether a missing declaration for this prefix can be recovered.</summary>
     /// <param name="prefix">The prefix, without the colon.</param>
     /// <returns><see langword="true"/> when a specification fixes the URI.</returns>
-    public static bool IsKnownNamespacePrefix(string prefix) =>
+    internal static bool IsKnownNamespacePrefix(string prefix) =>
         prefix is not null && KnownNamespaces.ContainsKey(prefix);
 
     /// <summary>
@@ -714,14 +704,18 @@ public sealed partial class EpubFormat
     /// The result, or <see langword="null"/> when every prefix the document uses
     /// is declared and there is nothing to repair.
     /// </returns>
-    public static NamespaceRepairResult? RepairNamespaces(ReadOnlySpan<byte> bytes)
+    internal static NamespaceRepairResult? RepairNamespaces(ReadOnlySpan<byte> bytes)
     {
         XmlEncodingInfo encoding = XmlEncodingDetector.Detect(bytes);
         string text = XmlEncodingDetector.Decode(bytes, encoding);
 
-        List<Undeclared> undeclared = FindUndeclared(text, out bool reachedEnd, out string? stoppedBecause);
+        // The scan runs on the text without a byte-order mark, so the offset it
+        // reports indexes that; the mark is added back before the insertion.
+        int bom = text.Length > 0 && text[0] == '﻿' ? 1 : 0;
 
-        if (undeclared.Count == 0)
+        Scan scan = FindUndeclared(bom == 0 ? text : text.Substring(bom));
+
+        if (scan.Undeclared.Count == 0)
         {
             return null;
         }
@@ -730,19 +724,12 @@ public sealed partial class EpubFormat
         List<string> skipped = [];
         string repairedText = text;
 
-        foreach (Undeclared use in undeclared)
+        foreach (string prefix in scan.Undeclared)
         {
-            if (IsKnownNamespacePrefix(use.Prefix))
-            {
-                added.Add(use.Prefix);
-            }
-            else
-            {
-                skipped.Add(use.Prefix);
-            }
+            (IsKnownNamespacePrefix(prefix) ? added : skipped).Add(prefix);
         }
 
-        if (added.Count > 0 && FindRootTagInsertionPoint(text, out int insertAt))
+        if (added.Count > 0 && scan.RootNameEnd >= 0)
         {
             // One insertion carrying every recoverable declaration. The root
             // element is where the format expects them and where a single edit
@@ -754,7 +741,7 @@ public sealed partial class EpubFormat
                             .Append("=\"").Append(KnownNamespaces[prefix]).Append('"');
             }
 
-            repairedText = text.Insert(insertAt, declarations.ToString());
+            repairedText = text.Insert(bom + scan.RootNameEnd, declarations.ToString());
         }
         else
         {
@@ -766,9 +753,9 @@ public sealed partial class EpubFormat
         // The scan stopping early means there is more wrong than namespaces, and
         // any prefix after the break was never seen — so completeness cannot be
         // claimed even if what we changed does parse.
-        if (remaining is null && !reachedEnd)
+        if (remaining is null && !scan.ReachedEnd)
         {
-            remaining = stoppedBecause;
+            remaining = scan.StoppedBecause;
         }
 
         return new NamespaceRepairResult
@@ -778,31 +765,40 @@ public sealed partial class EpubFormat
             Added = added,
             Skipped = skipped,
             RemainingError = remaining,
-            Line = undeclared[0].Line,
-            Column = undeclared[0].Column,
         };
     }
 
-    /// <summary>One prefix used without a declaration, and where it was first seen.</summary>
-    private readonly record struct Undeclared(string Prefix, int Line, int Column);
+    /// <summary>What one tolerant pass over the document found.</summary>
+    /// <param name="Undeclared">Prefixes used but never bound, in first-use order.</param>
+    /// <param name="RootNameEnd">
+    /// The offset just past the root element's name, where declarations go, or
+    /// -1 when no element was reached.
+    /// </param>
+    /// <param name="ReachedEnd">Whether the pass got to the end of the document.</param>
+    /// <param name="StoppedBecause">What stopped it, when it did not.</param>
+    private readonly record struct Scan(
+        IReadOnlyList<string> Undeclared, int RootNameEnd, bool ReachedEnd, string? StoppedBecause);
 
     /// <summary>
     /// Finds prefixes used on an element or attribute name that no
-    /// <c>xmlns:</c> declaration binds.
+    /// <c>xmlns:</c> declaration binds, and where a declaration would go.
     /// </summary>
-    private static List<Undeclared> FindUndeclared(
-        string text, out bool reachedEnd, out string? stoppedBecause)
+    private static Scan FindUndeclared(string text)
     {
-        var used = new List<Undeclared>();
+        var used = new List<string>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
         var declared = new HashSet<string>(StringComparer.Ordinal);
 
-        reachedEnd = false;
-        stoppedBecause = null;
+        int[] lineStarts = XmlLineIndex.Starts(text);
+        int rootNameEnd = -1;
+        bool reachedEnd = false;
+        string? stoppedBecause = null;
 
         using var stringReader = new StringReader(text);
         using var reader = new XmlTextReader(stringReader)
         {
+            // Prefixes are read as plain text, which is the whole point: the
+            // document being diagnosed is one whose prefixes do not resolve.
             Namespaces = false,
 
             // Never fetch an external DTD. A malicious or merely broken document
@@ -820,7 +816,18 @@ public sealed partial class EpubFormat
                     continue;
                 }
 
-                Record(reader.Name, reader, used, seen);
+                if (rootNameEnd < 0)
+                {
+                    // Immediately after the root element's name is always a
+                    // legal place for an attribute, and the reader has already
+                    // walked past the declaration, any comments and a doctype
+                    // internal subset to get here — so asking it where the root
+                    // is costs nothing and replaces a prolog scanner that had
+                    // to know about all three.
+                    rootNameEnd = XmlLineIndex.Offset(lineStarts, reader) + reader.Name.Length;
+                }
+
+                Record(reader.Name, used, seen);
 
                 if (!reader.HasAttributes)
                 {
@@ -842,7 +849,7 @@ public sealed partial class EpubFormat
                         continue;
                     }
 
-                    Record(name, reader, used, seen);
+                    Record(name, used, seen);
                 }
 
                 reader.MoveToElement();
@@ -858,11 +865,11 @@ public sealed partial class EpubFormat
             stoppedBecause = ex.Message;
         }
 
-        return used.Where(u => !declared.Contains(u.Prefix)).ToList();
+        return new Scan(
+            [.. used.Where(p => !declared.Contains(p))], rootNameEnd, reachedEnd, stoppedBecause);
     }
 
-    private static void Record(
-        string qualifiedName, XmlTextReader reader, List<Undeclared> used, HashSet<string> seen)
+    private static void Record(string qualifiedName, List<string> used, HashSet<string> seen)
     {
         int colon = qualifiedName.IndexOf(':');
         if (colon <= 0)
@@ -882,169 +889,8 @@ public sealed partial class EpubFormat
 
         if (seen.Add(prefix))
         {
-            used.Add(new Undeclared(prefix, reader.LineNumber, reader.LinePosition));
+            used.Add(prefix);
         }
-    }
-
-    /// <summary>
-    /// Finds the offset in the root element's start tag at which an attribute may
-    /// be inserted.
-    /// </summary>
-    private static bool FindRootTagInsertionPoint(string text, out int insertAt)
-    {
-        insertAt = 0;
-        int i = text.Length > 0 && text[0] == '﻿' ? 1 : 0;
-
-        while (i < text.Length)
-        {
-            if (text[i] != '<')
-            {
-                i++;
-                continue;
-            }
-
-            if (Peek(text, i + 1) == '?')
-            {
-                int close = text.IndexOf("?>", i + 2, StringComparison.Ordinal);
-                if (close < 0)
-                {
-                    return false;
-                }
-
-                i = close + 2;
-                continue;
-            }
-
-            if (Peek(text, i + 1) == '!')
-            {
-                if (string.CompareOrdinal(text, i, "<!--", 0, 4) == 0)
-                {
-                    int close = text.IndexOf("-->", i + 4, StringComparison.Ordinal);
-                    if (close < 0)
-                    {
-                        return false;
-                    }
-
-                    i = close + 3;
-                    continue;
-                }
-
-                i = SkipDoctype(text, i);
-                if (i < 0)
-                {
-                    return false;
-                }
-
-                continue;
-            }
-
-            char first = Peek(text, i + 1);
-            if (char.IsLetter(first) || first is '_' or ':')
-            {
-                return EndOfStartTag(text, i, out insertAt);
-            }
-
-            i++;
-        }
-
-        return false;
-    }
-
-    private static bool EndOfStartTag(string text, int start, out int insertAt)
-    {
-        insertAt = 0;
-
-        int nameEnd = start + 1;
-        while (nameEnd < text.Length && IsNameChar(text[nameEnd]))
-        {
-            nameEnd++;
-        }
-
-        char quote = '\0';
-        for (int i = nameEnd; i < text.Length; i++)
-        {
-            char c = text[i];
-
-            if (quote != '\0')
-            {
-                if (c == quote)
-                {
-                    quote = '\0';
-                }
-
-                continue;
-            }
-
-            if (c is '"' or '\'')
-            {
-                quote = c;
-                continue;
-            }
-
-            if (c != '>')
-            {
-                continue;
-            }
-
-            // Insert before the '/' of a self-closing tag, and before any
-            // whitespace preceding the '>', so the result reads naturally.
-            int at = i;
-            if (at > nameEnd && text[at - 1] == '/')
-            {
-                at--;
-            }
-
-            while (at > nameEnd && char.IsWhiteSpace(text[at - 1]))
-            {
-                at--;
-            }
-
-            insertAt = at;
-            return true;
-        }
-
-        // Unterminated start tag: broken well beyond a missing declaration, so
-        // report nothing rather than guess where it ends.
-        return false;
-    }
-
-    private static int SkipDoctype(string text, int start)
-    {
-        int depth = 0;
-        char quote = '\0';
-
-        for (int i = start + 2; i < text.Length; i++)
-        {
-            char c = text[i];
-
-            if (quote != '\0')
-            {
-                if (c == quote)
-                {
-                    quote = '\0';
-                }
-
-                continue;
-            }
-
-            switch (c)
-            {
-                case '"':
-                case '\'':
-                    quote = c;
-                    break;
-                case '[':
-                    depth++;
-                    break;
-                case ']':
-                    depth--;
-                    break;
-                case '>' when depth <= 0:
-                    return i + 1;
-            }
-        }
-
-        return -1;
     }
 
     private static string? StrictParseError(string text)
@@ -1059,16 +905,10 @@ public sealed partial class EpubFormat
             return ex.Message;
         }
     }
-
-    private static char Peek(string text, int index) =>
-        index < text.Length ? text[index] : '\0';
-
-    private static bool IsNameChar(char c) =>
-        char.IsLetterOrDigit(c) || c is '_' or ':' or '-' or '.';
 }
 
 /// <summary>An entry in the OPF manifest.</summary>
-public sealed record ManifestItem
+internal sealed record ManifestItem
 {
     /// <summary>The item's <c>id</c>, unique within the manifest.</summary>
     public required string Id { get; init; }
@@ -1094,18 +934,8 @@ public sealed record ManifestItem
                   .Contains("cover-image", StringComparer.Ordinal);
 }
 
-/// <summary>A reference from the spine to a manifest item.</summary>
-public sealed record SpineItemRef
-{
-    /// <summary>The manifest <c>id</c> this reference points at.</summary>
-    public required string IdRef { get; init; }
-
-    /// <summary>The element itself.</summary>
-    public required XElement Element { get; init; }
-}
-
 /// <summary>An EPUB 3 <c>&lt;meta refines="#id"&gt;</c> refinement.</summary>
-public sealed record MetaRefinement
+internal sealed record MetaRefinement
 {
     /// <summary>The id being refined, with the leading <c>#</c> stripped.</summary>
     public required string Refines { get; init; }
@@ -1118,15 +948,12 @@ public sealed record MetaRefinement
 
     /// <summary>The <c>scheme</c> attribute, such as <c>marc:relators</c>.</summary>
     public string? Scheme { get; init; }
-
-    /// <summary>The element itself.</summary>
-    public required XElement Element { get; init; }
 }
 
 /// <summary>
 /// An EPUB package document (the OPF), parsed in a way that survives editing.
 /// </summary>
-public sealed partial class OpfDocument
+internal sealed partial class OpfDocument
 {
     /// <summary>The OPF namespace.</summary>
     public static readonly XNamespace OpfNs = "http://www.idpf.org/2007/opf";
@@ -1134,14 +961,9 @@ public sealed partial class OpfDocument
     /// <summary>The Dublin Core elements namespace.</summary>
     public static readonly XNamespace DcNs = "http://purl.org/dc/elements/1.1/";
 
-    private OpfDocument(
-        XDocument document,
-        byte[] originalBytes,
-        XmlSourceFormat format,
-        string entryName)
+    private OpfDocument(XDocument document, XmlSourceFormat format, string entryName)
     {
         Document = document;
-        OriginalBytes = originalBytes;
         Format = format;
         EntryName = entryName;
     }
@@ -1150,25 +972,10 @@ public sealed partial class OpfDocument
     public XDocument Document { get; }
 
     /// <summary>
-    /// The bytes exactly as read. Retained for the session so a repair edits the
-    /// real file rather than a re-serialisation of it.
-    /// </summary>
-    public byte[] OriginalBytes { get; }
-
-    /// <summary>What the bytes said about their own encoding.</summary>
-    public XmlEncodingInfo Encoding => Format.Encoding;
-
-    /// <summary>
-    /// The XML declaration exactly as it appeared, or <see langword="null"/> if
-    /// the document had none. Re-emitted verbatim on save.
-    /// </summary>
-    public string? DeclarationText => Format.DeclarationText;
-
-    /// <summary>
     /// How the source was written, in the respects the parsed tree does not
     /// record — declaration, prolog, epilogue, empty-element style, line endings.
     /// </summary>
-    internal XmlSourceFormat Format { get; }
+    public XmlSourceFormat Format { get; }
 
     /// <summary>The container entry this document was read from.</summary>
     public string EntryName { get; }
@@ -1185,23 +992,9 @@ public sealed partial class OpfDocument
     /// <summary>The <c>metadata</c> element.</summary>
     public XElement? Metadata => FindChild(Package, "metadata");
 
-    /// <summary>The <c>manifest</c> element.</summary>
-    public XElement? ManifestElement => FindChild(Package, "manifest");
-
-    /// <summary>The <c>spine</c> element.</summary>
-    public XElement? SpineElement => FindChild(Package, "spine");
-
     /// <summary>The manifest items, in document order.</summary>
     public IReadOnlyList<ManifestItem> Manifest => _manifest ??= ReadManifest();
     private List<ManifestItem>? _manifest;
-
-    /// <summary>The spine references, in document order.</summary>
-    public IReadOnlyList<SpineItemRef> Spine => _spine ??= ReadSpine();
-    private List<SpineItemRef>? _spine;
-
-    /// <summary>The EPUB 3 refinements, in document order.</summary>
-    public IReadOnlyList<MetaRefinement> Refinements => _refinements ??= ReadRefinements();
-    private List<MetaRefinement>? _refinements;
 
     /// <summary>Parses an OPF from its bytes.</summary>
     /// <param name="bytes">The document's bytes.</param>
@@ -1213,14 +1006,13 @@ public sealed partial class OpfDocument
     /// </exception>
     public static OpfDocument Parse(ReadOnlySpan<byte> bytes, string entryName = "content.opf")
     {
-        byte[] original = bytes.ToArray();
         XmlEncodingInfo encoding = XmlEncodingDetector.Detect(bytes);
         string text = XmlEncodingDetector.Decode(bytes, encoding);
 
         XDocument document;
         try
         {
-            document = XDocument.Parse(text, LoadOptions.PreserveWhitespace | LoadOptions.SetLineInfo);
+            document = XDocument.Parse(text, LoadOptions.PreserveWhitespace);
         }
         catch (XmlException ex)
         {
@@ -1232,7 +1024,7 @@ public sealed partial class OpfDocument
         // style and the line ending are all captured here rather than left to
         // the serialiser, because none of them survives in the parsed tree and
         // each would otherwise turn a one-field edit into a whole-file diff.
-        return new OpfDocument(document, original, XmlSourceFormat.Detect(text, encoding), entryName);
+        return new OpfDocument(document, XmlSourceFormat.Detect(text, encoding), entryName);
     }
 
     private static XElement? FindChild(XElement? parent, string localName) =>
@@ -1240,12 +1032,14 @@ public sealed partial class OpfDocument
 
     private List<ManifestItem> ReadManifest()
     {
-        if (ManifestElement is null)
+        XElement? manifest = FindChild(Package, "manifest");
+
+        if (manifest is null)
         {
             return [];
         }
 
-        return [.. ManifestElement
+        return [.. manifest
             .Elements()
             .Where(e => e.Name.LocalName == "item")
             .Select(e => new ManifestItem
@@ -1258,53 +1052,34 @@ public sealed partial class OpfDocument
             })];
     }
 
-    private List<SpineItemRef> ReadSpine()
-    {
-        if (SpineElement is null)
-        {
-            return [];
-        }
-
-        return [.. SpineElement
-            .Elements()
-            .Where(e => e.Name.LocalName == "itemref")
-            .Select(e => new SpineItemRef
-            {
-                IdRef = (string?)e.Attribute("idref") ?? string.Empty,
-                Element = e,
-            })];
-    }
-
-    private List<MetaRefinement> ReadRefinements()
+    /// <summary>
+    /// The EPUB 3 refinements, keyed by the id of what they refine.
+    /// </summary>
+    /// <remarks>
+    /// Built on demand rather than cached: it is wanted twice per document at
+    /// most, once by a read and once by the read a write does to decide what
+    /// changed.
+    /// </remarks>
+    private ILookup<string, MetaRefinement> ReadRefinements()
     {
         if (Metadata is null)
         {
-            return [];
+            return Array.Empty<MetaRefinement>().ToLookup(r => r.Refines, StringComparer.Ordinal);
         }
 
-        var result = new List<MetaRefinement>();
-
-        foreach (XElement meta in Metadata.Elements().Where(e => e.Name.LocalName == "meta"))
-        {
-            string? refines = (string?)meta.Attribute("refines");
-            string? property = (string?)meta.Attribute("property");
-
-            if (refines is null || property is null)
+        return Metadata
+            .Elements()
+            .Where(e => e.Name.LocalName == "meta" &&
+                        e.Attribute("refines") is not null &&
+                        e.Attribute("property") is not null)
+            .Select(meta => new MetaRefinement
             {
-                continue;
-            }
-
-            result.Add(new MetaRefinement
-            {
-                Refines = refines.TrimStart('#'),
-                Property = property.Trim(),
+                Refines = ((string)meta.Attribute("refines")!).TrimStart('#'),
+                Property = ((string)meta.Attribute("property")!).Trim(),
                 Value = meta.Value.Trim(),
                 Scheme = (string?)meta.Attribute("scheme"),
-                Element = meta,
-            });
-        }
-
-        return result;
+            })
+            .ToLookup(r => r.Refines, StringComparer.Ordinal);
     }
 
     /// <summary>
@@ -1320,7 +1095,7 @@ public sealed partial class OpfDocument
             return metadata;
         }
 
-        ILookup<string, MetaRefinement> refinements = Refinements.ToLookup(r => r.Refines, StringComparer.Ordinal);
+        ILookup<string, MetaRefinement> refinements = ReadRefinements();
 
         ReadTitles(metadata, refinements);
         ReadCreators(metadata, refinements);
@@ -1533,15 +1308,11 @@ public sealed partial class OpfDocument
                 continue;
             }
 
-            var line = (IXmlLineInfo)meta;
-
             metadata.UnmappedFields.Add(new UnmappedField
             {
                 Source = "OPF",
                 Key = key,
                 Text = name is not null ? (string?)meta.Attribute("content") : meta.Value.Trim(),
-                Line = line.HasLineInfo() ? line.LineNumber : 0,
-                Column = line.HasLineInfo() ? line.LinePosition : 0,
             });
         }
     }
@@ -1580,7 +1351,7 @@ public sealed partial class OpfDocument
 /// The write half of <see cref="OpfDocument"/>: applying edits to the parsed
 /// tree and serialising it back without disturbing anything else.
 /// </summary>
-public sealed partial class OpfDocument
+internal sealed partial class OpfDocument
 {
     /// <summary>
     /// Serialises the document back to bytes.
@@ -1609,8 +1380,8 @@ public sealed partial class OpfDocument
         // would otherwise gain EPUB 2 attributes merely by being opened and
         // saved, which is a change the user did not ask for. So dual-convention
         // output applies to fields the user changed; a field left alone is left
-        // alone. Reporting single-convention files is EPUB-W032 and EPUB-W061's
-        // job, with the user opting in to the fix.
+        // alone, single-convention or not. Rewriting one into both forms is not
+        // a correction — nothing in the file says the user wanted it.
         BookMetadata current = ReadMetadata();
 
         ApplyTitle(metadataElement, current, metadata);
@@ -1641,8 +1412,9 @@ public sealed partial class OpfDocument
 
             // Removed rather than ignored. A cleared field that quietly keeps its
             // old value is the worst of the three options: the user is told nothing
-            // and the editor then disagrees with the file. The publication is now
-            // missing a required element, which is what rule EPUB-E012 is for.
+            // and the editor then disagrees with the file. The warning is the whole
+            // response — inventing a replacement title is exactly what this build
+            // does not do.
             Log.Warning(
                 $"The title was cleared, so '{EntryName}' no longer has a dc:title. "
                 + "EPUB requires one, and readers will show the file name instead.");
@@ -1710,8 +1482,8 @@ public sealed partial class OpfDocument
                       (string?)e.Attribute("content") == manifestItemId) == true;
 
         // Either form on its own counts as "already declared" for the purpose of
-        // not rewriting an untouched file. A file carrying only one is reported
-        // by EPUB-W032 rather than silently corrected on save.
+        // not rewriting an untouched file. Adding the missing convention to a
+        // file the user did not edit would be a change with no rule behind it.
         return epub3 || epub2;
     }
 
@@ -2144,98 +1916,6 @@ public sealed partial class OpfDocument
         element.Remove();
     }
 
-    private void InvalidateCaches()
-    {
-        _manifest = null;
-        _spine = null;
-        _refinements = null;
-    }
+    private void InvalidateCaches() => _manifest = null;
 }
 
-/// <summary>
-/// <c>META-INF/container.xml</c> — the file that says where an EPUB's package
-/// document lives.
-/// </summary>
-public sealed class ContainerXml
-{
-    /// <summary>The entry name, which the EPUB specification fixes.</summary>
-    public const string EntryName = "META-INF/container.xml";
-
-    private ContainerXml(IReadOnlyList<string> rootfilePaths)
-    {
-        RootfilePaths = rootfilePaths;
-    }
-
-    /// <summary>
-    /// The <c>full-path</c> of every declared rootfile, in document order.
-    /// </summary>
-    public IReadOnlyList<string> RootfilePaths { get; }
-
-    /// <summary>
-    /// The package document path to edit, or <see langword="null"/> if none was
-    /// declared.
-    /// </summary>
-    public string? PrimaryRootfilePath => RootfilePaths.Count > 0 ? RootfilePaths[0] : null;
-
-    /// <summary>Parses <c>META-INF/container.xml</c> from its bytes.</summary>
-    /// <param name="bytes">The file's bytes.</param>
-    /// <returns>The parsed container description.</returns>
-    /// <exception cref="BookFormatException">
-    /// The document is not well-formed. Surfaced as EPUB-F002.
-    /// </exception>
-    public static ContainerXml Parse(ReadOnlySpan<byte> bytes)
-    {
-        XmlEncodingInfo encoding = XmlEncodingDetector.Detect(bytes);
-        string text = XmlEncodingDetector.Decode(bytes, encoding);
-
-        XDocument document;
-        try
-        {
-            document = XDocument.Parse(text, LoadOptions.SetLineInfo);
-        }
-        catch (System.Xml.XmlException ex)
-        {
-            throw new BookFormatException(
-                $"'{EntryName}' is not well-formed XML: {ex.Message}", EntryName, ex);
-        }
-
-        // Match the rootfile elements namespace-agnostically. The container
-        // namespace is fixed by spec, but files that omit or misspell it are
-        // still readable and refusing them would help nobody.
-        List<string> paths = [.. document
-            .Descendants()
-            .Where(e => e.Name.LocalName == "rootfile")
-            .Select(e => (string?)e.Attribute("full-path"))
-            .Where(p => !string.IsNullOrWhiteSpace(p))
-            .Select(p => p!)];
-
-        return new ContainerXml(paths);
-    }
-
-    /// <summary>Reads and parses <c>META-INF/container.xml</c> from a container.</summary>
-    /// <param name="container">The open EPUB container.</param>
-    /// <returns>The parsed container description.</returns>
-    /// <exception cref="BookFormatException">
-    /// The entry is missing or not well-formed. Surfaced as EPUB-F002.
-    /// </exception>
-    public static ContainerXml Read(IContainer container)
-    {
-        Throw.IfNull(container);
-
-        ContainerEntry? entry = container.Entries.FirstOrDefault(
-            e => e.Name.Equals(EntryName, StringComparison.Ordinal));
-
-        // Some producers get the casing wrong. Accept it on read and report it,
-        // rather than declaring the book unopenable over a capital letter.
-        entry ??= container.Entries.FirstOrDefault(
-            e => e.Name.Equals(EntryName, StringComparison.OrdinalIgnoreCase));
-
-        if (entry is null)
-        {
-            throw new BookFormatException($"'{EntryName}' is missing.", EntryName);
-        }
-
-        return Parse(container.ReadAllBytes(entry));
-    }
-
-}

@@ -128,7 +128,7 @@ public static class Log
     /// the file wrong or stops it opening at all.
     /// </param>
     /// <param name="ruleId">
-    /// The stable rule identifier — <c>EPUB-E020</c>, <c>CBZ-W021</c>. The part
+    /// The stable rule identifier — <c>EPUB-E040</c>, <c>CBZ-E020</c>. The part
     /// users paste into bug reports and search for, so it comes first in the line.
     /// </param>
     /// <param name="message">What is wrong, in words. States the problem, not the fix.</param>

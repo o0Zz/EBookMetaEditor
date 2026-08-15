@@ -14,8 +14,7 @@ namespace EBookMeta.Formats;
 /// <remarks>
 /// This file is the <see cref="IBookFormat"/> implementation — reading, writing,
 /// and the corrections a write can prove, such as a <c>PageCount</c> recomputed
-/// from the images actually present. The validation rules live beside it in
-/// <c>CbzFormat.Rules.cs</c>, which is the same class.
+/// from the images actually present.
 /// <para>
 /// One instance serves CBZ and another serves CBT, because the two differ only in
 /// the container they are stored in: the metadata document, the rules and the
@@ -537,7 +536,7 @@ public sealed class ComicInfoDocument
         XDocument document;
         try
         {
-            document = XDocument.Parse(text, LoadOptions.PreserveWhitespace | LoadOptions.SetLineInfo);
+            document = XDocument.Parse(text, LoadOptions.PreserveWhitespace);
         }
         catch (XmlException ex)
         {
@@ -734,15 +733,11 @@ public sealed class ComicInfoDocument
                 continue;
             }
 
-            var line = (IXmlLineInfo)element;
-
             metadata.UnmappedFields.Add(new UnmappedField
             {
                 Source = "ComicInfo",
                 Key = name,
                 Text = element.HasElements ? null : element.Value.Trim(),
-                Line = line.HasLineInfo() ? line.LineNumber : 0,
-                Column = line.HasLineInfo() ? line.LinePosition : 0,
             });
         }
     }

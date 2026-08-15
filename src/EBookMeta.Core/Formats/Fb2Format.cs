@@ -16,10 +16,6 @@ namespace EBookMeta.Formats;
 /// <c>RawContainer</c> and <see cref="FormatId.Fb2Zip"/> over a
 /// <c>ZipContainer</c>. Which one a file gets is <c>BookContainers</c>'s decision;
 /// nothing here names a container.
-/// <para>
-/// The rules live beside this in <c>Fb2Format.Rules.cs</c>, which is the same
-/// class.
-/// </para>
 /// </remarks>
 public sealed partial class Fb2Format : IBookFormat
 {
@@ -415,7 +411,7 @@ public sealed class Fb2Document
 
         using var reader = XmlReader.Create(new StringReader(text), settings);
         var lineInfo = (IXmlLineInfo)reader;
-        int[] lineStarts = LineStarts(text);
+        int[] lineStarts = XmlLineIndex.Starts(text);
 
         string? rootName = null;
         var declarations = new List<(string Prefix, string Uri)>();
@@ -454,7 +450,7 @@ public sealed class Fb2Document
 
                 // LinePosition points at the first character of the name, so the
                 // '<' is one before it.
-                int start = Offset(lineStarts, lineInfo) - 1;
+                int start = XmlLineIndex.Offset(lineStarts, lineInfo) - 1;
                 string name = reader.Name;
                 bool empty = reader.IsEmptyElement;
 
@@ -599,37 +595,6 @@ public sealed class Fb2Document
 
     private static bool IsNameEnd(string text, int index) =>
         index >= text.Length || text[index] is ' ' or '\t' or '\r' or '\n' or '>' or '/';
-
-    private static int[] LineStarts(string text)
-    {
-        var starts = new List<int> { 0 };
-
-        for (int i = 0; i < text.Length; i++)
-        {
-            if (text[i] == '\n')
-            {
-                starts.Add(i + 1);
-            }
-            else if (text[i] == '\r')
-            {
-                // CRLF counts as one break; a lone CR is one too.
-                if (i + 1 < text.Length && text[i + 1] == '\n')
-                {
-                    i++;
-                }
-
-                starts.Add(i + 1);
-            }
-        }
-
-        return [.. starts];
-    }
-
-    private static int Offset(int[] lineStarts, IXmlLineInfo info)
-    {
-        int line = Math.Min(Math.Max(info.LineNumber, 1), lineStarts.Length);
-        return lineStarts[line - 1] + info.LinePosition - 1;
-    }
 
     /// <summary>Serialises the document back to bytes.</summary>
     /// <returns>The complete FictionBook file.</returns>
