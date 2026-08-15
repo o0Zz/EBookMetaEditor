@@ -287,6 +287,13 @@ no batch write path. A row is a `Book`; `SaveOne` is a call to `Book.Save`.
   the unread rows on top of the answer; equal values keep file-name order. The grid
   re-sorts when a read finishes, never on an edit — a row that jumped out from
   under the cursor as it was typed into would be worse than one in the wrong place.
+- **Numbering is the one bulk edit a paste cannot do**, because it is the one field
+  every row wants a *different* value in. `Ctrl+I` counts down the series index of
+  the selected rows in the order the grid is showing them, which is what sorting is
+  for: sort by file name, select, number 1…n. A row whose format cannot store an
+  index, and a row with no series name — the model cannot hold an index on its own
+  — are left alone and counted in the status line; only a row that took a number
+  consumes one, so the sequence has no gaps where a skipped row sat.
 - **Capabilities gate per cell, not per window**, so `Sort title` is dead on a
   comic and live on a book in the same column. `BatchEntry.Apply` refuses a field
   the format cannot store even if a caller asks, and every refusal is counted and

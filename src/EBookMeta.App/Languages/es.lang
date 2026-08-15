@@ -24,6 +24,7 @@ menu.edit = &Edición
 menu.edit.copy = &Copiar
 menu.edit.paste = &Pegar
 menu.edit.clear = &Vaciar
+menu.edit.number = &Numerar la serie…
 menu.help = ?
 menu.help.log = &Registro…
 menu.help.about = &Acerca de EBookMetaEditor…
@@ -52,6 +53,12 @@ dialog.open.title = Abrir un libro o un cómic
 dialog.addFiles.title = Añadir libros o cómics
 dialog.folder.batch = Editar los metadatos de todos los libros y cómics de una carpeta
 dialog.folder.add = Añadir todos los libros y cómics de una carpeta
+
+# Numera el índice de la serie a lo largo de una selección: 1, 2, 3…
+dialog.number.title = Numerar la serie
+dialog.number.start = Empezar en
+dialog.number.step = Incrementar en
+dialog.number.hint = Las filas seleccionadas se numeran de arriba abajo, en el orden en que la tabla las muestra. Una fila sin nombre de serie se deja como está.
 
 filter.supported = Archivos compatibles (*.epub;*.cbz;*.cbt;*.fb2;*.fb2.zip;*.mobi;*.prc;*.azw;*.azw3)
 filter.epub = EPUB (*.epub)
@@ -135,6 +142,12 @@ batch.cleared.one = 1 celda vaciada.
 batch.cleared.many = {0} celdas vaciadas.
 batch.clearedSkipped.one = 1 celda vaciada; {1} no puede guardarlo.
 batch.clearedSkipped.many = {0} celdas vaciadas; {1} no pueden guardarlo.
+
+batch.number.selectRows = Seleccione primero las filas que quiere numerar.
+batch.numbered.one = 1 fila numerada.
+batch.numbered.many = {0} filas numeradas.
+batch.numberedSkipped.one = 1 fila numerada; {1} no tiene serie.
+batch.numberedSkipped.many = {0} filas numeradas; {1} no tienen serie.
 
 batch.rowDirty = Guarde esta fila antes de abrirla por separado: contiene cambios sin guardar.
 

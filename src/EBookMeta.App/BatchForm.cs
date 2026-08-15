@@ -1,4 +1,5 @@
 ﻿using System.Collections;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -211,6 +212,8 @@ internal sealed class BatchForm : Form, IPathReceiver
         edit.DropDownItems.Add(WithShortcut(Item("menu.edit.copy", CopySelection), "Ctrl+C"));
         edit.DropDownItems.Add(WithShortcut(Item("menu.edit.paste", PasteIntoSelection), "Ctrl+V"));
         edit.DropDownItems.Add(WithShortcut(Item("menu.edit.clear", ClearSelection), "Del"));
+        edit.DropDownItems.Add(new ToolStripSeparator());
+        edit.DropDownItems.Add(Item("menu.edit.number", NumberSelection, Keys.Control | Keys.I));
 
         ToolStripMenuItem help = Item("menu.help");
         help.DropDownItems.Add(Item("menu.help.log", ShowLog, Keys.Control | Keys.L));
@@ -244,6 +247,8 @@ internal sealed class BatchForm : Form, IPathReceiver
         menu.Items.Add(WithShortcut(Item("menu.edit.copy", CopySelection), "Ctrl+C"));
         menu.Items.Add(WithShortcut(Item("menu.edit.paste", PasteIntoSelection), "Ctrl+V"));
         menu.Items.Add(WithShortcut(Item("menu.edit.clear", ClearSelection), "Del"));
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add(WithShortcut(Item("menu.edit.number", NumberSelection), "Ctrl+I"));
 
         return menu;
     }
@@ -811,6 +816,107 @@ internal sealed class BatchForm : Form, IPathReceiver
     }
 
     /// <summary>
+    /// Numbers the selected rows' series index, counting up from a first value.
+    /// </summary>
+    /// <remarks>
+    /// The one field a whole selection wants a *different* value in, which is why
+    /// paste cannot do it: numbering a shelf of twenty issues by hand is twenty
+    /// separate edits of one character each.
+    /// </remarks>
+    private void NumberSelection()
+    {
+        if (_busy)
+        {
+            return;
+        }
+
+        _grid.EndEdit();
+
+        List<DataGridViewRow> rows = SelectedRows();
+
+        if (rows.Count == 0)
+        {
+            SetStatus(Strings.Get("batch.number.selectRows"));
+            return;
+        }
+
+        using var dialog = new NumberDialog();
+
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        decimal next = dialog.Start;
+        int numbered = 0;
+        int skipped = 0;
+        var touched = new List<DataGridViewRow>();
+
+        foreach (DataGridViewRow row in rows)
+        {
+            var entry = (BatchEntry)row.Tag;
+
+            // An index belongs to a series: the model cannot hold one on its own,
+            // so a row with no series name is left alone rather than quietly
+            // swallowing the number. Set the series across the selection first —
+            // that is what paste is for — and then number it.
+            if (entry.Capabilities?.CanWriteAll(MetadataField.SeriesIndex) != true ||
+                entry.Read(MetadataField.Series).Length == 0)
+            {
+                skipped++;
+                continue;
+            }
+
+            // Invariant culture, as the model stores it: a French machine would
+            // otherwise write 2,5 into a file no reader parses.
+            entry.Apply(MetadataField.SeriesIndex, next.ToString(CultureInfo.InvariantCulture));
+
+            // Only a row that took a number consumes one, so the sequence the user
+            // asked for has no gaps where a comic without a series sat.
+            next += dialog.Step;
+            numbered++;
+            touched.Add(row);
+        }
+
+        foreach (DataGridViewRow row in touched)
+        {
+            RefreshRow(row);
+        }
+
+        SetStatus(skipped == 0
+            ? Strings.Plural("batch.numbered", numbered, numbered)
+            : Strings.Plural("batch.numberedSkipped", numbered, numbered, skipped));
+
+        UpdateStatus(keepMessage: true);
+    }
+
+    /// <summary>
+    /// The rows holding a selected cell, in the order the grid is showing them.
+    /// </summary>
+    /// <remarks>
+    /// Display order, not the order the files arrived in: sorting by file name and
+    /// then numbering is the whole point, and a row's index is its position in the
+    /// grid once <see cref="ApplySort"/> has reordered them.
+    /// </remarks>
+    private List<DataGridViewRow> SelectedRows()
+    {
+        List<DataGridViewRow> rows = [.. _grid.SelectedCells
+            .Cast<DataGridViewCell>()
+            .Select(cell => _grid.Rows[cell.RowIndex])
+            .Distinct()
+            .Where(row => row.Tag is BatchEntry)
+            .OrderBy(row => row.Index)];
+
+        if (rows.Count == 0 && _grid.CurrentCell is { } current &&
+            _grid.Rows[current.RowIndex].Tag is BatchEntry)
+        {
+            rows.Add(_grid.Rows[current.RowIndex]);
+        }
+
+        return rows;
+    }
+
+    /// <summary>
     /// Writes a value into every target cell whose format can store it, refreshes
     /// the rows that changed, and reports how many were written and how many were
     /// refused — a refusal is counted rather than hidden, because a user who
@@ -1262,4 +1368,115 @@ internal sealed class BatchForm : Form, IPathReceiver
         base.Dispose(disposing);
     }
 
+    /// <summary>
+    /// Asks what the first row's number is and how far apart the rest are.
+    /// </summary>
+    /// <remarks>
+    /// Nested rather than a window of its own: it is the batch grid's question, it
+    /// has no other caller, and a form that exists to return two numbers does not
+    /// earn a file.
+    /// </remarks>
+    private sealed class NumberDialog : Form
+    {
+        private readonly NumericUpDown _start = Spin(1);
+        private readonly NumericUpDown _step = Spin(1, minimum: 1);
+
+        internal NumberDialog()
+        {
+            Dialogs.Chrome(this, "dialog.number.title", new Size(340, 190));
+
+            Controls.Add(BuildLayout());
+            Controls.Add(BuildButtons());
+        }
+
+        /// <summary>The number the first row takes.</summary>
+        internal decimal Start => _start.Value;
+
+        /// <summary>How much each row adds to the one before it.</summary>
+        internal decimal Step => _step.Value;
+
+        /// <summary>
+        /// A whole-number spinner. Series indexes like 2.5 exist and the model
+        /// keeps them, but nothing counts a shelf in halves.
+        /// </summary>
+        /// <param name="value">What it starts at.</param>
+        /// <param name="minimum">
+        /// The floor. Zero for the first number, because comics number a prologue
+        /// issue 0; one for the step, because counting in noughts is not a request.
+        /// </param>
+        private static NumericUpDown Spin(decimal value, decimal minimum = 0) => new()
+        {
+            Minimum = minimum,
+            Maximum = 9999,
+            Value = value,
+            Width = 70,
+            TextAlign = HorizontalAlignment.Right,
+        };
+
+        private TableLayoutPanel BuildLayout()
+        {
+            var layout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                Padding = new Padding(14, 12, 14, 6),
+            };
+
+            // The label column takes whatever its translation needs and the
+            // spinners sit against it, so a German caption pushes rather than clips.
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+
+            AddRow(layout, "dialog.number.start", _start);
+            AddRow(layout, "dialog.number.step", _step);
+
+            var hint = new Label
+            {
+                Text = Strings.Get("dialog.number.hint"),
+                AutoSize = true,
+                MaximumSize = new Size(296, 0),
+                Margin = new Padding(0, 10, 0, 0),
+                ForeColor = SystemColors.GrayText,
+            };
+
+            layout.RowCount++;
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.Controls.Add(hint, 0, layout.RowCount - 1);
+            layout.SetColumnSpan(hint, 2);
+
+            return layout;
+        }
+
+        private static void AddRow(TableLayoutPanel layout, string labelKey, Control control)
+        {
+            layout.RowCount++;
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+            layout.Controls.Add(
+                new Label
+                {
+                    Text = Strings.Get(labelKey),
+                    AutoSize = true,
+                    Margin = new Padding(0, 6, 10, 3),
+                },
+                0,
+                layout.RowCount - 1);
+
+            layout.Controls.Add(control, 1, layout.RowCount - 1);
+        }
+
+        private FlowLayoutPanel BuildButtons()
+        {
+            Button ok = Dialogs.Action("button.ok", DialogResult.OK);
+            Button cancel = Dialogs.Action("button.cancel", DialogResult.Cancel);
+
+            // Rightmost first: the strip flows right to left.
+            FlowLayoutPanel buttons = Dialogs.ButtonStrip(cancel, ok);
+
+            AcceptButton = ok;
+            CancelButton = cancel;
+
+            return buttons;
+        }
+    }
 }

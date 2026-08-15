@@ -31,6 +31,7 @@ menu.edit = &Edit
 menu.edit.copy = &Copy
 menu.edit.paste = &Paste
 menu.edit.clear = C&lear
+menu.edit.number = &Number series index…
 menu.help = ?
 menu.help.log = &Log…
 menu.help.about = &About EBookMetaEditor…
@@ -61,6 +62,13 @@ dialog.open.title = Open a book or comic
 dialog.addFiles.title = Add books or comics
 dialog.folder.batch = Edit the metadata of every book and comic in a folder
 dialog.folder.add = Add every book and comic in a folder
+
+# Numbering the series index down a selection: 1, 2, 3… the one field a whole
+# selection wants a different value in.
+dialog.number.title = Number the series index
+dialog.number.start = Start at
+dialog.number.step = Increment by
+dialog.number.hint = The selected rows are numbered top to bottom, in the order the grid is showing them. A row with no series name is left alone.
 
 # File-dialog filters. Translate the description; leave the patterns in brackets
 # exactly as they are.
@@ -151,6 +159,12 @@ batch.cleared.one = 1 cell cleared.
 batch.cleared.many = {0} cells cleared.
 batch.clearedSkipped.one = 1 cell cleared; {1} could not store it.
 batch.clearedSkipped.many = {0} cells cleared; {1} could not store it.
+
+batch.number.selectRows = Select the rows to number first.
+batch.numbered.one = 1 row numbered.
+batch.numbered.many = {0} rows numbered.
+batch.numberedSkipped.one = 1 row numbered; {1} had no series to number.
+batch.numberedSkipped.many = {0} rows numbered; {1} had no series to number.
 
 batch.rowDirty = Save this row before opening it on its own — it has unsaved edits here.
 

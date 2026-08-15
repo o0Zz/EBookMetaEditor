@@ -24,6 +24,7 @@ menu.edit = &Modifica
 menu.edit.copy = &Copia
 menu.edit.paste = &Incolla
 menu.edit.clear = &Svuota
+menu.edit.number = &Numera la serie…
 menu.help = ?
 menu.help.log = &Registro…
 menu.help.about = &Informazioni su EBookMetaEditor…
@@ -52,6 +53,12 @@ dialog.open.title = Apri un libro o un fumetto
 dialog.addFiles.title = Aggiungi libri o fumetti
 dialog.folder.batch = Modifica i metadati di tutti i libri e fumetti di una cartella
 dialog.folder.add = Aggiungi tutti i libri e fumetti di una cartella
+
+# Numera il numero nella serie lungo una selezione: 1, 2, 3…
+dialog.number.title = Numera la serie
+dialog.number.start = Inizia da
+dialog.number.step = Incrementa di
+dialog.number.hint = Le righe selezionate vengono numerate dall'alto in basso, nell'ordine in cui la tabella le mostra. Una riga senza nome della serie viene lasciata invariata.
 
 filter.supported = File supportati (*.epub;*.cbz;*.cbt;*.fb2;*.fb2.zip;*.mobi;*.prc;*.azw;*.azw3)
 filter.epub = EPUB (*.epub)
@@ -135,6 +142,12 @@ batch.cleared.one = 1 cella svuotata.
 batch.cleared.many = {0} celle svuotate.
 batch.clearedSkipped.one = 1 cella svuotata; {1} non può memorizzarlo.
 batch.clearedSkipped.many = {0} celle svuotate; {1} non possono memorizzarlo.
+
+batch.number.selectRows = Seleziona prima le righe da numerare.
+batch.numbered.one = 1 riga numerata.
+batch.numbered.many = {0} righe numerate.
+batch.numberedSkipped.one = 1 riga numerata; {1} non ha una serie.
+batch.numberedSkipped.many = {0} righe numerate; {1} non hanno una serie.
 
 batch.rowDirty = Salva questa riga prima di aprirla da sola: contiene modifiche non salvate.
 

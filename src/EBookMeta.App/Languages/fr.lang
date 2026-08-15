@@ -24,6 +24,7 @@ menu.edit = &Édition
 menu.edit.copy = &Copier
 menu.edit.paste = Co&ller
 menu.edit.clear = &Effacer
+menu.edit.number = &Numéroter la série…
 menu.help = ?
 menu.help.log = &Journal…
 menu.help.about = À &propos d'EBookMetaEditor…
@@ -52,6 +53,12 @@ dialog.open.title = Ouvrir un livre ou une bande dessinée
 dialog.addFiles.title = Ajouter des livres ou des bandes dessinées
 dialog.folder.batch = Modifier les métadonnées de tous les livres et bandes dessinées d'un dossier
 dialog.folder.add = Ajouter tous les livres et bandes dessinées d'un dossier
+
+# Numérote le n° dans la série sur toute une sélection : 1, 2, 3…
+dialog.number.title = Numéroter la série
+dialog.number.start = Commencer à
+dialog.number.step = Incrémenter de
+dialog.number.hint = Les lignes sélectionnées sont numérotées de haut en bas, dans l'ordre où le tableau les affiche. Une ligne sans nom de série est laissée telle quelle.
 
 filter.supported = Fichiers pris en charge (*.epub;*.cbz;*.cbt;*.fb2;*.fb2.zip;*.mobi;*.prc;*.azw;*.azw3)
 filter.epub = EPUB (*.epub)
@@ -135,6 +142,12 @@ batch.cleared.one = 1 cellule effacée.
 batch.cleared.many = {0} cellules effacées.
 batch.clearedSkipped.one = 1 cellule effacée ; {1} ne peut pas l'enregistrer.
 batch.clearedSkipped.many = {0} cellules effacées ; {1} ne peuvent pas l'enregistrer.
+
+batch.number.selectRows = Sélectionnez d'abord les lignes à numéroter.
+batch.numbered.one = 1 ligne numérotée.
+batch.numbered.many = {0} lignes numérotées.
+batch.numberedSkipped.one = 1 ligne numérotée ; {1} n'a pas de série.
+batch.numberedSkipped.many = {0} lignes numérotées ; {1} n'ont pas de série.
 
 batch.rowDirty = Enregistrez cette ligne avant de l'ouvrir séparément : elle contient des modifications non enregistrées.
 
