@@ -23,6 +23,7 @@ menu.file.close = Fe&rmer
 menu.edit = &Édition
 menu.edit.copy = &Copier
 menu.edit.paste = Co&ller
+menu.edit.clear = &Effacer
 menu.help = ?
 menu.help.log = &Journal…
 menu.help.about = À &propos d'EBookMetaEditor…
@@ -130,6 +131,10 @@ batch.pasted.one = Collé dans 1 cellule.
 batch.pasted.many = Collé dans {0} cellules.
 batch.pastedSkipped.one = Collé dans 1 cellule ; {1} ne peut pas l'enregistrer.
 batch.pastedSkipped.many = Collé dans {0} cellules ; {1} ne peuvent pas l'enregistrer.
+batch.cleared.one = 1 cellule effacée.
+batch.cleared.many = {0} cellules effacées.
+batch.clearedSkipped.one = 1 cellule effacée ; {1} ne peut pas l'enregistrer.
+batch.clearedSkipped.many = {0} cellules effacées ; {1} ne peuvent pas l'enregistrer.
 
 batch.rowDirty = Enregistrez cette ligne avant de l'ouvrir séparément : elle contient des modifications non enregistrées.
 

@@ -23,6 +23,7 @@ menu.file.close = Chi&udi
 menu.edit = &Modifica
 menu.edit.copy = &Copia
 menu.edit.paste = &Incolla
+menu.edit.clear = &Svuota
 menu.help = ?
 menu.help.log = &Registro…
 menu.help.about = &Informazioni su EBookMetaEditor…
@@ -130,6 +131,10 @@ batch.pasted.one = Incollato in 1 cella.
 batch.pasted.many = Incollato in {0} celle.
 batch.pastedSkipped.one = Incollato in 1 cella; {1} non può memorizzarlo.
 batch.pastedSkipped.many = Incollato in {0} celle; {1} non possono memorizzarlo.
+batch.cleared.one = 1 cella svuotata.
+batch.cleared.many = {0} celle svuotate.
+batch.clearedSkipped.one = 1 cella svuotata; {1} non può memorizzarlo.
+batch.clearedSkipped.many = {0} celle svuotate; {1} non possono memorizzarlo.
 
 batch.rowDirty = Salva questa riga prima di aprirla da sola: contiene modifiche non salvate.
 

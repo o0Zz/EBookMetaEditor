@@ -30,6 +30,7 @@ menu.file.close = &Close
 menu.edit = &Edit
 menu.edit.copy = &Copy
 menu.edit.paste = &Paste
+menu.edit.clear = C&lear
 menu.help = ?
 menu.help.log = &Log…
 menu.help.about = &About EBookMetaEditor…
@@ -146,6 +147,10 @@ batch.pasted.one = Pasted into 1 cell.
 batch.pasted.many = Pasted into {0} cells.
 batch.pastedSkipped.one = Pasted into 1 cell; {1} could not store it.
 batch.pastedSkipped.many = Pasted into {0} cells; {1} could not store it.
+batch.cleared.one = 1 cell cleared.
+batch.cleared.many = {0} cells cleared.
+batch.clearedSkipped.one = 1 cell cleared; {1} could not store it.
+batch.clearedSkipped.many = {0} cells cleared; {1} could not store it.
 
 batch.rowDirty = Save this row before opening it on its own — it has unsaved edits here.
 

@@ -23,6 +23,7 @@ menu.file.close = S&chließen
 menu.edit = &Bearbeiten
 menu.edit.copy = &Kopieren
 menu.edit.paste = &Einfügen
+menu.edit.clear = &Leeren
 menu.help = ?
 menu.help.log = &Protokoll…
 menu.help.about = &Über EBookMetaEditor…
@@ -130,6 +131,10 @@ batch.pasted.one = In 1 Zelle eingefügt.
 batch.pasted.many = In {0} Zellen eingefügt.
 batch.pastedSkipped.one = In 1 Zelle eingefügt; {1} kann das nicht speichern.
 batch.pastedSkipped.many = In {0} Zellen eingefügt; {1} können das nicht speichern.
+batch.cleared.one = 1 Zelle geleert.
+batch.cleared.many = {0} Zellen geleert.
+batch.clearedSkipped.one = 1 Zelle geleert; {1} kann das nicht speichern.
+batch.clearedSkipped.many = {0} Zellen geleert; {1} können das nicht speichern.
 
 batch.rowDirty = Speichern Sie diese Zeile, bevor Sie sie einzeln öffnen — sie enthält ungespeicherte Änderungen.
 

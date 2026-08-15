@@ -23,6 +23,7 @@ menu.file.close = C&errar
 menu.edit = &Edición
 menu.edit.copy = &Copiar
 menu.edit.paste = &Pegar
+menu.edit.clear = &Vaciar
 menu.help = ?
 menu.help.log = &Registro…
 menu.help.about = &Acerca de EBookMetaEditor…
@@ -130,6 +131,10 @@ batch.pasted.one = Pegado en 1 celda.
 batch.pasted.many = Pegado en {0} celdas.
 batch.pastedSkipped.one = Pegado en 1 celda; {1} no puede guardarlo.
 batch.pastedSkipped.many = Pegado en {0} celdas; {1} no pueden guardarlo.
+batch.cleared.one = 1 celda vaciada.
+batch.cleared.many = {0} celdas vaciadas.
+batch.clearedSkipped.one = 1 celda vaciada; {1} no puede guardarlo.
+batch.clearedSkipped.many = {0} celdas vaciadas; {1} no pueden guardarlo.
 
 batch.rowDirty = Guarde esta fila antes de abrirla por separado: contiene cambios sin guardar.
 

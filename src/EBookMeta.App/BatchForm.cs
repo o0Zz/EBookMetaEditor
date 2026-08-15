@@ -204,6 +204,7 @@ internal sealed class BatchForm : Form, IPathReceiver
         ToolStripMenuItem edit = Item("menu.edit");
         edit.DropDownItems.Add(WithShortcut(Item("menu.edit.copy", CopySelection), "Ctrl+C"));
         edit.DropDownItems.Add(WithShortcut(Item("menu.edit.paste", PasteIntoSelection), "Ctrl+V"));
+        edit.DropDownItems.Add(WithShortcut(Item("menu.edit.clear", ClearSelection), "Del"));
 
         ToolStripMenuItem help = Item("menu.help");
         help.DropDownItems.Add(Item("menu.help.log", ShowLog, Keys.Control | Keys.L));
@@ -236,6 +237,7 @@ internal sealed class BatchForm : Form, IPathReceiver
 
         menu.Items.Add(WithShortcut(Item("menu.edit.copy", CopySelection), "Ctrl+C"));
         menu.Items.Add(WithShortcut(Item("menu.edit.paste", PasteIntoSelection), "Ctrl+V"));
+        menu.Items.Add(WithShortcut(Item("menu.edit.clear", ClearSelection), "Del"));
 
         return menu;
     }
@@ -517,6 +519,13 @@ internal sealed class BatchForm : Form, IPathReceiver
                     PasteIntoSelection();
                     return true;
 
+                // Backspace as well as Delete: the grid does not start an edit on
+                // it, so it would otherwise do nothing at all in a spreadsheet.
+                case Keys.Delete:
+                case Keys.Back:
+                    ClearSelection();
+                    return true;
+
                 // Only over the tick column: everywhere else a space bar starts an
                 // edit with a space in it, which is what EditOnKeystrokeOrF2 is for.
                 case Keys.Space when _grid.CurrentCell?.ColumnIndex == SaveColumn:
@@ -659,7 +668,51 @@ internal sealed class BatchForm : Form, IPathReceiver
             return;
         }
 
-        int pasted = 0;
+        (int pasted, int skipped) = ApplyToCells(targets, cell => ValueFor(block, cell, targets[0]));
+
+        SetStatus(skipped == 0
+            ? Strings.Plural("batch.pasted", pasted, pasted)
+            : Strings.Plural("batch.pastedSkipped", pasted, pasted, skipped));
+
+        UpdateStatus(keepMessage: true);
+    }
+
+    /// <summary>Empties the selected cells.</summary>
+    private void ClearSelection()
+    {
+        if (_busy)
+        {
+            return;
+        }
+
+        List<DataGridViewCell> targets = EditableSelection();
+
+        if (targets.Count == 0)
+        {
+            SetStatus(Strings.Get("batch.paste.selectCell"));
+            return;
+        }
+
+        (int cleared, int skipped) = ApplyToCells(targets, _ => string.Empty);
+
+        SetStatus(skipped == 0
+            ? Strings.Plural("batch.cleared", cleared, cleared)
+            : Strings.Plural("batch.clearedSkipped", cleared, cleared, skipped));
+
+        UpdateStatus(keepMessage: true);
+    }
+
+    /// <summary>
+    /// Writes a value into every target cell whose format can store it, refreshes
+    /// the rows that changed, and reports how many were written and how many were
+    /// refused — a refusal is counted rather than hidden, because a user who
+    /// selected thirty cells deserves to know three of them kept their value.
+    /// </summary>
+    private (int Written, int Skipped) ApplyToCells(
+        List<DataGridViewCell> targets,
+        Func<DataGridViewCell, string> value)
+    {
+        int written = 0;
         int skipped = 0;
         var touched = new HashSet<DataGridViewRow>();
 
@@ -680,9 +733,9 @@ internal sealed class BatchForm : Form, IPathReceiver
                 continue;
             }
 
-            entry.Apply(field, ValueFor(block, cell, targets[0]));
+            entry.Apply(field, value(cell));
             touched.Add(row);
-            pasted++;
+            written++;
         }
 
         foreach (DataGridViewRow row in touched)
@@ -690,11 +743,7 @@ internal sealed class BatchForm : Form, IPathReceiver
             RefreshRow(row);
         }
 
-        SetStatus(skipped == 0
-            ? Strings.Plural("batch.pasted", pasted, pasted)
-            : Strings.Plural("batch.pastedSkipped", pasted, pasted, skipped));
-
-        UpdateStatus(keepMessage: true);
+        return (written, skipped);
     }
 
     /// <summary>
