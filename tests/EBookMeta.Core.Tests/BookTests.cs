@@ -12,21 +12,6 @@ namespace EBookMeta.Tests;
 /// </summary>
 public sealed class BookTests
 {
-    private static List<Finding> Findings(string path)
-    {
-        var findings = new List<Finding>();
-
-        try
-        {
-            Book.Load(path, ReadOptions.WithoutCover, findings);
-        }
-        catch (BookFormatException)
-        {
-        }
-
-        return findings;
-    }
-
     [Fact]
     public void Loading_reports_the_format_the_metadata_and_the_size()
     {
@@ -58,12 +43,7 @@ public sealed class BookTests
             Assert.Throws<UnsupportedFormatException>(() => Book.Load(path));
 
         Assert.Equal(FormatId.Cbr, ex.Detected.Format);
-
-        // GEN-W002 is reported even though the open failed: the mismatch is the
-        // reason it failed, and it is the useful half of the answer.
-        Finding finding = Assert.Single(Findings(path), f => f.RuleId == "GEN-W002");
-        Assert.Equal(Severity.Warning, finding.Severity);
-        Assert.Contains("extension", finding.Message, StringComparison.Ordinal);
+        Assert.Equal(FormatId.Cbz, ex.Detected.ClaimedByExtension);
     }
 
     [Fact]
@@ -79,21 +59,7 @@ public sealed class BookTests
 
         Assert.Equal(FormatId.Epub, book.Detected.Format);
         Assert.Equal("The Ocean at the End of the Lane", book.Metadata.Title);
-        Assert.Contains(book.LoadFindings, f => f.RuleId == "GEN-W002");
-    }
-
-    [Fact]
-    public void Gen_e003_an_entry_name_that_escapes_the_archive()
-    {
-        using var temp = new TempDir();
-        string path = new CbzBuilder()
-            .WithEntry("../evil.txt", "nothing good")
-            .WriteTo(temp.File("broken-gen-e003-traversal.cbz"));
-
-        Finding finding = Assert.Single(Findings(path), f => f.RuleId == "GEN-E003");
-
-        Assert.Equal(Severity.Error, finding.Severity);
-        Assert.Equal("../evil.txt", finding.Location);
+        Assert.False(book.Detected.ExtensionAgrees);
     }
 
     /// <summary>
@@ -138,27 +104,23 @@ public sealed class BookTests
         Assert.NotEqual(before, File.ReadAllBytes(path));
     }
 
+    /// <summary>
+    /// A correction has to be a fix rather than a recurring complaint: saving twice
+    /// must leave the second save with nothing to do.
+    /// </summary>
     [Fact]
-    public void Save_findings_are_separate_from_load_findings()
+    public void A_correction_made_on_save_stays_made()
     {
         using var temp = new TempDir();
         string path = new CbzBuilder()
             .WithComicInfo(CbzBuilder.MinimalComicInfo)
             .WriteTo(temp.File("comic.cbz"));
 
-        Book book = Book.Load(path);
+        Book.Load(path).Save(keepBackup: false);
+        byte[] afterFirst = File.ReadAllBytes(path);
 
-        Assert.Empty(book.SaveFindings);
+        Book.Load(path).Save(keepBackup: false);
 
-        book.Save(keepBackup: false);
-
-        Assert.Contains(book.SaveFindings, f => f.RuleId == "CBZ-E020");
-
-        // A second save has nothing left to correct, because the first one fixed
-        // it. That is what makes the correction a fix rather than a recurring
-        // complaint.
-        book.Save(keepBackup: false);
-
-        Assert.DoesNotContain(book.SaveFindings, f => f.RuleId == "CBZ-E020");
+        Assert.Equal(afterFirst, File.ReadAllBytes(path));
     }
 }

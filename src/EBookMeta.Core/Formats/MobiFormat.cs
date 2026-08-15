@@ -111,28 +111,25 @@ public sealed partial class MobiFormat : IBookFormat
     /// (MOBI-F002).
     /// </exception>
     public BookMetadata Read(
-        IContainer container, ReadOptions? options = null, ICollection<Finding>? findings = null)
+        IContainer container, ReadOptions? options = null)
     {
         Throw.IfNull(container);
 
         options ??= ReadOptions.Default;
 
-        List<MobiDocument> headers = ReadHeaders(container, findings);
+        List<MobiDocument> headers = ReadHeaders(container);
         MobiDocument preferred = headers[headers.Count - 1];
 
         BookMetadata metadata = preferred.ReadMetadata();
 
         if (options.IncludeCover)
         {
-            ReadCover(container, preferred, metadata, findings);
+            ReadCover(container, preferred, metadata);
         }
 
-        if (findings is not null)
-        {
-            CheckRequiredMetadata(preferred, metadata, findings);
-            CheckHeaders(container, headers, findings);
-            CheckCover(container, preferred, findings);
-        }
+        CheckRequiredMetadata(preferred, metadata);
+        CheckHeaders(container, headers);
+        CheckCover(container, preferred);
 
         Log.Info(
             $"Read MOBI metadata from {headers.Count} header record"
@@ -149,14 +146,13 @@ public sealed partial class MobiFormat : IBookFormat
     public void Write(
         IContainer container,
         BookMetadata metadata,
-        string targetPath,
-        ICollection<Finding>? findings = null)
+        string targetPath)
     {
         Throw.IfNull(container);
         Throw.IfNull(metadata);
         Throw.IfNullOrEmpty(targetPath);
 
-        List<MobiDocument> headers = ReadHeaders(container, findings);
+        List<MobiDocument> headers = ReadHeaders(container);
 
         // What Read handed the caller, so the difference between it and what came
         // back is exactly what the user edited.
@@ -180,15 +176,12 @@ public sealed partial class MobiFormat : IBookFormat
 
         if (headers.Count > 1 && modified)
         {
-            findings?.Add(new Finding
-            {
-                RuleId = "MOBI-W030",
-                Severity = Severity.Warning,
-                Message = "This is a joint MOBI and KF8 file; the fields you changed were "
+            Log.Rule(
+                LogLevel.Warning,
+                "MOBI-W030",
+                "This is a joint MOBI and KF8 file; the fields you changed were "
                     + $"written to both of its {headers.Count} headers so that every reader "
-                    + "shows the same thing.",
-                HasAutofix = true,
-            });
+                    + "shows the same thing.");
         }
 
         var entries = new List<PendingEntry>(container.Entries.Count);
@@ -274,23 +267,20 @@ public sealed partial class MobiFormat : IBookFormat
     /// </summary>
     /// <returns>The headers, in record order, so the last is the preferred one.</returns>
     private static List<MobiDocument> ReadHeaders(
-        IContainer container, ICollection<Finding>? findings)
+        IContainer container)
     {
-        MobiDocument first = ParseHeader(container, 0, findings);
+        MobiDocument first = ParseHeader(container, 0);
 
         if (first.HasDrm)
         {
-            var finding = new Finding
-            {
-                RuleId = "MOBI-F002",
-                Severity = Severity.Fatal,
-                Message = "This book's text is encrypted with DRM. Rewriting its metadata "
-                    + "would produce a file no reader would open, so nothing was changed.",
-                Location = container.Entries[0].Name,
-            };
+            // Reported and then thrown, in that order, so the rule id reaches the
+            // log before the open fails and the user has something to search for.
+            const string drm =
+                "This book's text is encrypted with DRM. Rewriting its metadata "
+                + "would produce a file no reader would open, so nothing was changed.";
 
-            findings?.Add(finding);
-            throw new BookFormatException(finding.Message, path: null);
+            Log.Rule(LogLevel.Error, "MOBI-F002", drm, container.Entries[0].Name);
+            throw new BookFormatException(drm, path: null);
         }
 
         var headers = new List<MobiDocument> { first };
@@ -303,7 +293,7 @@ public sealed partial class MobiFormat : IBookFormat
 
         try
         {
-            MobiDocument kf8 = ParseHeader(container, boundary, findings: null);
+            MobiDocument kf8 = ParseHeader(container, boundary);
 
             if (!kf8.HasDrm)
             {
@@ -314,21 +304,18 @@ public sealed partial class MobiFormat : IBookFormat
         {
             // A boundary pointing at something that is not a header is worth
             // saying, but the MOBI 6 half is still perfectly editable.
-            findings?.Add(new Finding
-            {
-                RuleId = "MOBI-W031",
-                Severity = Severity.Warning,
-                Message = $"EXTH record 121 says the KF8 part starts at record {boundary}, "
-                    + "but no MOBI header is there. Only the first header will be updated.",
-                Detail = boundary.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            });
+            Log.Rule(
+                LogLevel.Warning,
+                "MOBI-W031",
+                $"EXTH record 121 says the KF8 part starts at record {boundary}, "
+                    + "but no MOBI header is there. Only the first header will be updated.");
         }
 
         return headers;
     }
 
     private static MobiDocument ParseHeader(
-        IContainer container, int index, ICollection<Finding>? findings)
+        IContainer container, int index)
     {
         ContainerEntry entry = container.Entries[index];
 
@@ -338,14 +325,7 @@ public sealed partial class MobiFormat : IBookFormat
         }
         catch (BookFormatException ex)
         {
-            findings?.Add(new Finding
-            {
-                RuleId = "MOBI-F001",
-                Severity = Severity.Fatal,
-                Message = ex.Message,
-                Location = entry.Name,
-            });
-
+            Log.Rule(LogLevel.Error, "MOBI-F001", ex.Message, entry.Name);
             throw;
         }
     }
@@ -372,8 +352,7 @@ public sealed partial class MobiFormat : IBookFormat
     private static void ReadCover(
         IContainer container,
         MobiDocument header,
-        BookMetadata metadata,
-        ICollection<Finding>? findings)
+        BookMetadata metadata)
     {
         if (CoverRecord(container, header) is not { } index)
         {
@@ -384,15 +363,12 @@ public sealed partial class MobiFormat : IBookFormat
 
         if (MediaTypeOf(data) is not { } mediaType)
         {
-            findings?.Add(new Finding
-            {
-                RuleId = "MOBI-W021",
-                Severity = Severity.Warning,
-                Message = $"Record {index} is declared as the cover but does not begin like "
+            Log.Rule(
+                LogLevel.Warning,
+                "MOBI-W021",
+                $"Record {index} is declared as the cover but does not begin like "
                     + "an image.",
-                Location = container.Entries[index].Name,
-            });
-
+                container.Entries[index].Name);
             return;
         }
 
@@ -455,45 +431,39 @@ public sealed partial class MobiFormat
     /// Checks the fields a book needs before a library can file it.
     /// </summary>
     private static void CheckRequiredMetadata(
-        MobiDocument header, BookMetadata metadata, ICollection<Finding> findings)
+        MobiDocument header, BookMetadata metadata)
     {
         string location = header.Location;
 
         if (string.IsNullOrWhiteSpace(metadata.Title))
         {
-            findings.Add(new Finding
-            {
-                RuleId = "MOBI-E010",
-                Severity = Severity.Error,
-                Message = "The book has no title, in either the header's name field or "
+            Log.Rule(
+                LogLevel.Error,
+                "MOBI-E010",
+                "The book has no title, in either the header's name field or "
                     + "EXTH record 503.",
-                Location = location,
-            });
+                location);
         }
 
         if (!metadata.PrimaryCreators.Any())
         {
-            findings.Add(new Finding
-            {
-                RuleId = "MOBI-W011",
-                Severity = Severity.Warning,
-                Message = "There is no author (EXTH record 100), so a library will file "
+            Log.Rule(
+                LogLevel.Warning,
+                "MOBI-W011",
+                "There is no author (EXTH record 100), so a library will file "
                     + "this book under no author at all.",
-                Location = location,
-            });
+                location);
         }
 
         if (metadata.Language is null)
         {
-            findings.Add(new Finding
-            {
-                RuleId = "MOBI-W012",
-                Severity = Severity.Warning,
-                Message = "There is no language (EXTH record 524). The MOBI header's own "
+            Log.Rule(
+                LogLevel.Warning,
+                "MOBI-W012",
+                "There is no language (EXTH record 524). The MOBI header's own "
                     + "locale field is not read as a substitute, because mapping its "
                     + "numeric code back to a language tag would be a guess.",
-                Location = location,
-            });
+                location);
         }
     }
 
@@ -501,7 +471,7 @@ public sealed partial class MobiFormat
     /// Reports what the database's header records say about each other.
     /// </summary>
     private static void CheckHeaders(
-        IContainer container, List<MobiDocument> headers, ICollection<Finding> findings)
+        IContainer container, List<MobiDocument> headers)
     {
         if (headers.Count < 2)
         {
@@ -518,16 +488,13 @@ public sealed partial class MobiFormat
 
         if (!string.Equals(first.Title, second.Title, StringComparison.Ordinal))
         {
-            findings.Add(new Finding
-            {
-                RuleId = "MOBI-W020",
-                Severity = Severity.Warning,
-                Message = "The MOBI and KF8 halves of this file carry different titles "
+            Log.Rule(
+                LogLevel.Warning,
+                "MOBI-W020",
+                "The MOBI and KF8 halves of this file carry different titles "
                     + $"('{first.Title}' and '{second.Title}'). The KF8 one is shown, "
                     + "because that is the half readers use. Editing the title writes both; "
-                    + "saving without editing changes neither.",
-                Detail = $"{first.Title} / {second.Title}",
-            });
+                    + "saving without editing changes neither.");
         }
     }
 
@@ -535,33 +502,27 @@ public sealed partial class MobiFormat
     /// Reports a cover reference that points outside the database.
     /// </summary>
     private static void CheckCover(
-        IContainer container, MobiDocument header, ICollection<Finding> findings)
+        IContainer container, MobiDocument header)
     {
         if (header.CoverImageOffset is not { } offset)
         {
-            findings.Add(new Finding
-            {
-                RuleId = "MOBI-W022",
-                Severity = Severity.Warning,
-                Message = "No cover is declared (EXTH record 201), so readers will show "
+            Log.Rule(
+                LogLevel.Warning,
+                "MOBI-W022",
+                "No cover is declared (EXTH record 201), so readers will show "
                     + "this book with a generated one.",
-                Location = header.Location,
-            });
-
+                header.Location);
             return;
         }
 
         if (header.FirstImageIndex < 0)
         {
-            findings.Add(new Finding
-            {
-                RuleId = "MOBI-E023",
-                Severity = Severity.Error,
-                Message = $"A cover is declared at image {offset}, but the header does not "
+            Log.Rule(
+                LogLevel.Error,
+                "MOBI-E023",
+                $"A cover is declared at image {offset}, but the header does not "
                     + "say which record the images start at, so it cannot be found.",
-                Location = header.Location,
-            });
-
+                header.Location);
             return;
         }
 
@@ -569,15 +530,12 @@ public sealed partial class MobiFormat
 
         if (index <= 0 || index >= container.Entries.Count)
         {
-            findings.Add(new Finding
-            {
-                RuleId = "MOBI-E023",
-                Severity = Severity.Error,
-                Message = $"The cover points at record {index}, which is outside this "
+            Log.Rule(
+                LogLevel.Error,
+                "MOBI-E023",
+                $"The cover points at record {index}, which is outside this "
                     + $"database's {container.Entries.Count} records.",
-                Location = header.Location,
-                Detail = index.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            });
+                header.Location);
         }
     }
 }

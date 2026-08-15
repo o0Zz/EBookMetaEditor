@@ -13,13 +13,13 @@ namespace EBookMeta.Tests;
 public sealed class Fb2Tests
 {
     private static void Write(
-        string source, string target, Action<BookMetadata> edit, ICollection<Finding>? findings = null)
+        string source, string target, Action<BookMetadata> edit)
     {
         using RawContainer container = RawContainer.Open(source);
         var format = new Fb2Format();
         BookMetadata metadata = format.Read(container, ReadOptions.WithoutCover);
         edit(metadata);
-        format.Write(container, metadata, target, findings);
+        format.Write(container, metadata, target);
     }
 
     private static BookMetadata Read(string path, ReadOptions? options = null)
@@ -282,11 +282,9 @@ public sealed class Fb2Tests
             .WithoutBinaries()
             .WriteTo(temp.File("book.fb2"));
 
-        var findings = new List<Finding>();
         using RawContainer container = RawContainer.Open(path);
-        new Fb2Format().Read(container, ReadOptions.Default, findings);
+        new Fb2Format().Read(container, ReadOptions.Default);
 
-        Assert.Contains(findings, f => f.RuleId == "FB2-E030");
     }
 
     [Theory]
@@ -300,11 +298,9 @@ public sealed class Fb2Tests
             .WithDescription(Fb2Builder.MinimalDescription.Replace(removed, string.Empty))
             .WriteTo(temp.File("book.fb2"));
 
-        var findings = new List<Finding>();
         using RawContainer container = RawContainer.Open(path);
-        new Fb2Format().Read(container, ReadOptions.WithoutCover, findings);
+        new Fb2Format().Read(container, ReadOptions.WithoutCover);
 
-        Assert.Contains(findings, f => f.RuleId == rule);
     }
 
     /// <summary>FB2-F002: no description at all, so there is nothing to edit.</summary>
@@ -317,13 +313,11 @@ public sealed class Fb2Tests
             .WithoutDescription()
             .WriteTo(temp.File("book.fb2"));
 
-        var findings = new List<Finding>();
         using RawContainer container = RawContainer.Open(path);
 
         Assert.Throws<BookFormatException>(
-            () => new Fb2Format().Read(container, ReadOptions.WithoutCover, findings));
+            () => new Fb2Format().Read(container, ReadOptions.WithoutCover));
 
-        Assert.Contains(findings, f => f.RuleId == "FB2-F002");
     }
 
     /// <summary>

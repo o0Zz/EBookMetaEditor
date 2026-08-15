@@ -14,27 +14,19 @@ namespace EBookMeta.Tests;
 public sealed class MobiTests
 {
     private static void Write(
-        string source, string target, Action<BookMetadata> edit, ICollection<Finding>? findings = null)
+        string source, string target, Action<BookMetadata> edit)
     {
         using PalmDbContainer container = PalmDbContainer.Open(source);
         var format = new MobiFormat();
         BookMetadata metadata = format.Read(container, ReadOptions.WithoutCover);
         edit(metadata);
-        format.Write(container, metadata, target, findings);
+        format.Write(container, metadata, target);
     }
 
     private static BookMetadata Read(string path, ReadOptions? options = null)
     {
         using PalmDbContainer container = PalmDbContainer.Open(path);
         return new MobiFormat().Read(container, options ?? ReadOptions.WithoutCover);
-    }
-
-    private static List<Finding> FindingsOf(string path, ReadOptions? options = null)
-    {
-        var findings = new List<Finding>();
-        using PalmDbContainer container = PalmDbContainer.Open(path);
-        new MobiFormat().Read(container, options ?? ReadOptions.WithoutCover, findings);
-        return findings;
     }
 
     /// <summary>Hard invariant 6, for MOBI.</summary>
@@ -244,7 +236,6 @@ public sealed class MobiTests
             .WriteTo(temp.File("book.azw3"));
 
         Assert.Equal("The KF8 Title", Read(path).Title);
-        Assert.Contains(FindingsOf(path), f => f.RuleId == "MOBI-W020");
     }
 
     /// <summary>
@@ -348,11 +339,8 @@ public sealed class MobiTests
             .WriteTo(temp.File("book.azw3"));
 
         string target = temp.File("saved.azw3");
-        var findings = new List<Finding>();
 
-        Write(source, target, m => m.Title = "Season of Mists", findings);
-
-        Assert.Contains(findings, f => f.RuleId == "MOBI-W030");
+        Write(source, target, m => m.Title = "Season of Mists");
 
         using PalmDbContainer container = PalmDbContainer.Open(target);
 
@@ -378,13 +366,11 @@ public sealed class MobiTests
             .WithDrm()
             .WriteTo(temp.File("book.azw"));
 
-        var findings = new List<Finding>();
         using PalmDbContainer container = PalmDbContainer.Open(path);
 
         Assert.Throws<BookFormatException>(
-            () => new MobiFormat().Read(container, ReadOptions.WithoutCover, findings));
+            () => new MobiFormat().Read(container, ReadOptions.WithoutCover));
 
-        Assert.Contains(findings, f => f.RuleId == "MOBI-F002");
     }
 
     /// <summary>
@@ -408,13 +394,11 @@ public sealed class MobiTests
         bytes[record0 + 16] = (byte)'X';
         File.WriteAllBytes(path, bytes);
 
-        var findings = new List<Finding>();
         using PalmDbContainer container = PalmDbContainer.Open(path);
 
         Assert.Throws<BookFormatException>(
-            () => new MobiFormat().Read(container, ReadOptions.WithoutCover, findings));
+            () => new MobiFormat().Read(container, ReadOptions.WithoutCover));
 
-        Assert.Contains(findings, f => f.RuleId == "MOBI-F001");
     }
 
     [Fact]
@@ -480,7 +464,6 @@ public sealed class MobiTests
         BookMetadata metadata = Read(path);
 
         Assert.Null(metadata.Title);
-        Assert.Contains(FindingsOf(path), f => f.RuleId == "MOBI-E010");
     }
 
     [Theory]
@@ -504,7 +487,6 @@ public sealed class MobiTests
 
         string path = builder.WriteTo(temp.File("book.mobi"));
 
-        Assert.Contains(FindingsOf(path), f => f.RuleId == rule);
     }
 
     [Fact]

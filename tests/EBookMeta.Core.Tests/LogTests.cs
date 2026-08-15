@@ -57,26 +57,34 @@ public sealed class LogTests : IDisposable
         Assert.Contains("not well-formed", entry.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The rule id leads the line, because it is what a user pastes into a bug
+    /// report and what they search the log for.
+    /// </summary>
     [Theory]
-    [InlineData(Severity.Info, LogLevel.Info)]
-    [InlineData(Severity.Warning, LogLevel.Warning)]
-    [InlineData(Severity.Error, LogLevel.Error)]
-    [InlineData(Severity.Fatal, LogLevel.Error)]
-    public void Findings_are_logged_at_a_matching_level(Severity severity, LogLevel expected)
+    [InlineData(LogLevel.Warning)]
+    [InlineData(LogLevel.Error)]
+    public void A_rule_is_logged_at_the_level_it_was_given(LogLevel level)
     {
-        Log.Finding(new Finding
-        {
-            RuleId = "EPUB-W070",
-            Severity = severity,
-            Message = "Namespace prefix 'opf' is used but never declared.",
-            Location = "OEBPS/content.opf",
-            Line = 4,
-        });
+        Log.Rule(
+            level,
+            "EPUB-W070",
+            "Namespace prefix 'opf' is used but never declared.",
+            "OEBPS/content.opf");
 
         LogEntry entry = Assert.Single(Log.Entries);
-        Assert.Equal(expected, entry.Level);
-        Assert.Contains("EPUB-W070", entry.Message, StringComparison.Ordinal);
-        Assert.Contains("OEBPS/content.opf:4", entry.Message, StringComparison.Ordinal);
+
+        Assert.Equal(level, entry.Level);
+        Assert.StartsWith("EPUB-W070:", entry.Message, StringComparison.Ordinal);
+        Assert.Contains("OEBPS/content.opf", entry.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_rule_with_no_location_omits_it()
+    {
+        Log.Rule(LogLevel.Warning, "CBZ-W010", "There is no ComicInfo.xml.");
+
+        Assert.DoesNotContain("(", Assert.Single(Log.Entries).Message, StringComparison.Ordinal);
     }
 
     [Fact]

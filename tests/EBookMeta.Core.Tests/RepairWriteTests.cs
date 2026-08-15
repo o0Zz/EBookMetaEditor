@@ -65,18 +65,12 @@ public sealed class RepairWriteTests
         string path = BrokenEpub(temp);
 
         using ZipContainer container = ZipContainer.Open(path);
-        var findings = new List<Finding>();
-        BookMetadata metadata = new EpubFormat().Read(container, findings: findings);
+        BookMetadata metadata = new EpubFormat().Read(container);
 
         // The undeclared opf: prefix is corrected on the way in, so the metadata it
         // carried is available rather than the file being refused.
         Assert.Equal("Neverwhere", metadata.Title);
         Assert.Equal("Gaiman, Neil", Assert.Single(metadata.Creators).SortName);
-
-        // Reported by the read itself. There is no separate validate step.
-        Finding finding = Assert.Single(findings, f => f.RuleId == "EPUB-W070");
-        Assert.True(finding.HasAutofix);
-        Assert.Equal("OEBPS/content.opf", finding.Location);
     }
 
     [Fact]

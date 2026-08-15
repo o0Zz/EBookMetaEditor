@@ -133,16 +133,9 @@ public sealed class BookFormatsTests
         // formats in the tests that share the registry with it.
         public FormatClaim? TryOpen(BookSource source) => null;
 
-        public BookMetadata Read(
-            IContainer container,
-            ReadOptions? options = null,
-            ICollection<Finding>? findings = null) => new();
+        public BookMetadata Read(IContainer container, ReadOptions? options = null) => new();
 
-        public void Write(
-            IContainer container,
-            BookMetadata metadata,
-            string targetPath,
-            ICollection<Finding>? findings = null) =>
+        public void Write(IContainer container, BookMetadata metadata, string targetPath) =>
             throw new NotSupportedException();
     }
 }

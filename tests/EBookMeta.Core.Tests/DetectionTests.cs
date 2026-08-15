@@ -150,6 +150,45 @@ public sealed class DetectionTests
     }
 
     /// <summary>
+    /// A ZIP with no <c>mimetype</c>, no <c>ComicInfo.xml</c> and no images is
+    /// indistinguishable from any other ZIP by content — so every format declines
+    /// it, and the honest answer is that this build cannot edit it.
+    /// </summary>
+    [Fact]
+    public void A_zip_no_format_claims_is_refused()
+    {
+        using var temp = new TempDir();
+        string path = new EpubBuilder()
+            .WithoutMimetype()
+            .WriteTo(temp.File("no-mimetype.epub"));
+
+        Assert.Throws<UnsupportedFormatException>(() => Book.Load(path));
+        Assert.Equal(FormatId.UnknownZip, BookFormats.Identify(path).Format);
+    }
+
+    /// <summary>
+    /// A 300-page comic must cost what a three-page one costs: every rule works
+    /// from entry names and the one metadata document, so nothing here decompresses
+    /// a page.
+    /// </summary>
+    [Fact]
+    public void A_long_comic_opens_without_reading_its_pages()
+    {
+        using var temp = new TempDir();
+        string[] pages = [.. Enumerable.Range(1, 300).Select(i => $"{i:000}.png")];
+
+        string path = new CbzBuilder()
+            .WithPages(pages)
+            .WithComicInfo("<ComicInfo><Series>S</Series><PageCount>300</PageCount></ComicInfo>")
+            .WriteTo(temp.File("long.cbz"));
+
+        Book book = Book.Load(path, ReadOptions.WithoutCover);
+
+        Assert.Equal("S", book.Metadata.Series?.Name);
+        Assert.Equal(301, book.EntryCount);
+    }
+
+    /// <summary>
     /// A format must decline another format's file rather than throw, because an
     /// exception would abandon the loop before the formats after it were asked.
     /// </summary>
@@ -218,11 +257,11 @@ public sealed class DetectionTests
 
         Assert.Equal(FormatId.Epub, BookFormats.Identify(path).Format);
 
-        var findings = new List<Finding>();
-        Book book = Book.Load(path, ReadOptions.WithoutCover, findings);
+        // The repair runs because EpubFormat claimed the file despite the damage.
+        Book book = Book.Load(path, ReadOptions.WithoutCover);
 
         Assert.Equal("Neverwhere", book.Metadata.Title);
-        Assert.Contains(findings, f => f.RuleId == "EPUB-W070");
+        Assert.Equal("Gaiman, Neil", Assert.Single(book.Metadata.Creators).SortName);
     }
 
     private static FormatId Detect(TempDir temp, string name, byte[] magic)

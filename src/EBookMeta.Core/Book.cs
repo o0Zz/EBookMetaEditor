@@ -11,22 +11,18 @@ namespace EBookMeta;
 public sealed class Book
 {
     private readonly IBookFormat _format;
-    private readonly List<Finding> _loadFindings;
-    private readonly List<Finding> _saveFindings = [];
 
     private Book(
         string path,
         DetectedFormat detected,
         IBookFormat format,
         BookMetadata metadata,
-        List<Finding> loadFindings,
         int entryCount)
     {
         Path = path;
         Detected = detected;
         _format = format;
         Metadata = metadata;
-        _loadFindings = loadFindings;
         EntryCount = entryCount;
     }
 
@@ -48,15 +44,6 @@ public sealed class Book
     /// <summary>How many entries the container held when it was read.</summary>
     public int EntryCount { get; }
 
-    /// <summary>What loading the file noticed, by stable rule ID.</summary>
-    public IReadOnlyList<Finding> LoadFindings => _loadFindings;
-
-    /// <summary>
-    /// What the most recent <see cref="Save"/> noticed and corrected. Empty until
-    /// the file has been saved.
-    /// </summary>
-    public IReadOnlyList<Finding> SaveFindings => _saveFindings;
-
     /// <summary>Whether this format can be written at all.</summary>
     public bool CanSave => Capabilities.CanWrite;
 
@@ -65,11 +52,6 @@ public sealed class Book
     /// <param name="options">
     /// How much to read. <see langword="null"/> means <see cref="ReadOptions.Default"/>;
     /// a grid of hundreds of rows wants <see cref="ReadOptions.WithoutCover"/>.
-    /// </param>
-    /// <param name="findings">
-    /// Also receives everything the load noticed, and is filled even when the load
-    /// fails. <see cref="LoadFindings"/> is enough for a file that opened; this is
-    /// for a caller that wants the diagnosis of one that did not.
     /// </param>
     /// <returns>The open book.</returns>
     /// <exception cref="UnsupportedFormatException">
@@ -80,12 +62,9 @@ public sealed class Book
     /// The file is damaged beyond what can be recovered on the way in.
     /// </exception>
     /// <exception cref="BookIoException">The file could not be read.</exception>
-    public static Book Load(
-        string path, ReadOptions? options = null, ICollection<Finding>? findings = null)
+    public static Book Load(string path, ReadOptions? options = null)
     {
         Throw.IfNullOrEmpty(path);
-
-        var collected = new List<Finding>();
 
         // Offered to every registered format; the strongest claim wins and the file
         // comes back still open, so the read below does not reopen it.
@@ -93,15 +72,11 @@ public sealed class Book
 
         if (!detected.ExtensionAgrees)
         {
-            collected.Add(ExtensionDisagrees(path, detected));
+            ReportExtensionDisagreement(path, detected);
         }
 
         if (source is null)
         {
-            // Reported before throwing: the extension disagreement is usually the
-            // most useful thing anyone will learn about this file, and it is the
-            // reason the open failed.
-            Publish(collected, findings);
             throw new UnsupportedFormatException(detected, path);
         }
 
@@ -110,25 +85,11 @@ public sealed class Book
 
         IContainer container = source.Container;
 
-        try
-        {
-            CheckEntryNames(container, collected);
+        CheckEntryNames(container);
 
-            BookMetadata metadata = format.Read(container, options, collected);
+        BookMetadata metadata = format.Read(container, options);
 
-            Publish(collected, findings);
-
-            return new Book(path, detected, format, metadata, collected, container.Entries.Count);
-        }
-        catch (BookFormatException)
-        {
-            // Published on the way out, not swallowed. A read that fails has
-            // usually already said why — CBZ-F001, or the namespace prefixes no
-            // specification covers — and losing that on the exception's way up
-            // would leave the user with a message and no rule ID to search for.
-            Publish(collected, findings);
-            throw;
-        }
+        return new Book(path, detected, format, metadata, container.Entries.Count);
     }
 
     /// <summary>
@@ -155,27 +116,16 @@ public sealed class Book
                 $"{Detected.Format.DisplayName()} cannot be written by this build.");
         }
 
-        _saveFindings.Clear();
-
-        try
-        {
-            return AtomicFileWriter.Write(
-                Path,
-                temp =>
-                {
-                    // Reopened inside the callback so the source handle is closed
-                    // before File.Replace swaps the file underneath it.
-                    using IContainer container = BookContainers.Open(Path, Detected.Container);
-                    _format.Write(container, Metadata, temp, _saveFindings);
-                },
-                keepBackup);
-        }
-        finally
-        {
-            // In a finally so a correction that was made before the write failed is
-            // still on the record. The user's file is unchanged either way.
-            Report(_saveFindings);
-        }
+        return AtomicFileWriter.Write(
+            Path,
+            temp =>
+            {
+                // Reopened inside the callback so the source handle is closed
+                // before File.Replace swaps the file underneath it.
+                using IContainer container = BookContainers.Open(Path, Detected.Container);
+                _format.Write(container, Metadata, temp);
+            },
+            keepBackup);
     }
 
     /// <summary>Returns the file name and what it turned out to be, for diagnostics.</summary>
@@ -184,48 +134,26 @@ public sealed class Book
         $"{System.IO.Path.GetFileName(Path)} ({Detected.Format.DisplayName()})";
 
     /// <summary>
-    /// Forwards findings to the session log, which is the only place they surface.
+    /// Reports a file whose extension does not match what it turned out to be.
     /// </summary>
-    private static void Report(IEnumerable<Finding> findings)
-    {
-        foreach (Finding finding in findings)
-        {
-            Log.Finding(finding);
-        }
-    }
-
-    /// <summary>Logs findings and copies them to a caller's sink, if there is one.</summary>
-    private static void Publish(List<Finding> collected, ICollection<Finding>? sink)
-    {
-        Report(collected);
-
-        if (sink is null)
-        {
-            return;
-        }
-
-        foreach (Finding finding in collected)
-        {
-            sink.Add(finding);
-        }
-    }
-
-    private static Finding ExtensionDisagrees(string path, DetectedFormat detected) =>
-        new()
-        {
-            RuleId = "GEN-W002",
-            Severity = Severity.Warning,
-            Message =
-                $"The extension says {detected.ClaimedByExtension.DisplayName()} "
-                + $"but the content is {detected.Format.DisplayName()}.",
-            Location = System.IO.Path.GetFileName(path),
-            Detail = detected.Detail,
-        };
+    /// <remarks>
+    /// Reported here rather than by the detection loop because the same file is
+    /// often identified more than once and this must appear in the log once, on the
+    /// open the user actually asked for.
+    /// </remarks>
+    private static void ReportExtensionDisagreement(string path, DetectedFormat detected) =>
+        Log.Rule(
+            LogLevel.Warning,
+            "GEN-W002",
+            $"The extension says {detected.ClaimedByExtension.DisplayName()} "
+                + $"but the content is {detected.Format.DisplayName()}"
+                + (detected.Detail is null ? "." : $" ({detected.Detail})."),
+            System.IO.Path.GetFileName(path));
 
     /// <summary>
     /// Reports entry names that point outside the archive.
     /// </summary>
-    private static void CheckEntryNames(IContainer container, List<Finding> findings)
+    private static void CheckEntryNames(IContainer container)
     {
         foreach (ContainerEntry entry in container.Entries)
         {
@@ -234,13 +162,11 @@ public sealed class Book
                 continue;
             }
 
-            findings.Add(new Finding
-            {
-                RuleId = "GEN-E003",
-                Severity = Severity.Error,
-                Message = "Entry name is absolute or escapes the archive.",
-                Location = entry.Name,
-            });
+            Log.Rule(
+                LogLevel.Error,
+                "GEN-E003",
+                "Entry name is absolute or escapes the archive.",
+                entry.Name);
         }
     }
 

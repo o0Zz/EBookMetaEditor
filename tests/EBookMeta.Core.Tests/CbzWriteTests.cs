@@ -11,13 +11,13 @@ namespace EBookMeta.Tests;
 public sealed class CbzWriteTests
 {
     private static void Write(
-        string source, string target, Action<BookMetadata> edit, ICollection<Finding>? findings = null)
+        string source, string target, Action<BookMetadata> edit)
     {
         using ZipContainer container = ZipContainer.Open(source);
         var format = new CbzFormat();
         BookMetadata metadata = format.Read(container);
         edit(metadata);
-        format.Write(container, metadata, target, findings);
+        format.Write(container, metadata, target);
     }
 
     private static BookMetadata Read(string path)
@@ -76,14 +76,12 @@ public sealed class CbzWriteTests
             .WithComicInfo(CbzBuilder.MinimalComicInfo)
             .WriteTo(temp.File("missing.cbz"));
 
-        var findings = new List<Finding>();
-        Write(missing, target, _ => { }, findings);
+        Write(missing, target, _ => { });
 
         Assert.Contains("<PageCount>3</PageCount>", ComicInfoText(target), StringComparison.Ordinal);
 
         // Everything else in the document still survives untouched.
         Assert.Contains("<Series>The Sandman</Series>", ComicInfoText(target), StringComparison.Ordinal);
-        Assert.True(Assert.Single(findings, f => f.RuleId == "CBZ-E020").HasAutofix);
 
         string wrong = new CbzBuilder()
             .WithComicInfo(CbzBuilder.MinimalComicInfo.Replace(
@@ -91,12 +89,10 @@ public sealed class CbzWriteTests
                 "<Series>The Sandman</Series>\n  <PageCount>99</PageCount>"))
             .WriteTo(temp.File("wrong.cbz"));
 
-        findings.Clear();
-        Write(wrong, temp.File("saved-2.cbz"), _ => { }, findings);
+        Write(wrong, temp.File("saved-2.cbz"), _ => { });
 
         Assert.Contains("<PageCount>3</PageCount>", ComicInfoText(temp.File("saved-2.cbz")), StringComparison.Ordinal);
         Assert.DoesNotContain("99", ComicInfoText(temp.File("saved-2.cbz")), StringComparison.Ordinal);
-        Assert.Contains("99", Assert.Single(findings, f => f.RuleId == "CBZ-E020").Message, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -112,8 +108,7 @@ public sealed class CbzWriteTests
             .WriteTo(temp.File("comic.cbz"));
         string target = temp.File("saved.cbz");
 
-        var findings = new List<Finding>();
-        Write(source, target, _ => { }, findings);
+        Write(source, target, _ => { });
 
         using ZipContainer saved = ZipContainer.Open(target);
         List<string> names = [.. saved.Entries.Select(e => e.Name)];
@@ -127,7 +122,6 @@ public sealed class CbzWriteTests
             ["01.png", "02.png", "03.png"],
             names.Where(n => n.EndsWith(".png", StringComparison.Ordinal)));
 
-        Assert.True(Assert.Single(findings, f => f.RuleId == "CBZ-E011").HasAutofix);
     }
 
     /// <summary>Hard invariant 9.</summary>

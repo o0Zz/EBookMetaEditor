@@ -273,4 +273,31 @@ public sealed class EpubWriteTests
 
     private static string[] ReadOpfLines(string epubPath) =>
         ReadOpfText(epubPath).Replace("\r\n", "\n").Split('\n');
+
+    /// <summary>
+    /// The correction with the most direct payoff: readers reject an EPUB outright
+    /// until <c>mimetype</c> is the first entry and stored, and both defects are
+    /// provable from the file rather than guessed at.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Saving_puts_the_mimetype_entry_back(bool compressed)
+    {
+        using var temp = new TempDir();
+        EpubBuilder builder = compressed
+            ? new EpubBuilder().WithCompressedMimetype()
+            : new EpubBuilder().WithMimetypeNotFirst();
+
+        string path = builder.WriteTo(temp.File($"broken-mimetype-{compressed}.epub"));
+
+        Book book = Book.Load(path);
+        book.Save(keepBackup: false);
+
+        using ZipContainer saved = ZipContainer.Open(path);
+        ContainerEntry first = saved.Entries[0];
+
+        Assert.Equal("mimetype", first.Name);
+        Assert.Equal(ZipCompressionMethods.Stored, first.CompressionMethod);
+    }
 }

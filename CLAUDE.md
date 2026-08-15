@@ -1,4 +1,4 @@
-﻿# CLAUDE.md
+# CLAUDE.md
 
 Guidance for Claude Code working in this repository.
 
@@ -9,8 +9,8 @@ the Explorer right-click menu. Two things make it different from calibre,
 Sigil, ComicTagger or epub-metadata-editor:
 
 1. **It checks, without being asked.** Every file is examined for structural and
-   semantic consistency as it is opened, with findings reported by stable rule ID,
-   file, line and column.
+   semantic consistency as it is opened, and whatever is wrong is written to the
+   session log under a stable rule ID.
 2. **It repairs, quietly.** Broken XML and inconsistent metadata are recovered
    on open, so a file that no other tool will load becomes editable. The
    correction lives in memory: the bytes on disk are untouched until the user
@@ -120,9 +120,8 @@ src/
     AtomicFileWriter.cs    the only sanctioned way a user's file is replaced
     BatchSession.cs        many files read, edited and saved together
     MetadataFields.cs      the text projection of a field, shared by both editors
-    Finding.cs             Finding + Severity
     NaturalNameComparer.cs so 2.jpg sorts before 10.jpg
-    Log.cs                 the session log: Info / Warning / Error / Finding
+    Log.cs                 the session log: Debug / Info / Warning / Error / Rule
     Compat.cs              everything net48 lacks, in one file
     Containers/        one file per container, and nothing else:
                        ZipContainer, TarContainer, PalmDbContainer, RawContainer
@@ -323,8 +322,8 @@ somewhere.
 interface IBookFormat {
     FormatId Id { get; }
     FormatCapabilities Capabilities { get; }
-    BookMetadata Read(IContainer c, ReadOptions? o = null, ICollection<Finding>? findings = null);
-    void Write(IContainer c, BookMetadata m, string targetPath, ICollection<Finding>? findings = null);
+    BookMetadata Read(IContainer c, ReadOptions? o = null);
+    void Write(IContainer c, BookMetadata m, string targetPath);
 }
 ```
 
@@ -483,7 +482,7 @@ Not style preferences. Violating these corrupts users' libraries.
    logged, and every correction is provable from the file alone: a page count is
    recomputed from the images that are present, not guessed. So the property to
    protect is "saving does not gratuitously rewrite", not "saving never changes
-   anything". A change with no finding behind it is the bug.
+   anything". A change with no logged rule behind it is the bug.
 
 Accepted limitation, ZIP only: `System.IO.Compression` does not preserve ZIP extra
 fields, original timestamps, or the archive comment. Round-trip byte-identity
@@ -580,7 +579,7 @@ what you want *after* something looked wrong, not while you are typing a title.
   without them asking.
 - `Log.Error` for failures, and `Log.Error(message, exception)` to keep the type
   and message of the cause.
-- `Log.Finding` for a `Finding`, which picks the level from its severity.
+- `Log.Rule` for a validation rule, which puts the rule ID first in the line.
 - `Log.Debug` for detail that only matters once something has gone wrong.
 
 Core logs; Core never writes to the console. `Log` holds no opinion about
@@ -597,22 +596,29 @@ deliberately. Do not reintroduce them.
 The reason is that a separate validate step gets the model backwards. A user does
 not want to be told their file is broken; they want to edit it. So:
 
-- **Loading reports.** `Read` takes an `ICollection<Finding>` and fills it. Every
-  rule works from the parsed metadata document and from container entry *names*,
-  which the central directory has already supplied — so running all of them costs
-  a read essentially nothing, and there is no reason to defer any of it. Anything
-  recoverable is recovered in memory on the way in.
-- **Saving corrects.** `Write` takes the same sink and reports what it fixed. A
-  correction must be provable from the file alone: a page count recomputed from the
-  images present, a `mimetype` entry put back where the specification requires it, a
-  namespace declaration a published spec fixes. Anything needing an assumption is
-  reported by the read and left alone.
-- **`Book` joins the two.** `Book.Load` and `Book.Save` are the only entry points
-  either window uses, and `Book` is what forwards findings to `Log`. Handlers report;
-  they do not log rules.
+- **Loading reports.** Every rule works from the parsed metadata document and from
+  container entry *names*, which the central directory has already supplied — so
+  running all of them costs a read essentially nothing, and there is no reason to
+  defer any of it. Anything recoverable is recovered in memory on the way in.
+- **Saving corrects.** `Write` reports what it fixed. A correction must be provable
+  from the file alone: a page count recomputed from the images present, a `mimetype`
+  entry put back where the specification requires it, a namespace declaration a
+  published spec fixes. Anything needing an assumption is reported by the read and
+  left alone.
+- **A rule logs where it fires.** `Log.Rule(level, ruleId, message, location)`, at
+  the point of discovery. There is no findings type and no sink threaded through
+  `Read` and `Write` — that existed once and was removed deliberately, along with
+  `Book.LoadFindings` and `Book.SaveFindings`. Do not reintroduce them: a rule that
+  fires says so, once, where it fired.
 - **Nothing reaches the disk without a save.** A repair found on open lives in
   memory. There is no repair-specific write path, which is what makes "the file on
   disk is what the user last saved" true by construction.
+
+The cost of that simplicity, stated so nobody rediscovers it as a surprise: rules
+are no longer assertable in tests. Verifying one means reading `Log.Entries`, which
+is a global that four parallel batch threads write to, so tests assert on behaviour
+— the metadata that came out, the bytes that were written — and not on which rules
+fired.
 
 Rules are plain code inside the format's own file, grouped by the question they
 answer (`CheckRequiredMetadata`, `CheckReferences`, `CheckArchive`, `CheckLayout`,
@@ -728,8 +734,6 @@ is wrong — it turns an unedited save of a mismatched file into data loss, whic
 `MobiTests.Saving_a_joint_file_does_not_overwrite_one_half_with_the_other` exists
 to catch.
 
-When adding a rule, add a fixture that triggers it in isolation.
-
 ## Interface language
 
 `Strings` serves every piece of text the windows show, out of one
@@ -744,9 +748,8 @@ half-finished translation shows English lines rather than raw key names.
   built from what is embedded, and the csproj globs `Languages\*.lang`.
   `WithCulture=false` on that item is load-bearing — without it MSBuild reads
   `de.lang` as a culture-specific resource and builds a satellite.
-- **The log and every `Finding` stay English.** They are diagnostics, pasted
-  into bug reports, and keyed by stable rule IDs. Core knows nothing about the
-  interface language and must not learn.
+- **The log stays English, rule IDs included.** It is a diagnostic, pasted into
+  bug reports. Core knows nothing about the interface language and must not learn.
 - **`Strings.Use` sets `CurrentUICulture`, never `CurrentCulture`.** Metadata is
   parsed and written by Core using the latter; a series index or a date that
   round-tripped differently because the window is in German would be the
@@ -793,7 +796,6 @@ Required coverage:
 - a DRM-encrypted MOBI, asserted to be refused
 - an FB2 with a large body, asserted byte-identical from `<body>` onwards after an
   edit
-- one fixture per validation rule
 - `broken-unclosed-tag.epub`, `broken-bare-ampersand.epub` — repair path
 - `broken-mimetype-compressed.epub`
 - `latin1-declared-utf8.epub`

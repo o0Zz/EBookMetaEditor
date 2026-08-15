@@ -98,12 +98,8 @@ public sealed partial class EpubFormat : IBookFormat
     /// <exception cref="BookFormatException">
     /// The container file or the package document is missing or malformed.
     /// </exception>
-    /// <param name="findings">
-    /// Collects a namespace repair as rule EPUB-W070, so the correction is on the
-    /// record. <see langword="null"/> discards it.
-    /// </param>
     public static OpfDocument OpenPackageDocument(
-        IContainer container, ICollection<Finding>? findings = null)
+        IContainer container)
     {
         Throw.IfNull(container);
 
@@ -140,23 +136,16 @@ public sealed partial class EpubFormat : IBookFormat
                 throw;
             }
 
-            // Reported as a finding rather than logged here, so that a repair
-            // reaches the log by the same route as every other rule and cannot
-            // appear twice. Severity.Warning is what puts it in the log as a
-            // warning, which invariant 14 requires of every repair.
-            findings?.Add(new Finding
-            {
-                RuleId = "EPUB-W070",
-                Severity = Severity.Warning,
-                Message =
-                    $"'{entry.Name}' was missing namespace declarations and has been repaired "
+            // Logged as a warning, which invariant 14 requires of every repair: a
+            // repair is the one thing that changes a user's file without them
+            // asking, so it must never be silent.
+            Log.Rule(
+                LogLevel.Warning,
+                "EPUB-W070",
+                $"'{entry.Name}' was missing namespace declarations and has been repaired "
                     + $"in memory: added xmlns for {string.Join(", ", repair.Added)}. "
                     + "Save to keep the correction.",
-                Location = entry.Name,
-                Line = repair.Line,
-                Column = repair.Column,
-                HasAutofix = true,
-            });
+                entry.Name);
 
             return OpfDocument.Parse(repair.RepairedBytes, entry.Name);
         }
@@ -216,13 +205,13 @@ public sealed partial class EpubFormat : IBookFormat
 
     /// <inheritdoc />
     public BookMetadata Read(
-        IContainer container, ReadOptions? options = null, ICollection<Finding>? findings = null)
+        IContainer container, ReadOptions? options = null)
     {
         Throw.IfNull(container);
 
         options ??= ReadOptions.Default;
 
-        OpfDocument opf = OpenPackageDocument(container, findings);
+        OpfDocument opf = OpenPackageDocument(container);
         BookMetadata metadata = opf.ReadMetadata();
 
         if (options.IncludeCover)
@@ -234,10 +223,7 @@ public sealed partial class EpubFormat : IBookFormat
         // is already parsed and its manifest, spine and refinements are already
         // cached, and the cross-checks against the archive compare entry names the
         // central directory has already supplied.
-        if (findings is not null)
-        {
-            CheckPackage(container, opf, findings);
-        }
+        CheckPackage(container, opf);
 
         Log.Info(
             $"Read EPUB {opf.Version ?? "(unversioned)"} metadata from '{opf.EntryName}': "
@@ -251,14 +237,13 @@ public sealed partial class EpubFormat : IBookFormat
     public void Write(
         IContainer container,
         BookMetadata metadata,
-        string targetPath,
-        ICollection<Finding>? findings = null)
+        string targetPath)
     {
         Throw.IfNull(container);
         Throw.IfNull(metadata);
         Throw.IfNullOrEmpty(targetPath);
 
-        OpfDocument opf = OpenPackageDocument(container, findings);
+        OpfDocument opf = OpenPackageDocument(container);
         opf.ApplyMetadata(metadata);
 
         byte[]? coverBytes = ApplyCover(opf, metadata, out string? coverEntryName);
@@ -287,7 +272,7 @@ public sealed partial class EpubFormat : IBookFormat
             }
         }
 
-        RepairMimetype(entries, findings);
+        RepairMimetype(entries);
 
         container.Rebuild(entries, targetPath);
 
@@ -338,7 +323,7 @@ public sealed partial class EpubFormat : IBookFormat
     /// <summary>
     /// Puts <c>mimetype</c> back where the specification requires it.
     /// </summary>
-    private static void RepairMimetype(List<PendingEntry> entries, ICollection<Finding>? findings)
+    private static void RepairMimetype(List<PendingEntry> entries)
     {
         int index = entries.FindIndex(e => e.Name.Equals(MimetypeEntryName, StringComparison.Ordinal));
         PendingEntry? existing = index < 0 ? null : entries[index];
@@ -361,18 +346,15 @@ public sealed partial class EpubFormat : IBookFormat
             Encoding.ASCII.GetBytes(EpubMediaType),
             ZipCompressionMethods.Stored));
 
-        findings?.Add(new Finding
-        {
-            RuleId = "EPUB-E040",
-            Severity = Severity.Warning,
-            Message = existing is null
+        Log.Rule(
+            LogLevel.Warning,
+            "EPUB-E040",
+            existing is null
                 ? $"'{MimetypeEntryName}' was missing; written as the first entry, stored."
                 : wrongPlace
                     ? $"'{MimetypeEntryName}' was not the first entry; moved to the front on save."
                     : $"'{MimetypeEntryName}' was compressed; stored on save.",
-            Location = MimetypeEntryName,
-            HasAutofix = true,
-        });
+            MimetypeEntryName);
     }
 
     /// <summary>
@@ -512,97 +494,75 @@ public sealed partial class EpubFormat
     /// Checks the package document against itself and against the archive.
     /// </summary>
     private static void CheckPackage(
-        IContainer container, OpfDocument opf, ICollection<Finding> findings)
+        IContainer container, OpfDocument opf)
     {
-        CheckRequiredMetadata(opf, findings);
-        CheckReferences(opf, findings);
-        CheckArchive(container, opf, findings);
+        CheckRequiredMetadata(opf);
+        CheckReferences(opf);
+        CheckArchive(container, opf);
     }
 
     /// <summary>
     /// Checks the metadata every EPUB is required to carry.
     /// </summary>
-    private static void CheckRequiredMetadata(OpfDocument opf, ICollection<Finding> findings)
+    private static void CheckRequiredMetadata(OpfDocument opf)
     {
         string? location = opf.EntryName;
 
         if (opf.Encoding is { DeclarationMatchesBytes: false, Mismatch: { } mismatch })
         {
-            findings.Add(new Finding
-            {
-                RuleId = "EPUB-E050",
-                Severity = Severity.Error,
-                Message = $"The declared encoding does not match the bytes: {mismatch}",
-                Location = location,
-            });
+            Log.Rule(
+                LogLevel.Error,
+                "EPUB-E050",
+                $"The declared encoding does not match the bytes: {mismatch}",
+                location);
         }
 
         if (opf.UniqueIdentifierRef is null)
         {
-            findings.Add(new Finding
-            {
-                RuleId = "EPUB-E010",
-                Severity = Severity.Error,
-                Message = "package/@unique-identifier is absent, so nothing says which "
+            Log.Rule(
+                LogLevel.Error,
+                "EPUB-E010",
+                "package/@unique-identifier is absent, so nothing says which "
                     + "identifier identifies this book.",
-                Location = location,
-            });
+                location);
         }
         else if (!Identifiers(opf).Contains(opf.UniqueIdentifierRef, StringComparer.Ordinal))
         {
-            findings.Add(new Finding
-            {
-                RuleId = "EPUB-E011",
-                Severity = Severity.Error,
-                Message = $"package/@unique-identifier is '{opf.UniqueIdentifierRef}' but no "
+            Log.Rule(
+                LogLevel.Error,
+                "EPUB-E011",
+                $"package/@unique-identifier is '{opf.UniqueIdentifierRef}' but no "
                     + "dc:identifier carries that id.",
-                Location = location,
-                Detail = opf.UniqueIdentifierRef,
-            });
+                location);
         }
 
         if (string.IsNullOrWhiteSpace(DcValue(opf, "title")))
         {
-            findings.Add(new Finding
-            {
-                RuleId = "EPUB-E012",
-                Severity = Severity.Error,
-                Message = "dc:title is missing or empty.",
-                Location = location,
-            });
+            Log.Rule(LogLevel.Error, "EPUB-E012", "dc:title is missing or empty.", location);
         }
 
         string? language = DcValue(opf, "language");
 
         if (string.IsNullOrWhiteSpace(language))
         {
-            findings.Add(new Finding
-            {
-                RuleId = "EPUB-E013",
-                Severity = Severity.Error,
-                Message = "dc:language is missing.",
-                Location = location,
-            });
+            Log.Rule(LogLevel.Error, "EPUB-E013", "dc:language is missing.", location);
         }
         else if (!MetadataFields.IsPlausibleLanguageTag(language!))
         {
-            findings.Add(new Finding
-            {
-                RuleId = "EPUB-W014",
-                Severity = Severity.Warning,
-                Message = $"dc:language is '{language}', which is not a plausible BCP 47 tag. "
+            Log.Rule(
+                LogLevel.Warning,
+                "EPUB-W014",
+                $"dc:language is '{language}', which is not a plausible BCP 47 tag. "
                     + "Two or three letters, optionally followed by a subtag, is what readers "
                     + "expect — 'en', 'fr', 'pt-BR'.",
-                Location = location,
-                Detail = language,
-            });
+                location);
         }
     }
 
     /// <summary>
     /// Checks that the ids the package document points at actually exist in it.
     /// </summary>
-    private static void CheckReferences(OpfDocument opf, ICollection<Finding> findings)
+    private static void CheckReferences(OpfDocument opf)
     {
         string? location = opf.EntryName;
         var ids = new HashSet<string>(StringComparer.Ordinal);
@@ -618,30 +578,24 @@ public sealed partial class EpubFormat
 
         foreach (string duplicate in duplicates.Distinct(StringComparer.Ordinal))
         {
-            findings.Add(new Finding
-            {
-                RuleId = "EPUB-E022",
-                Severity = Severity.Error,
-                Message = $"Two manifest items share the id '{duplicate}', so any reference "
+            Log.Rule(
+                LogLevel.Error,
+                "EPUB-E022",
+                $"Two manifest items share the id '{duplicate}', so any reference "
                     + "to it is ambiguous.",
-                Location = location,
-                Detail = duplicate,
-            });
+                location);
         }
 
         foreach (SpineItemRef itemRef in opf.Spine)
         {
             if (itemRef.IdRef is { Length: > 0 } idRef && !ids.Contains(idRef))
             {
-                findings.Add(new Finding
-                {
-                    RuleId = "EPUB-E020",
-                    Severity = Severity.Error,
-                    Message = $"The spine refers to '{idRef}', which is not in the manifest, "
+                Log.Rule(
+                    LogLevel.Error,
+                    "EPUB-E020",
+                    $"The spine refers to '{idRef}', which is not in the manifest, "
                         + "so that part of the reading order does not exist.",
-                    Location = location,
-                    Detail = idRef,
-                });
+                    location);
             }
         }
 
@@ -654,27 +608,24 @@ public sealed partial class EpubFormat
             // in the document at all.
             if (target.Length > 0 && !ids.Contains(target) && !ElementIdExists(opf, target))
             {
-                findings.Add(new Finding
-                {
-                    RuleId = "EPUB-W060",
-                    Severity = Severity.Warning,
-                    Message = $"A meta/@refines points at '{target}', which nothing in the "
+                Log.Rule(
+                    LogLevel.Warning,
+                    "EPUB-W060",
+                    $"A meta/@refines points at '{target}', which nothing in the "
                         + "package document declares, so the refinement is ignored.",
-                    Location = location,
-                    Detail = refinement.Property,
-                });
+                    location);
             }
         }
 
-        CheckCoverDeclarations(opf, ids, findings);
-        CheckSeriesDeclarations(opf, findings);
+        CheckCoverDeclarations(opf, ids);
+        CheckSeriesDeclarations(opf);
     }
 
     /// <summary>
     /// Checks the two cover conventions against each other and against the manifest.
     /// </summary>
     private static void CheckCoverDeclarations(
-        OpfDocument opf, HashSet<string> manifestIds, ICollection<Finding> findings)
+        OpfDocument opf, HashSet<string> manifestIds)
     {
         string? location = opf.EntryName;
         string? legacy = CoverMetaContent(opf);
@@ -682,50 +633,38 @@ public sealed partial class EpubFormat
 
         if (legacy is { Length: > 0 } && !manifestIds.Contains(legacy))
         {
-            findings.Add(new Finding
-            {
-                RuleId = "EPUB-E030",
-                Severity = Severity.Error,
-                Message = $"The cover metadata names manifest item '{legacy}', which does "
+            Log.Rule(
+                LogLevel.Error,
+                "EPUB-E030",
+                $"The cover metadata names manifest item '{legacy}', which does "
                     + "not exist.",
-                Location = location,
-                Detail = legacy,
-            });
-
+                location);
             return;
         }
 
         if (legacy is null && !epub3)
         {
-            findings.Add(new Finding
-            {
-                RuleId = "EPUB-W031",
-                Severity = Severity.Warning,
-                Message = "No cover is declared. Saving will not invent one, so shelves will "
+            Log.Rule(
+                LogLevel.Warning,
+                "EPUB-W031",
+                "No cover is declared. Saving will not invent one, so shelves will "
                     + "show this book without a thumbnail.",
-                Location = location,
-            });
+                location);
         }
         else if (legacy is null || !epub3)
         {
-            findings.Add(new Finding
-            {
-                RuleId = "EPUB-W032",
-                Severity = Severity.Warning,
-                Message = epub3
+            Log.Rule(LogLevel.Warning, "EPUB-W032", epub3
                     ? "The cover is declared the EPUB 3 way only, so EPUB 2 readers will not "
                         + "find it. Editing the cover writes both conventions."
                     : "The cover is declared the EPUB 2 way only, so EPUB 3 readers may not "
-                        + "find it. Editing the cover writes both conventions.",
-                Location = location,
-            });
+                        + "find it. Editing the cover writes both conventions.", location);
         }
     }
 
     /// <summary>
     /// Checks the two series conventions against each other.
     /// </summary>
-    private static void CheckSeriesDeclarations(OpfDocument opf, ICollection<Finding> findings)
+    private static void CheckSeriesDeclarations(OpfDocument opf)
     {
         if (opf.Metadata is not { } metadata)
         {
@@ -742,17 +681,15 @@ public sealed partial class EpubFormat
 
         if (calibre != epub3)
         {
-            findings.Add(new Finding
-            {
-                RuleId = "EPUB-W061",
-                Severity = Severity.Warning,
-                Message = calibre
+            Log.Rule(
+                LogLevel.Warning,
+                "EPUB-W061",
+                calibre
                     ? "The series is recorded the calibre way only, so EPUB 3 readers will "
                         + "not see it. Editing the series writes both conventions."
                     : "The series is recorded the EPUB 3 way only, so calibre and EPUB 2 "
                         + "readers will not see it. Editing the series writes both conventions.",
-                Location = opf.EntryName,
-            });
+                opf.EntryName);
         }
     }
 
@@ -765,7 +702,7 @@ public sealed partial class EpubFormat
     /// the right thing — readers reject the file when they do not.
     /// </remarks>
     private static void CheckArchive(
-        IContainer container, OpfDocument opf, ICollection<Finding> findings)
+        IContainer container, OpfDocument opf)
     {
         var present = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -796,14 +733,11 @@ public sealed partial class EpubFormat
 
             if (!present.Contains(resolved))
             {
-                findings.Add(new Finding
-                {
-                    RuleId = "EPUB-E021",
-                    Severity = Severity.Error,
-                    Message = $"The manifest lists '{href}', which is not in the archive.",
-                    Location = opf.EntryName,
-                    Detail = resolved,
-                });
+                Log.Rule(
+                    LogLevel.Error,
+                    "EPUB-E021",
+                    $"The manifest lists '{href}', which is not in the archive.",
+                    opf.EntryName);
             }
         }
 
@@ -814,68 +748,53 @@ public sealed partial class EpubFormat
 
         if (orphans.Count > 0)
         {
-            findings.Add(new Finding
-            {
-                RuleId = "EPUB-W023",
-                Severity = Severity.Warning,
-                Message = $"The archive holds {orphans.Count} file"
+            Log.Rule(LogLevel.Warning, "EPUB-W023", $"The archive holds {orphans.Count} file"
                     + (orphans.Count == 1 ? "" : "s")
                     + " the manifest does not list, so readers will ignore "
-                    + (orphans.Count == 1 ? "it" : "them") + ".",
-                Detail = string.Join(", ", orphans.Take(5)),
-            });
+                    + (orphans.Count == 1 ? "it" : "them") + ".");
         }
 
-        CheckMimetype(container, findings);
+        CheckMimetype(container);
     }
 
     /// <summary>
     /// Checks the one entry whose position and storage are dictated by the spec.
     /// </summary>
-    private static void CheckMimetype(IContainer container, ICollection<Finding> findings)
+    private static void CheckMimetype(IContainer container)
     {
         ContainerEntry? first = container.Entries.Count > 0 ? container.Entries[0] : null;
 
         if (first is null || !first.Name.Equals(MimetypeEntryName, StringComparison.Ordinal))
         {
-            findings.Add(new Finding
-            {
-                RuleId = "EPUB-E040",
-                Severity = Severity.Error,
-                Message = $"'{MimetypeEntryName}' must be the archive's first entry. "
+            Log.Rule(
+                LogLevel.Error,
+                "EPUB-E040",
+                $"'{MimetypeEntryName}' must be the archive's first entry. "
                     + "Saving puts it back.",
-                Location = MimetypeEntryName,
-                HasAutofix = true,
-            });
-
+                MimetypeEntryName);
             return;
         }
 
         if (first.CompressionMethod != ZipCompressionMethods.Stored)
         {
-            findings.Add(new Finding
-            {
-                RuleId = "EPUB-E040",
-                Severity = Severity.Error,
-                Message = $"'{MimetypeEntryName}' is compressed and must be stored. "
+            Log.Rule(
+                LogLevel.Error,
+                "EPUB-E040",
+                $"'{MimetypeEntryName}' is compressed and must be stored. "
                     + "Saving stores it.",
-                Location = MimetypeEntryName,
-                HasAutofix = true,
-            });
+                MimetypeEntryName);
         }
 
         string content = Encoding.ASCII.GetString(container.ReadAllBytes(first));
 
         if (!content.Equals(EpubMediaType, StringComparison.Ordinal))
         {
-            findings.Add(new Finding
-            {
-                RuleId = "EPUB-E040",
-                Severity = Severity.Error,
-                Message = $"'{MimetypeEntryName}' must contain exactly '{EpubMediaType}', "
+            Log.Rule(
+                LogLevel.Error,
+                "EPUB-E040",
+                $"'{MimetypeEntryName}' must contain exactly '{EpubMediaType}', "
                     + $"with no BOM and no trailing newline, but contains '{content.Trim()}'.",
-                Location = MimetypeEntryName,
-            });
+                MimetypeEntryName);
         }
     }
 

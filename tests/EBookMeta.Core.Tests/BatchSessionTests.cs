@@ -383,10 +383,10 @@ public sealed class BatchSessionTests
         BatchSession session = BatchSession.Create([clean, untagged]);
         session.Load();
 
-        Assert.Empty(Entry(session, "clean.cbz").Book!.LoadFindings);
-
-        Finding finding = Assert.Single(Entry(session, "untagged.cbz").Book!.LoadFindings);
-        Assert.Equal("CBZ-W010", finding.RuleId);
+        // An untagged comic still loads; it simply has nothing to show yet, and a
+        // save is what gives it a ComicInfo.xml.
+        Assert.NotNull(Entry(session, "clean.cbz").Book);
+        Assert.Null(Entry(session, "untagged.cbz").Book!.Metadata.Series);
     }
 
     private sealed class Progress(List<BatchProgress> reports) : IProgress<BatchProgress>

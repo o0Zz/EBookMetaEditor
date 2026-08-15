@@ -169,7 +169,7 @@ public sealed partial class CbzFormat : IBookFormat
     /// <c>ComicInfo.xml</c> is present but not well-formed (CBZ-F001).
     /// </exception>
     public BookMetadata Read(
-        IContainer container, ReadOptions? options = null, ICollection<Finding>? findings = null)
+        IContainer container, ReadOptions? options = null)
     {
         Throw.IfNull(container);
 
@@ -185,7 +185,7 @@ public sealed partial class CbzFormat : IBookFormat
         }
         else
         {
-            document = Parse(container, entry, findings);
+            document = Parse(container, entry);
             metadata = document.ReadMetadata();
         }
 
@@ -197,12 +197,9 @@ public sealed partial class CbzFormat : IBookFormat
         // Checked here rather than on request, because none of it costs anything:
         // every rule below reads the parsed document or entry names the central
         // directory already gave us, and nothing is decompressed to do it.
-        if (findings is not null)
-        {
-            CheckLayout(container, entry, findings);
-            CheckPages(container, entry, document, findings);
-            CheckFields(entry, document, findings);
-        }
+        CheckLayout(container, entry);
+        CheckPages(container, entry, document);
+        CheckFields(entry, document);
 
         Log.Info(
             entry is null
@@ -223,8 +220,7 @@ public sealed partial class CbzFormat : IBookFormat
     public void Write(
         IContainer container,
         BookMetadata metadata,
-        string targetPath,
-        ICollection<Finding>? findings = null)
+        string targetPath)
     {
         Throw.IfNull(container);
         Throw.IfNull(metadata);
@@ -245,7 +241,7 @@ public sealed partial class CbzFormat : IBookFormat
 
         ContainerEntry? entry = FindComicInfo(container);
         ComicInfoDocument document =
-            entry is null ? ComicInfoDocument.CreateEmpty() : Parse(container, entry, findings);
+            entry is null ? ComicInfoDocument.CreateEmpty() : Parse(container, entry);
 
         document.ApplyMetadata(metadata);
 
@@ -257,17 +253,10 @@ public sealed partial class CbzFormat : IBookFormat
         // anything, and every reader that trusts it is misled until it is fixed.
         if (document.SetPageCount(images) && entry is not null)
         {
-            findings?.Add(new Finding
-            {
-                RuleId = "CBZ-E020",
-                Severity = Severity.Warning,
-                Message = declared is null
+            Log.Rule(LogLevel.Warning, "CBZ-E020", declared is null
                     ? $"No PageCount was declared; set to {images} on save."
                     : $"PageCount said {declared} but the archive holds {images} "
-                        + $"image{(images == 1 ? "" : "s")}; corrected on save.",
-                Location = entry.Name,
-                HasAutofix = true,
-            });
+                        + $"image{(images == 1 ? "" : "s")}; corrected on save.", entry.Name);
         }
 
         // A nested ComicInfo.xml is one most readers never find, and the rebuild is
@@ -278,15 +267,12 @@ public sealed partial class CbzFormat : IBookFormat
 
         if (relocate)
         {
-            findings?.Add(new Finding
-            {
-                RuleId = "CBZ-E011",
-                Severity = Severity.Warning,
-                Message = $"'{entry!.Name}' was not at the archive root, where readers look "
+            Log.Rule(
+                LogLevel.Warning,
+                "CBZ-E011",
+                $"'{entry!.Name}' was not at the archive root, where readers look "
                     + $"for it; moved to '{ComicInfoDocument.DefaultEntryName}' on save.",
-                Location = entry.Name,
-                HasAutofix = true,
-            });
+                entry.Name);
         }
 
         byte[] bytes = document.Serialize();
@@ -335,7 +321,7 @@ public sealed partial class CbzFormat : IBookFormat
     /// Parses the metadata document, reporting CBZ-F001 before giving up.
     /// </summary>
     private static ComicInfoDocument Parse(
-        IContainer container, ContainerEntry entry, ICollection<Finding>? findings)
+        IContainer container, ContainerEntry entry)
     {
         try
         {
@@ -343,14 +329,7 @@ public sealed partial class CbzFormat : IBookFormat
         }
         catch (BookFormatException ex)
         {
-            findings?.Add(new Finding
-            {
-                RuleId = "CBZ-F001",
-                Severity = Severity.Fatal,
-                Message = ex.Message,
-                Location = entry.Name,
-            });
-
+            Log.Rule(LogLevel.Error, "CBZ-F001", ex.Message, entry.Name);
             throw;
         }
     }
@@ -464,30 +443,26 @@ public sealed partial class CbzFormat
     /// Reports where the metadata document is, or that there is none.
     /// </summary>
     private static void CheckLayout(
-        IContainer container, ContainerEntry? entry, ICollection<Finding> findings)
+        IContainer container, ContainerEntry? entry)
     {
         if (entry is null)
         {
             // Not a defect. Most comics in a collection have never been tagged,
             // and this is the message that explains what saving will do.
-            findings.Add(new Finding
-            {
-                RuleId = "CBZ-W010",
-                Severity = Severity.Warning,
-                Message = $"There is no '{ComicInfoDocument.DefaultEntryName}'. "
-                    + "One will be created when you save.",
-            });
+            Log.Rule(
+                LogLevel.Warning,
+                "CBZ-W010",
+                $"There is no '{ComicInfoDocument.DefaultEntryName}'. "
+                    + "One will be created when you save.");
         }
         else if (entry.Name.IndexOf('/') >= 0)
         {
-            findings.Add(new Finding
-            {
-                RuleId = "CBZ-E011",
-                Severity = Severity.Error,
-                Message = $"'{entry.Name}' is not at the archive root, so most readers "
+            Log.Rule(
+                LogLevel.Error,
+                "CBZ-E011",
+                $"'{entry.Name}' is not at the archive root, so most readers "
                     + "will not find it.",
-                Location = entry.Name,
-            });
+                entry.Name);
         }
 
         bool hasCoMet = container.Entries.Any(e =>
@@ -500,16 +475,13 @@ public sealed partial class CbzFormat
             // would mean parsing two more documents on open. Naming them is
             // enough for the user to know why two applications show different
             // titles for the same file.
-            findings.Add(new Finding
-            {
-                RuleId = "CBZ-W012",
-                Severity = Severity.Warning,
-                Message = "This archive carries more than one metadata convention "
+            Log.Rule(
+                LogLevel.Warning,
+                "CBZ-W012",
+                "This archive carries more than one metadata convention "
                     + $"({string.Join(" and ", Conventions(entry, hasCoMet, hasComicBookLover))}). "
                     + $"Only '{ComicInfoDocument.DefaultEntryName}' is written; the others are "
-                    + "left as they are, so applications reading them may disagree.",
-                Detail = hasComicBookLover ? "the ZIP comment also blocks saving" : null,
-            });
+                    + "left as they are, so applications reading them may disagree.");
         }
     }
 
@@ -544,8 +516,7 @@ public sealed partial class CbzFormat
     private static void CheckPages(
         IContainer container,
         ContainerEntry? entry,
-        ComicInfoDocument? document,
-        ICollection<Finding> findings)
+        ComicInfoDocument? document)
     {
         List<ContainerEntry> images = Images(container).ToList();
 
@@ -553,14 +524,12 @@ public sealed partial class CbzFormat
         {
             if (document.PageCount is { } declared && declared != images.Count)
             {
-                findings.Add(new Finding
-                {
-                    RuleId = "CBZ-E020",
-                    Severity = Severity.Error,
-                    Message = $"PageCount says {declared} but the archive holds "
+                Log.Rule(
+                    LogLevel.Error,
+                    "CBZ-E020",
+                    $"PageCount says {declared} but the archive holds "
                         + $"{images.Count} image{(images.Count == 1 ? "" : "s")}.",
-                    Location = entry!.Name,
-                });
+                    entry!.Name);
             }
 
             IReadOnlyList<int?> pages = document.PageImageIndexes;
@@ -568,27 +537,23 @@ public sealed partial class CbzFormat
             if (pages.Count > 0 &&
                 (pages.Count != images.Count || pages.Any(p => p is null || p < 0 || p >= images.Count)))
             {
-                findings.Add(new Finding
-                {
-                    RuleId = "CBZ-W021",
-                    Severity = Severity.Warning,
-                    Message = $"The <Pages> block describes {pages.Count} page(s) and does not "
+                Log.Rule(
+                    LogLevel.Warning,
+                    "CBZ-W021",
+                    $"The <Pages> block describes {pages.Count} page(s) and does not "
                         + $"match the {images.Count} image(s) in the archive.",
-                    Location = entry!.Name,
-                });
+                    entry!.Name);
             }
         }
 
         if (!SortsIntoReadingOrder(images))
         {
-            findings.Add(new Finding
-            {
-                RuleId = "CBZ-W022",
-                Severity = Severity.Warning,
-                Message = "The page filenames do not sort into reading order. Unpadded "
+            Log.Rule(
+                LogLevel.Warning,
+                "CBZ-W022",
+                "The page filenames do not sort into reading order. Unpadded "
                     + "numbers are the usual cause — '10.jpg' sorts before '2.jpg' — and "
-                    + "readers that sort by name will show the pages jumbled.",
-            });
+                    + "readers that sort by name will show the pages jumbled.");
         }
 
         List<string> extras = container.Entries
@@ -598,15 +563,9 @@ public sealed partial class CbzFormat
 
         if (extras.Count > 0)
         {
-            findings.Add(new Finding
-            {
-                RuleId = "CBZ-W023",
-                Severity = Severity.Warning,
-                Message = $"The archive holds {extras.Count} entr"
+            Log.Rule(LogLevel.Warning, "CBZ-W023", $"The archive holds {extras.Count} entr"
                     + (extras.Count == 1 ? "y" : "ies")
-                    + " that are neither images nor metadata.",
-                Detail = string.Join(", ", extras.Take(5)),
-            });
+                    + " that are neither images nor metadata.");
         }
     }
 
@@ -614,7 +573,7 @@ public sealed partial class CbzFormat
     /// Checks the fields whose content can be wrong on its own terms.
     /// </summary>
     private static void CheckFields(
-        ContainerEntry? entry, ComicInfoDocument? document, ICollection<Finding> findings)
+        ContainerEntry? entry, ComicInfoDocument? document)
     {
         if (document is null || entry is null)
         {
@@ -623,40 +582,31 @@ public sealed partial class CbzFormat
 
         if (document.Value("Number") is { } number && document.Value("Series") is null)
         {
-            findings.Add(new Finding
-            {
-                RuleId = "CBZ-W030",
-                Severity = Severity.Warning,
-                Message = $"Number is '{number}' but no Series is given, so a library will "
+            Log.Rule(
+                LogLevel.Warning,
+                "CBZ-W030",
+                $"Number is '{number}' but no Series is given, so a library will "
                     + "file this issue under no series at all.",
-                Location = entry.Name,
-                Detail = number,
-            });
+                entry.Name);
         }
 
         if (ImpossibleDate(document) is { } date)
         {
-            findings.Add(new Finding
-            {
-                RuleId = "CBZ-W031",
-                Severity = Severity.Warning,
-                Message = $"Year, Month and Day do not form a real date ({date}).",
-                Location = entry.Name,
-                Detail = date,
-            });
+            Log.Rule(
+                LogLevel.Warning,
+                "CBZ-W031",
+                $"Year, Month and Day do not form a real date ({date}).",
+                entry.Name);
         }
 
         if (document.Value("LanguageISO") is { } language && !IsIso639Part1(language))
         {
-            findings.Add(new Finding
-            {
-                RuleId = "CBZ-W032",
-                Severity = Severity.Warning,
-                Message = $"LanguageISO is '{language}', which is not an ISO 639-1 code. "
+            Log.Rule(
+                LogLevel.Warning,
+                "CBZ-W032",
+                $"LanguageISO is '{language}', which is not an ISO 639-1 code. "
                     + "The schema wants two letters, such as 'en' or 'fr'.",
-                Location = entry.Name,
-                Detail = language,
-            });
+                entry.Name);
         }
     }
 

@@ -134,27 +134,22 @@ public sealed partial class Fb2Format : IBookFormat
     /// <c>&lt;description&gt;</c> (FB2-F002).
     /// </exception>
     public BookMetadata Read(
-        IContainer container, ReadOptions? options = null, ICollection<Finding>? findings = null)
+        IContainer container, ReadOptions? options = null)
     {
         Throw.IfNull(container);
 
         options ??= ReadOptions.Default;
 
-        ContainerEntry entry = FindDocument(container, findings);
-        Fb2Document document = Parse(container, entry, findings);
+        ContainerEntry entry = FindDocument(container);
+        Fb2Document document = Parse(container, entry);
         BookMetadata metadata = document.ReadMetadata();
 
-        if (options.IncludeCover)
-        {
-            ReadCover(container, entry, document, metadata, findings);
-        }
+        bool coverFailedToDecode = options.IncludeCover
+            && ReadCover(container, entry, document, metadata);
 
-        if (findings is not null)
-        {
-            CheckRequiredMetadata(document, metadata, findings);
-            CheckEncoding(document, findings);
-            CheckCover(document, metadata, options, findings);
-        }
+        CheckRequiredMetadata(document, metadata);
+        CheckEncoding(document);
+        CheckCover(document, metadata, options, coverFailedToDecode);
 
         Log.Info(
             $"Read FictionBook metadata from '{entry.Name}': "
@@ -168,15 +163,14 @@ public sealed partial class Fb2Format : IBookFormat
     public void Write(
         IContainer container,
         BookMetadata metadata,
-        string targetPath,
-        ICollection<Finding>? findings = null)
+        string targetPath)
     {
         Throw.IfNull(container);
         Throw.IfNull(metadata);
         Throw.IfNullOrEmpty(targetPath);
 
-        ContainerEntry entry = FindDocument(container, findings: null);
-        Fb2Document document = Parse(container, entry, findings);
+        ContainerEntry entry = FindDocument(container);
+        Fb2Document document = Parse(container, entry);
 
         document.ApplyMetadata(metadata);
 
@@ -202,7 +196,7 @@ public sealed partial class Fb2Format : IBookFormat
     /// </summary>
     /// <exception cref="BookFormatException">The archive holds no FB2 document.</exception>
     private static ContainerEntry FindDocument(
-        IContainer container, ICollection<Finding>? findings)
+        IContainer container)
     {
         List<ContainerEntry> candidates = [.. container.Entries
             .Where(e => !e.IsDirectory &&
@@ -226,14 +220,11 @@ public sealed partial class Fb2Format : IBookFormat
 
         if (candidates.Count > 1)
         {
-            findings?.Add(new Finding
-            {
-                RuleId = "FB2-W020",
-                Severity = Severity.Warning,
-                Message = $"The archive holds {candidates.Count} FictionBook documents; "
-                    + $"'{candidates[0].Name}' is the one being edited.",
-                Detail = string.Join(", ", candidates.Select(c => c.Name)),
-            });
+            Log.Rule(
+                LogLevel.Warning,
+                "FB2-W020",
+                $"The archive holds {candidates.Count} FictionBook documents; "
+                    + $"'{candidates[0].Name}' is the one being edited.");
         }
 
         return candidates[0];
@@ -243,7 +234,7 @@ public sealed partial class Fb2Format : IBookFormat
     /// Parses the document, reporting FB2-F001 or FB2-F002 before giving up.
     /// </summary>
     private static Fb2Document Parse(
-        IContainer container, ContainerEntry entry, ICollection<Finding>? findings)
+        IContainer container, ContainerEntry entry)
     {
         try
         {
@@ -251,16 +242,13 @@ public sealed partial class Fb2Format : IBookFormat
         }
         catch (BookFormatException ex)
         {
-            findings?.Add(new Finding
-            {
-                RuleId = ex.Message.Contains("<description>", StringComparison.Ordinal)
+            Log.Rule(
+                LogLevel.Error,
+                ex.Message.Contains("<description>", StringComparison.Ordinal)
                     ? "FB2-F002"
                     : "FB2-F001",
-                Severity = Severity.Fatal,
-                Message = ex.Message,
-                Location = entry.Name,
-            });
-
+                ex.Message,
+                entry.Name);
             throw;
         }
     }
@@ -274,16 +262,21 @@ public sealed partial class Fb2Format : IBookFormat
     /// done when a cover was asked for: the batch grid reads three hundred books
     /// with <c>ReadOptions.WithoutCover</c> and never walks a single one of them.
     /// </remarks>
-    private static void ReadCover(
+    /// <returns>
+    /// <see langword="true"/> when a declared cover was found but would not decode,
+    /// which is FB2-W031. The caller needs to know, because a missing cover and an
+    /// undecodable one are different defects and only the first is FB2-E030 —
+    /// reporting both for one broken image would be telling the user twice.
+    /// </returns>
+    private static bool ReadCover(
         IContainer container,
         ContainerEntry entry,
         Fb2Document document,
-        BookMetadata metadata,
-        ICollection<Finding>? findings)
+        BookMetadata metadata)
     {
         if (document.CoverImageId() is not { } id)
         {
-            return;
+            return false;
         }
 
         var settings = new XmlReaderSettings
@@ -320,21 +313,23 @@ public sealed partial class Fb2Format : IBookFormat
                     SourceManifestId = id,
                 };
 
-                return;
+                return false;
             }
         }
         catch (Exception ex) when (ex is XmlException or FormatException)
         {
             // A cover that will not decode is not a reason to refuse the file. The
             // metadata is all still readable, and the rule below says what is wrong.
-            findings?.Add(new Finding
-            {
-                RuleId = "FB2-W031",
-                Severity = Severity.Warning,
-                Message = $"The cover image '{id}' could not be decoded: {ex.Message}",
-                Location = entry.Name,
-            });
+            Log.Rule(
+                LogLevel.Warning,
+                "FB2-W031",
+                $"The cover image '{id}' could not be decoded: {ex.Message}",
+                entry.Name);
+
+            return true;
         }
+
+        return false;
     }
 
 }
@@ -355,7 +350,7 @@ public sealed partial class Fb2Format
     /// Checks the fields a FictionBook is required to carry.
     /// </summary>
     private static void CheckRequiredMetadata(
-        Fb2Document document, BookMetadata metadata, ICollection<Finding> findings)
+        Fb2Document document, BookMetadata metadata)
     {
         string location = document.EntryName;
         XElement? titleInfo = document.Description.Elements()
@@ -363,74 +358,62 @@ public sealed partial class Fb2Format
 
         if (titleInfo is null)
         {
-            findings.Add(new Finding
-            {
-                RuleId = "FB2-E010",
-                Severity = Severity.Error,
-                Message = "There is no <title-info>, which is where a FictionBook keeps "
+            Log.Rule(
+                LogLevel.Error,
+                "FB2-E010",
+                "There is no <title-info>, which is where a FictionBook keeps "
                     + "everything about the book itself.",
-                Location = location,
-            });
-
+                location);
             return;
         }
 
         if (string.IsNullOrWhiteSpace(metadata.Title))
         {
-            findings.Add(new Finding
-            {
-                RuleId = "FB2-E011",
-                Severity = Severity.Error,
-                Message = "<book-title> is missing or empty, so readers have no title to "
+            Log.Rule(
+                LogLevel.Error,
+                "FB2-E011",
+                "<book-title> is missing or empty, so readers have no title to "
                     + "show but the file name.",
-                Location = location,
-            });
+                location);
         }
 
         if (metadata.Language is not { } language || string.IsNullOrWhiteSpace(language))
         {
-            findings.Add(new Finding
-            {
-                RuleId = "FB2-E012",
-                Severity = Severity.Error,
-                Message = "<lang> is missing. The schema requires it, and readers use it "
+            Log.Rule(
+                LogLevel.Error,
+                "FB2-E012",
+                "<lang> is missing. The schema requires it, and readers use it "
                     + "for hyphenation and sorting.",
-                Location = location,
-            });
+                location);
         }
         else if (!MetadataFields.IsPlausibleLanguageTag(language))
         {
-            findings.Add(new Finding
-            {
-                RuleId = "FB2-W013",
-                Severity = Severity.Warning,
-                Message = $"<lang> is '{language}', which is not a plausible language code. "
+            Log.Rule(
+                LogLevel.Warning,
+                "FB2-W013",
+                $"<lang> is '{language}', which is not a plausible language code. "
                     + "Two or three letters is what readers expect — 'en', 'ru', 'fr'.",
-                Location = location,
-                Detail = language,
-            });
+                location);
         }
 
         if (!metadata.PrimaryCreators.Any())
         {
-            findings.Add(new Finding
-            {
-                RuleId = "FB2-W014",
-                Severity = Severity.Warning,
-                Message = "There is no <author>. The schema requires at least one, and a "
+            Log.Rule(
+                LogLevel.Warning,
+                "FB2-W014",
+                "There is no <author>. The schema requires at least one, and a "
                     + "library will file this book under no author at all.",
-                Location = location,
-            });
+                location);
         }
 
-        CheckSequence(titleInfo, location, findings);
+        CheckSequence(titleInfo, location);
     }
 
     /// <summary>
     /// Reports a series position that is not a number.
     /// </summary>
     private static void CheckSequence(
-        XElement titleInfo, string location, ICollection<Finding> findings)
+        XElement titleInfo, string location)
     {
         foreach (XElement sequence in titleInfo.Elements()
             .Where(e => e.Name.LocalName == "sequence"))
@@ -447,32 +430,27 @@ public sealed partial class Fb2Format
                 continue;
             }
 
-            findings.Add(new Finding
-            {
-                RuleId = "FB2-W060",
-                Severity = Severity.Warning,
-                Message = $"The series position is '{number}', which is not a number, so "
+            Log.Rule(
+                LogLevel.Warning,
+                "FB2-W060",
+                $"The series position is '{number}', which is not a number, so "
                     + "readers that sort a series numerically will not place this book.",
-                Location = location,
-                Detail = number,
-            });
+                location);
         }
     }
 
     /// <summary>
     /// Reports bytes that do not match what the declaration claims.
     /// </summary>
-    private static void CheckEncoding(Fb2Document document, ICollection<Finding> findings)
+    private static void CheckEncoding(Fb2Document document)
     {
         if (document.Encoding is { DeclarationMatchesBytes: false, Mismatch: { } mismatch })
         {
-            findings.Add(new Finding
-            {
-                RuleId = "FB2-E050",
-                Severity = Severity.Error,
-                Message = $"The declared encoding does not match the bytes: {mismatch}",
-                Location = document.EntryName,
-            });
+            Log.Rule(
+                LogLevel.Error,
+                "FB2-E050",
+                $"The declared encoding does not match the bytes: {mismatch}",
+                document.EntryName);
         }
     }
 
@@ -489,36 +467,31 @@ public sealed partial class Fb2Format
         Fb2Document document,
         BookMetadata metadata,
         ReadOptions options,
-        ICollection<Finding> findings)
+        bool coverFailedToDecode)
     {
         string? id = document.CoverImageId();
 
         if (id is null)
         {
-            findings.Add(new Finding
-            {
-                RuleId = "FB2-W032",
-                Severity = Severity.Warning,
-                Message = "No cover is declared, so readers will show this book with a "
+            Log.Rule(
+                LogLevel.Warning,
+                "FB2-W032",
+                "No cover is declared, so readers will show this book with a "
                     + "blank or generated one.",
-                Location = document.EntryName,
-            });
-
+                document.EntryName);
             return;
         }
 
-        if (options.IncludeCover && metadata.Cover is null &&
-            !findings.Any(f => f.RuleId == "FB2-W031"))
+        // Not when the image merely failed to decode: FB2-W031 has already said so,
+        // and the binary it points at is plainly there.
+        if (options.IncludeCover && metadata.Cover is null && !coverFailedToDecode)
         {
-            findings.Add(new Finding
-            {
-                RuleId = "FB2-E030",
-                Severity = Severity.Error,
-                Message = $"The cover page points at '{id}', but the document has no "
+            Log.Rule(
+                LogLevel.Error,
+                "FB2-E030",
+                $"The cover page points at '{id}', but the document has no "
                     + $"<binary> with that id.",
-                Location = document.EntryName,
-                Detail = id,
-            });
+                document.EntryName);
         }
     }
 

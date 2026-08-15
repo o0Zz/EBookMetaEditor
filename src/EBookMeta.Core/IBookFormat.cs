@@ -95,12 +95,8 @@ public interface IBookFormat
     /// parameter exists so a single-file editor never has to say so, while a batch
     /// read can ask for metadata without covers.
     /// </param>
-    /// <param name="findings">
-    /// Collects what the read noticed, by stable rule ID. <see langword="null"/>
-    /// discards them — a caller that only wants the metadata need not care.
-    /// </param>
     BookMetadata Read(
-        IContainer container, ReadOptions? options = null, ICollection<Finding>? findings = null);
+        IContainer container, ReadOptions? options = null);
 
     /// <summary>
     /// Writes metadata, producing a complete new file at
@@ -115,15 +111,10 @@ public interface IBookFormat
     /// <exception cref="NotSupportedException">
     /// <see cref="FormatCapabilities.CanWrite"/> is <see langword="false"/>.
     /// </exception>
-    /// <param name="findings">
-    /// Collects what the write corrected, by stable rule ID. <see langword="null"/>
-    /// discards them.
-    /// </param>
     void Write(
         IContainer container,
         BookMetadata metadata,
-        string targetPath,
-        ICollection<Finding>? findings = null);
+        string targetPath);
 }
 
 /// <summary>How sure a format is that a file is one of its own.</summary>

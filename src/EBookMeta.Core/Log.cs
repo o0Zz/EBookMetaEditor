@@ -121,20 +121,33 @@ public static class Log
         Write(LogLevel.Error, $"{message} — {exception.GetType().Name}: {exception.Message}");
     }
 
-    /// <summary>Logs a validation finding at a level matching its severity.</summary>
-    /// <param name="finding">The finding to record.</param>
-    public static void Finding(Finding finding)
+    /// <summary>Logs a validation rule firing, at the point it was noticed.</summary>
+    /// <param name="level">
+    /// <see cref="LogLevel.Warning"/> for a defect the file survives or a save
+    /// corrects, <see cref="LogLevel.Error"/> for one that makes some reader get
+    /// the file wrong or stops it opening at all.
+    /// </param>
+    /// <param name="ruleId">
+    /// The stable rule identifier — <c>EPUB-E020</c>, <c>CBZ-W021</c>. The part
+    /// users paste into bug reports and search for, so it comes first in the line.
+    /// </param>
+    /// <param name="message">What is wrong, in words. States the problem, not the fix.</param>
+    /// <param name="location">
+    /// The container entry it is attributable to, or <see langword="null"/> when it
+    /// belongs to the file as a whole.
+    /// </param>
+    /// <remarks>
+    /// Rules log straight here rather than being collected and published later.
+    /// There is no findings type and no sink to thread through <c>Read</c> and
+    /// <c>Write</c>: a rule that fires says so, once, where it fired.
+    /// </remarks>
+    public static void Rule(LogLevel level, string ruleId, string message, string? location = null)
     {
-        Throw.IfNull(finding);
+        Throw.IfNullOrEmpty(ruleId);
 
-        LogLevel level = finding.Severity switch
-        {
-            Severity.Fatal or Severity.Error => LogLevel.Error,
-            Severity.Warning => LogLevel.Warning,
-            _ => LogLevel.Info,
-        };
-
-        Write(level, finding.ToString());
+        Write(level, location is null
+            ? $"{ruleId}: {message}"
+            : $"{ruleId}: {message} ({location})");
     }
 
     /// <summary>Renders an optional field's value for a log line.</summary>
