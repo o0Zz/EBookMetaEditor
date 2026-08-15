@@ -1,6 +1,5 @@
 using System.Globalization;
 using EBookMeta.Xml;
-using EBookMeta.Formats;
 using EBookMeta.Model;
 
 namespace EBookMeta;

@@ -24,9 +24,9 @@ public interface IContainer : IDisposable
     /// <see langword="false"/> for RAR, and callers must handle that rather
     /// than assume. RAR compression is proprietary: SharpCompress reads but
     /// cannot write, and the UnRAR binary's licence forbids using it to build a
-    /// compatible compressor. This is not a bug to work around — the correct
-    /// response to a CBR is to offer conversion to CBZ as an explicit user
-    /// choice, surfaced by rule GEN-W004.
+    /// compatible compressor. This is not a bug to work around: a CBR would open
+    /// into an editor that cannot save, so no container is registered for one at
+    /// all and <c>Book.Load</c> refuses it by name as GEN-W004.
     /// </remarks>
     bool IsWritable { get; }
 
@@ -62,6 +62,48 @@ public interface IContainer : IDisposable
     /// </exception>
     /// <exception cref="BookIoException">The target could not be written.</exception>
     void Rebuild(IEnumerable<PendingEntry> entries, string targetPath);
+}
+
+/// <summary>
+/// The physical container a file turned out to be, independent of the metadata
+/// document inside it.
+/// </summary>
+/// <remarks>
+/// The container half of the two axes, and the answer <see cref="BookContainers.Sniff"/>
+/// gives. It lives here rather than beside <see cref="FormatId"/> because several
+/// formats share one container — EPUB and CBZ are both ZIP, MOBI and AZW3 are both
+/// PalmDB — so which container the bytes are is never the same question as which
+/// format they hold. <see cref="BookContainers.Open"/> maps it to an
+/// <see cref="IContainer"/> implementation.
+/// <para>
+/// <see cref="Rar"/> and <see cref="SevenZip"/> are named and never opened. This
+/// build recognises both so it can tell a user their <c>.cbz</c> is really a RAR,
+/// which costs a few magic-number comparisons; opening one would cost a container
+/// implementation, and neither can be written at all.
+/// </para>
+/// </remarks>
+public enum ContainerKind
+{
+    /// <summary>Not recognised.</summary>
+    Unknown = 0,
+
+    /// <summary>A single unarchived file.</summary>
+    Raw,
+
+    /// <summary>ZIP.</summary>
+    Zip,
+
+    /// <summary>RAR, versions 4 and 5. Readable, never writable.</summary>
+    Rar,
+
+    /// <summary>7z.</summary>
+    SevenZip,
+
+    /// <summary>TAR.</summary>
+    Tar,
+
+    /// <summary>PalmDB, the record container behind MOBI and AZW.</summary>
+    PalmDb,
 }
 
 /// <summary>

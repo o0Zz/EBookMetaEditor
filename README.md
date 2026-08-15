@@ -75,14 +75,20 @@ A few of these are worth explaining:
 
 ## Checking and repair
 
-Every file is checked as it opens — no button, no "validate" step. Structural and
-semantic problems are reported by a stable rule ID (`EPUB-E020`, `CBZ-E020`,
-`MOBI-W012`, …) in the log, under the **?** menu.
+There is no button and no "validate" step, and deliberately no list of everything
+wrong with your file. A checker that reports forty defects and repairs none is
+worse than a tool that quietly fixes the four it can prove, so this one only ever
+says something when it has done something — every repair, refusal and mismatch gets
+a stable rule ID (`EPUB-E040`, `CBZ-E020`, `GEN-W002`, …) in the log, under the
+**?** menu.
 
 Broken XML is repaired **in memory** so a file no other tool will load becomes
 editable. Nothing reaches your disk until you press Save, and saving writes the
-repair along with your edits — plus anything else it can *prove* wrong, like a
-comic's page count recomputed from the images actually in the archive.
+repair along with your edits — plus anything else it can *prove* wrong: a comic's
+page count recomputed from the images actually in the archive, an EPUB's `mimetype`
+put back where the specification requires it, a table of contents brought back into
+line with the package. Provable is the bar. A missing title is not repaired, because
+nothing in the file says what it should have been.
 
 Saving a file you did not edit gives you back byte-for-byte the same file. That is
 tested for every format.
@@ -150,29 +156,45 @@ Those two axes are two interfaces, and they sit at the root of `EBookMeta.Core`
 so the shape is visible at a glance:
 
 ```
-EBookMeta.Core   all logic — containers, formats, validation, repair.
-                No UI dependencies whatsoever.
-  IBookFormat     what a metadata document can do: Read, Write
-  IContainer      what a file of named entries can do: Entries, OpenRead, Rebuild
-  BookFormats     registry of IBookFormat: which one opens which format
-  BookContainers  factory for IContainer: which one a file gets
-  Book            one open file: Load and Save, and what they noticed
-  Containers/     ZipContainer (with its own central-directory reader),
-                  TarContainer, PalmDbContainer, RawContainer
-  Formats/        EpubFormat, CbzFormat, Fb2Format, MobiFormat — each X.cs
-                  (read/write) plus X.Rules.cs (the validation rules);
-                  FormatDetector, capabilities
-  Documents/      OPF, ComicInfo, FictionBook, MOBI/EXTH, and the XML-fidelity
-                  plumbing beneath them
-  Model/          BookMetadata and friends
-  BatchSession    many files read, edited and saved together
-  MetadataFields  what a field looks like in a box, shared by both editors
-  NamespaceRepair recovery of missing xmlns declarations
-  Log             the session log, shown in the ? menu
-EBookMeta.App    WinForms UI, single instance, receives paths in argv.
-                One window per file, one grid for many. Also owns context-menu
-                registration, from its Settings form.
+EBookMeta.Core       all logic — containers, formats, repair.
+                     No UI dependencies whatsoever.
+  README.md            where to start reading, and in what order
+
+  IBookFormat.cs       axis 1, the metadata document: TryOpen, Read, Write,
+                       plus the vocabulary they are spoken in — FormatId,
+                       FormatCapabilities, ReadOptions, BookSource, FormatClaim
+  Formats/             one file per format, and nothing else:
+                       EpubFormat, CbzFormat, Fb2Format, MobiFormat
+  BookFormats.cs       registry of axis 1, and the open path
+
+  IContainer.cs        axis 2, the physical file: Entries, OpenRead, Rebuild,
+                       plus its vocabulary — ContainerKind, ContainerEntry,
+                       PendingEntry
+  Containers/          one file per container, and nothing else:
+                       ZipContainer (with its own central-directory reader),
+                       TarContainer, PalmDbContainer, RawContainer
+  BookContainers.cs    factory for axis 2, and the magic-number sniff
+
+  Book.cs              one open file: Load and Save, and what they noticed
+  BatchSession.cs      many files read, edited and saved together
+  MetadataFields.cs    what a field looks like in a box, shared by both editors
+  AtomicFileWriter.cs  the only sanctioned way a user's file is replaced
+  BookExceptions.cs    the three typed failures Core throws
+  Log.cs               the session log, shown in the ? menu
+  Compat.cs            everything net48 lacks, in one file
+  Xml/                 encoding detection and exact-fidelity XML writing
+  Model/               BookMetadata and friends
+
+EBookMeta.App        WinForms UI, single instance, receives paths in argv.
+                     One window per file, one grid for many. Also owns
+                     context-menu registration, from its Settings form.
 ```
+
+The two axes are laid out identically on purpose: a seam file holding an interface
+and its whole vocabulary, a folder of implementations beside it, and a registry that
+picks one. Learning either axis teaches you the other. `ls Formats/` is the answer
+to "what does this build support" and `ls Containers/` to "how does it read them",
+so both are kept free of anything that is not an implementation.
 
 Adding a format is one `IBookFormat` and one `BookFormats.Register` call. The UI
 asks the registry which format to use and never names one, so nothing in the

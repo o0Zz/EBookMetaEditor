@@ -1,4 +1,3 @@
-using EBookMeta.Formats;
 
 namespace EBookMeta;
 

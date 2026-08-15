@@ -19,10 +19,6 @@ Sigil, ComicTagger or epub-metadata-editor:
    everything that is wrong with a file — a checker that reports forty defects and
    repairs none is a worse tool than one that quietly fixes four. See **Repairs**.
 
-Non-goals: reading books, editing content/XHTML/CSS, format conversion, DRM,
-library management, page-image processing. If a feature request drifts toward
-"become calibre", push back.
-
 ## Format support
 
 Two independent axes — **container** and **metadata document**. Keep them
@@ -47,30 +43,6 @@ already there and cost nothing but a registration. MOBI cost both halves at once
 needs a new one is a project.** Each of `CbzFormat`, `Fb2Format` and `MobiFormat` is
 registered twice, once per `FormatId`, and none of them names a container.
 
-**Explicitly out of scope**, say so rather than attempting: CBR, CB7, KFX, AZW4,
-PDF, LIT, PDB, RB, DjVu, audiobook formats.
-
-Do not add one of these because it "looks close to" something supported. PDF needs
-incremental update, KFX is a proprietary Ion container, LIT has no implementation
-outside GPL projects, and `.pdb` is not one format but a family of them — PalmDoc,
-eReader, Plucker — that happen to share a container with MOBI. Each is a project of
-its own, and none is in scope.
-
-**CBR and CB7 are the ones to keep saying no to**, because they look like the CBT
-change and are not. SharpCompress reads RAR and 7z and writes neither: RAR
-compression is proprietary and the UnRAR licence forbids building a compatible
-compressor, and no 7z writer ships here. Either one would open into an editor that
-cannot save, which is not this product. Their fixtures could not be generated
-either, so the corpus rule would break with them.
-
-**Detection is not support, and the difference matters.** `BookContainers.Sniff`
-recognises RAR and 7z, and `BookFormats` names them and PDF, and both must keep
-doing so — they are the answers no registered format is there to give. A
-`.cbz` that is really a RAR archive is extremely common, and telling the user
-that (`GEN-W002`) is one of this tool's headline features. Recognising a format
-well enough to name it costs a few magic-number comparisons; supporting it costs
-a container implementation. Name them; do not open them.
-
 Secondary metadata conventions in comic archives, in priority order:
 `ComicInfo.xml` (ComicRack schema — the de facto standard, used by Komga,
 Kavita, ComicTagger), then CoMet (`comet.xml`), then the ComicBookLover JSON
@@ -79,10 +51,12 @@ preserve the others untouched.
 
 Note on that last point: `System.IO.Compression` cannot write a ZIP archive
 comment, so a CBZ carrying a ComicBookLover blob cannot be rebuilt with it
-intact. **Resolved by refusing:** `CbzFormat.Write` throws rather than saving
-such a file, and `CBZ-W012` reports the blob on open. Losing a user's
-ComicBookLover metadata to a title edit is not a trade this tool makes on their
-behalf, and a warning they can dismiss is not consent.
+intact. **Resolved by refusing:** `CbzFormat.Write` logs `CBZ-W012` and throws
+rather than saving such a file. Note that it fires on write, not on open — nothing
+is wrong with the file until a save would drop something, and reading one is
+perfectly safe. Losing a user's ComicBookLover metadata to a title edit is not a
+trade this tool makes on their behalf, and a warning they can dismiss is not
+consent.
 
 ## Target and deployment
 
@@ -107,13 +81,16 @@ behalf, and a warning they can dismiss is not consent.
 EBookMeta.sln
 src/
   EBookMeta.Core/       net48          — all logic. ZERO UI dependencies.
+    README.md           ── where to start reading, and in what order
     IBookFormat.cs      ── seam 1: the metadata-document axis.
                            TryOpen / Read / Write / Extensions, plus the
-                           vocabulary they are spoken in: BookSource,
-                           FormatClaim, MatchConfidence
+                           vocabulary they are spoken in: FormatId,
+                           FormatIdExtensions, MetadataField, FormatCapabilities,
+                           ReadOptions, BookSource, FormatClaim, MatchConfidence
     IContainer.cs       ── seam 2: the physical axis. Entries / OpenRead / Rebuild,
-                           plus the vocabulary it is spoken in: ContainerEntry,
-                           PendingEntry, SectionStream, ReadAllBytes
+                           plus the vocabulary it is spoken in: ContainerKind,
+                           ContainerEntry, PendingEntry, ZipCompressionMethods,
+                           SectionStream, ReadAllBytes
     BookFormats.cs         registry of seam 1, and the open path: Register / For /
                            TryOpen / Identify / FromExtension + DetectedFormat
     BookContainers.cs      factory for seam 2: Open / IsSupported / Sniff
@@ -132,9 +109,7 @@ src/
                        EpubFormat (+ OPF, container.xml, xmlns repair),
                        CbzFormat (CBZ + CBT, + ComicInfo.xml),
                        Fb2Format (FB2 + FB2.ZIP, + the FictionBook document),
-                       MobiFormat (MOBI/PRC + AZW/AZW3, + the EXTH document);
-                       then the small shared vocabulary they are asked in:
-                       FormatCapabilities, FormatId, ReadOptions
+                       MobiFormat (MOBI/PRC + AZW/AZW3, + the EXTH document)
     Xml/               the plumbing XDocument makes necessary, shared by every
                        XML format: XmlEncodingDetector, XmlSourceFormat,
                        XmlExactWriter
@@ -163,13 +138,24 @@ files names a concrete implementation. `Book.Load` opens an `IContainer`, never 
 **One file per format, one file per container. This is the layout rule that
 matters most, and it is not about tidiness.** `ls Formats/` is the answer to "what
 does this build support", and `ls Containers/` is the answer to "how does it read
-them". A format that spilled across `EpubFormat.cs`, `EpubFormat.Rules.cs`,
-`OpfDocument.cs`, `ContainerXml.cs` and a sniffer in a sixth file made both
-questions require a search, and made "what does EPUB depend on" unanswerable
-without reading five files. Each format file is now long — EPUB is around 2500
-lines — and that is the accepted cost. **Do not split one back out.** If a format
-file feels unwieldy, the fix is `#region`-free ordering and good headers within
-it, not a second file.
+them". Both folders hold implementations and nothing else, so both questions are
+answered by a directory listing rather than by a search. Each format file is long —
+EPUB is around 1900 lines — and that is the accepted cost. **Do not split one back
+out**, and do not park a shared type in the folder either: `FormatId`,
+`FormatCapabilities` and `ReadOptions` used to sit in `Formats/`, which made `ls`
+return seven entries for four formats and cost the folder the one job it has.
+
+**The two axes are laid out identically, and that symmetry is the thing to
+preserve.** Each seam file holds its interface *and the whole vocabulary that seam
+is spoken in*; each folder beside it holds implementations and nothing else.
+`IBookFormat.cs` + `Formats/` mirrors `IContainer.cs` + `Containers/` line for
+line, so learning one axis teaches you the other. A new shared type goes in the
+seam file for its axis — and which axis it belongs to is decided by which registry
+consumes it, not by which folder is closest. `ContainerKind` lived in
+`Formats/FormatId.cs` for a while, which forced `BookContainers` — the container
+registry — to import the format namespace to reach an enum it owns. That is the
+axis conflation this document warns about in its second paragraph, arriving as a
+file path rather than as a type.
 
 **A file gets a folder only when several files share a subject.** `Xml/` holds the
 three helpers every XML format needs and `Model/` the metadata types; both earn
@@ -194,8 +180,7 @@ part of implementing it rather than a second edit in a sniffer somewhere else.
 
 ### Opening a file: every format is asked
 
-There is no sniffer. `BookFormats.TryOpen` offers the file to every registered
-format and the strongest `FormatClaim` wins:
+`BookFormats.TryOpen` offers the file to every registered format and the strongest `FormatClaim` wins:
 
 ```csharp
 using BookSource? source = BookFormats.TryOpen(path, out DetectedFormat detected);
@@ -480,11 +465,9 @@ Not style preferences. Violating these corrupts users' libraries.
 2. **Never open an archive with `ZipArchiveMode.Update`.**
 3. Entries other than the metadata document are copied **byte for byte**.
    Never round-trip XHTML, CSS or images through a parser.
-4. **Preserve entry order and per-entry compression method.** Do not re-sort,
-   do not recompress. Detect stored vs deflated on read and reproduce it.
-5. Reject and report absolute paths and `..` traversal in entry names and
+4. Reject and report absolute paths and `..` traversal in entry names and
    manifest hrefs rather than following them.
-6. **Round-tripping a valid file is a no-op**: open it, save without editing, get
+5. **Round-tripping a valid file is a no-op**: open it, save without editing, get
    identical bytes. There is a test per format; keep them green.
 
    An *invalid* file round-trips to a corrected one, and that is the point rather
@@ -576,13 +559,6 @@ tar 1.34 — while `ZipContainer` can only promise to reproduce its own.
 
 ## Logging
 
-The window has **no findings panel**. Rules, repairs and failures go to the
-session log, reachable from the **?** menu, which also holds the About box.
-
-The reasoning: a metadata editor is used for twenty seconds at a time, and a
-permanent panel that usually reads "nothing to report" is furniture. A log is
-what you want *after* something looked wrong, not while you are typing a title.
-
 - `Log.Info` for progress — a file opened, a file saved, entries written.
 - `Log.Warning` for anything handled but notable, **including every repair**. A
   repair must never be silent: it is the one thing that changes a user's file
@@ -634,11 +610,21 @@ user's file without them asking and must never be silent.
 |---|---|
 | EPUB-F001 / F002 | The OPF or `container.xml` cannot be parsed or located |
 | CBZ-F001 | `ComicInfo.xml` is present but not well-formed |
+| CBZ-W012 | The archive carries a ZIP comment a rebuild cannot write back |
 | FB2-F001 / F002 | Not well-formed, or no `<description>` to edit |
 | MOBI-F001 | No MOBI header in record 0 |
 | MOBI-F002 | The text is DRM-encrypted |
 | GEN-W002 | The extension disagrees with the content |
 | GEN-W004 | The format is recognised but unsupported |
+
+**GEN-E003 is the one rule that only reports, and hard invariant 5 is why it is
+allowed to.** An entry name that is absolute or contains `..` is logged by
+`Book.Load` and nothing else happens: there is no correction, because nothing in
+the file says what the name should have been, and no refusal, because the entry is
+never followed. Core reads entries into memory and rebuilds archives; it does not
+extract to disk, so "do not follow it" is true by construction and the rule exists
+to say what was seen. Do not treat it as precedent for report-only rules — it is
+the exception the invariant names, not a door left open.
 
 **MOBI-F002 is a refusal, not a warning.** DRM is a non-goal, and rewriting the
 header of an encrypted book produces a file no reader will open — so the read

@@ -1,7 +1,6 @@
 using System.Text;
 using System.Threading;
 using EBookMeta.Containers;
-using EBookMeta.Formats;
 using EBookMeta.Tests.Builders;
 using Xunit;
 

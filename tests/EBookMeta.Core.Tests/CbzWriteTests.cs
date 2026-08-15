@@ -350,11 +350,20 @@ public sealed class CbzWriteTests
             Assert.Equal("{\"appID\":\"ComicBookLover\"}", container.ArchiveComment);
         }
 
+        Log.Clear();
+
         BookFormatException error = Assert.Throws<BookFormatException>(
             () => Write(source, target, m => m.Title = "Anything"));
 
         Assert.Contains("ComicBookLover", error.Message, StringComparison.Ordinal);
         Assert.False(File.Exists(target));
+
+        // A refusal says which rule refused. It fires on write rather than on
+        // open: nothing is wrong with the file until a save would drop something.
+        Assert.Contains(
+            Log.Entries,
+            e => e.Level == LogLevel.Error
+                && e.Message.StartsWith("CBZ-W012:", StringComparison.Ordinal));
     }
 
     /// <summary>

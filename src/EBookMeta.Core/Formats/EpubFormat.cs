@@ -108,7 +108,7 @@ public sealed partial class EpubFormat : IBookFormat
         {
             return OpfDocument.Parse(bytes, entry.Name);
         }
-        catch (BookFormatException)
+        catch (BookFormatException ex)
         {
             // Recoverable damage is corrected here, on the way in, so every
             // caller downstream gets a document that parses. Read shows the user
@@ -131,6 +131,7 @@ public sealed partial class EpubFormat : IBookFormat
                         + "are undeclared and no known namespace applies to them.");
                 }
 
+                Log.Rule(LogLevel.Error, "EPUB-F001", ex.Message, entry.Name);
                 throw;
             }
 
@@ -173,6 +174,23 @@ public sealed partial class EpubFormat : IBookFormat
     /// points at an entry that is not in the archive. Surfaced as EPUB-F002.
     /// </exception>
     private static ContainerEntry LocatePackageDocument(IContainer container)
+    {
+        try
+        {
+            return ResolvePackageDocument(container);
+        }
+        catch (BookFormatException ex)
+        {
+            Log.Rule(LogLevel.Error, "EPUB-F002", ex.Message, ContainerEntryName);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Does the work of <see cref="LocatePackageDocument"/>, which reports
+    /// EPUB-F002 over the top of it.
+    /// </summary>
+    private static ContainerEntry ResolvePackageDocument(IContainer container)
     {
         ContainerEntry? entry = FindEntry(container, ContainerEntryName)
             ?? throw new BookFormatException($"'{ContainerEntryName}' is missing.", ContainerEntryName);

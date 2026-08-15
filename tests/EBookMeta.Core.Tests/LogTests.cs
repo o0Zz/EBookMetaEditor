@@ -249,4 +249,62 @@ public sealed class LogTests : IDisposable
 
         Assert.Contains(Log.Entries, e => e.Level == LogLevel.Warning && e.Message.Contains("extension"));
     }
+
+    [Fact]
+    public void A_recognised_but_unsupported_format_is_logged_as_GEN_W004()
+    {
+        using var temp = new TempDir();
+
+        // Named .cbr, and really a RAR — so the extension agrees with the content
+        // and GEN-W002 stays silent. What is left is the answer no registered
+        // format can give: this build knows what the file is and cannot edit it.
+        string path = temp.File("comic.cbr");
+        File.WriteAllBytes(
+            path,
+            [.. Encoding.ASCII.GetBytes("Rar!\x1a\x07\x00"), .. new byte[64]]);
+
+        Log.Clear();
+
+        Assert.Throws<UnsupportedFormatException>(() => Book.Load(path));
+
+        LogEntry rule = Assert.Single(Log.Entries, e => e.Message.StartsWith("GEN-W004:", StringComparison.Ordinal));
+
+        Assert.Equal(LogLevel.Error, rule.Level);
+        Assert.Contains("CBR", rule.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(Log.Entries, e => e.Message.StartsWith("GEN-W002:", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void An_unparsable_package_document_is_logged_as_EPUB_F001()
+    {
+        using var temp = new TempDir();
+        string path = new EpubBuilder()
+            .WithOpf(EpubBuilder.OpfUnknownPrefix)
+            .WriteTo(temp.File("unparsable-opf.epub"));
+
+        Log.Clear();
+
+        Assert.Throws<BookFormatException>(() => Book.Load(path));
+
+        LogEntry rule = Assert.Single(Log.Entries, e => e.Message.StartsWith("EPUB-F001:", StringComparison.Ordinal));
+
+        Assert.Equal(LogLevel.Error, rule.Level);
+    }
+
+    [Fact]
+    public void A_missing_container_xml_is_logged_as_EPUB_F002()
+    {
+        using var temp = new TempDir();
+        string path = new EpubBuilder()
+            .WithContainerXml(null)
+            .WriteTo(temp.File("no-container-xml.epub"));
+
+        Log.Clear();
+
+        Assert.Throws<BookFormatException>(() => Book.Load(path));
+
+        LogEntry rule = Assert.Single(Log.Entries, e => e.Message.StartsWith("EPUB-F002:", StringComparison.Ordinal));
+
+        Assert.Equal(LogLevel.Error, rule.Level);
+    }
 }

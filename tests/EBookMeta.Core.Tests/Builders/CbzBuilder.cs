@@ -1,6 +1,5 @@
 using System.Text;
 using EBookMeta.Containers;
-using EBookMeta.Formats;
 
 namespace EBookMeta.Tests.Builders;
 

@@ -1,5 +1,4 @@
 using EBookMeta.Containers;
-using EBookMeta.Formats;
 using EBookMeta.Model;
 
 namespace EBookMeta;
@@ -77,6 +76,7 @@ public sealed class Book
 
         if (source is null)
         {
+            ReportUnsupported(path, detected);
             throw new UnsupportedFormatException(detected, path);
         }
 
@@ -132,6 +132,25 @@ public sealed class Book
     /// <returns>A short description.</returns>
     public override string ToString() =>
         $"{System.IO.Path.GetFileName(Path)} ({Detected.Format.DisplayName()})";
+
+    /// <summary>
+    /// Reports a file this build recognises and cannot edit.
+    /// </summary>
+    /// <remarks>
+    /// A refusal rather than a report, which is why it earns a rule ID: naming what
+    /// the file actually is — a RAR, a 7z, a PDF — is the difference between "this
+    /// did not open" and an answer the user can act on. Logged here rather than in
+    /// the detection loop for the same reason as
+    /// <see cref="ReportExtensionDisagreement"/>: the loop runs more than once per
+    /// file, and this belongs in the log once, on the open the user asked for.
+    /// </remarks>
+    private static void ReportUnsupported(string path, DetectedFormat detected) =>
+        Log.Rule(
+            LogLevel.Error,
+            "GEN-W004",
+            $"{detected.Format.DisplayName()} is recognised but cannot be edited by this build"
+                + (detected.Detail is null ? "." : $" ({detected.Detail})."),
+            System.IO.Path.GetFileName(path));
 
     /// <summary>
     /// Reports a file whose extension does not match what it turned out to be.

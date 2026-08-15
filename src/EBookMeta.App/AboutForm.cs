@@ -1,5 +1,4 @@
 using System.Reflection;
-using EBookMeta.Formats;
 
 namespace EBookMeta.App;
 

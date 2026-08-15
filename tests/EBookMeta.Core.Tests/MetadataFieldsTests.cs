@@ -1,5 +1,4 @@
 using EBookMeta.Xml;
-using EBookMeta.Formats;
 using EBookMeta.Model;
 using Xunit;
 

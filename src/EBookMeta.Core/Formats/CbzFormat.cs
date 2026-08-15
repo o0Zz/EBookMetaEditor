@@ -224,11 +224,13 @@ public sealed partial class CbzFormat : IBookFormat
         // tool gets to make on their behalf.
         if (!string.IsNullOrEmpty(container.ArchiveComment))
         {
-            throw new BookFormatException(
+            const string reason =
                 "This archive carries a ZIP comment, which usually holds ComicBookLover "
                 + "metadata. Saving would lose it, because a rebuilt archive cannot carry "
-                + "one, so nothing was written.",
-                targetPath);
+                + "one, so nothing was written.";
+
+            Log.Rule(LogLevel.Error, "CBZ-W012", reason, targetPath);
+            throw new BookFormatException(reason, targetPath);
         }
 
         ContainerEntry? entry = FindComicInfo(container);

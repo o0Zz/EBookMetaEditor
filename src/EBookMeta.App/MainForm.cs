@@ -1,5 +1,4 @@
 ﻿using EBookMeta.Containers;
-using EBookMeta.Formats;
 using EBookMeta.Model;
 
 namespace EBookMeta.App;
