@@ -95,9 +95,13 @@ log.saveFailed = No se pudo guardar el registro: {0}
 batch.title = Edición por lotes — EBookMetaEditor
 batch.button.saveAll = &Guardar todo
 
+column.save = Guardar
 column.status = Estado
 column.file = Archivo
 column.format = Formato
+
+# Descripción emergente de la cabecera de la columna de casillas.
+batch.saveTip = Los archivos marcados aquí se escriben con Guardar todo. Editar una fila la marca; marque una fila a mano para reescribir un archivo que no ha editado, que es como una reparación encontrada al abrir llega al disco. Haga clic en esta cabecera para marcar todas las filas.
 
 batch.state.reading = Leyendo…
 batch.state.edited = Editado
@@ -112,7 +116,7 @@ batch.progress = {0} {1} de {2} — {3}
 batch.cancelled = {0} cancelada.
 batch.failed = {0} fallida: {1}
 
-batch.nothingEdited = No se ha editado nada.
+batch.nothingToSave = Ningún archivo está marcado para guardar.
 
 # Copiar y pegar. Un solo valor va a cada celda seleccionada; un bloque copiado se
 # rellena hacia la derecha y hacia abajo desde la esquina superior izquierda.
@@ -133,7 +137,7 @@ batch.summary.files.one = 1 archivo
 batch.summary.files.many = {0} archivos
 batch.summary.unusable = {0} no editable(s)
 batch.summary.noEdits = sin cambios
-batch.summary.edited = {0} editado(s)
+batch.summary.toSave = {0} por guardar
 
 batch.close.busy = Todavía se está ejecutando una operación por lotes. ¿Detenerla y cerrar?
 batch.close.dirty.one = 1 archivo tiene cambios sin guardar. ¿Cerrar sin guardar?

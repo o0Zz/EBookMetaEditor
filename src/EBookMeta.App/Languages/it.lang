@@ -95,9 +95,13 @@ log.saveFailed = Impossibile salvare il registro: {0}
 batch.title = Modifica in blocco — EBookMetaEditor
 batch.button.saveAll = &Salva tutto
 
+column.save = Salva
 column.status = Stato
 column.file = File
 column.format = Formato
+
+# Suggerimento dell'intestazione della colonna con le caselle.
+batch.saveTip = I file spuntati qui vengono scritti da Salva tutto. Modificare una riga la spunta; spunti una riga a mano per riscrivere un file che non ha modificato, ed è così che una riparazione trovata all'apertura arriva sul disco. Faccia clic su questa intestazione per spuntare tutte le righe.
 
 batch.state.reading = Lettura…
 batch.state.edited = Modificato
@@ -112,7 +116,7 @@ batch.progress = {0} {1} di {2} — {3}
 batch.cancelled = {0} annullata.
 batch.failed = {0} non riuscita: {1}
 
-batch.nothingEdited = Non è stato modificato nulla.
+batch.nothingToSave = Nessun file è spuntato per il salvataggio.
 
 # Copia e incolla. Un singolo valore va in ogni cella selezionata; un blocco
 # copiato si riempie verso destra e verso il basso dall'angolo in alto a sinistra.
@@ -133,7 +137,7 @@ batch.summary.files.one = 1 file
 batch.summary.files.many = {0} file
 batch.summary.unusable = {0} non modificabile/i
 batch.summary.noEdits = nessuna modifica
-batch.summary.edited = {0} modificato/i
+batch.summary.toSave = {0} da salvare
 
 batch.close.busy = Un'operazione in blocco è ancora in corso. Interromperla e chiudere?
 batch.close.dirty.one = 1 file contiene modifiche non salvate. Chiudere senza salvare?

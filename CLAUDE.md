@@ -431,10 +431,18 @@ codebase needs.
   that fails leaves its own file untouched, does not stop the other nineteen, and
   says why on its own row. Rolling back nineteen good writes because the
   twentieth was read-only would be worse behaviour, not better.
-- **Only edited files are written.** `BatchEntry` snapshots the text of every
-  field on read, so dirtiness is "differs from what is on disk" rather than
-  "somebody touched this row". Typing a value and typing it back writes nothing.
-  A file nobody edited is not rewritten byte-identically — it is not opened.
+- **A file is written because it is ticked, and editing it ticks it.** `BatchEntry`
+  snapshots the text of every field on read, so dirtiness is "differs from what is
+  on disk" rather than "somebody touched this row"; typing a value and typing it
+  back writes nothing, and a file nobody edited is not rewritten byte-identically —
+  it is not opened. But dirtiness alone was the wrong gate, because a repair found
+  on open lives in memory and changes no field, so the one file that most needs
+  saving was the one the grid refused to save. `BatchEntry.SaveRequested` is the
+  grid's leftmost column and `WillSave` is `IsWritable && (IsDirty ||
+  SaveRequested)`, which is what `Save` consults. It only ever *adds* files: an
+  edited row is ticked and its box locked, so no click can silently drop an edit.
+  This is the same offer the single-file window makes by enabling Save on
+  `CanSave` alone — the asymmetry between the two editors was the bug.
 - **Covers are not read** (`ReadOptions.WithoutCover`). A grid of titles has no
   use for three hundred full-size images.
 - **Capabilities gate per cell, not per window.** A row's format decides which of

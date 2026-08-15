@@ -95,9 +95,13 @@ log.saveFailed = Impossible d'enregistrer le journal : {0}
 batch.title = Édition par lot — EBookMetaEditor
 batch.button.saveAll = &Enregistrer tout
 
+column.save = Enregistrer
 column.status = État
 column.file = Fichier
 column.format = Format
+
+# Info-bulle de l'en-tête de la colonne à cocher.
+batch.saveTip = Les fichiers cochés ici sont écrits par Enregistrer tout. Modifier une ligne la coche ; cochez une ligne à la main pour réécrire un fichier que vous n'avez pas modifié, ce qui est la façon dont une réparation trouvée à l'ouverture est écrite sur le disque. Cliquez sur cet en-tête pour cocher toutes les lignes.
 
 batch.state.reading = Lecture…
 batch.state.edited = Modifié
@@ -112,7 +116,7 @@ batch.progress = {0} {1} sur {2} — {3}
 batch.cancelled = {0} annulée.
 batch.failed = {0} échouée : {1}
 
-batch.nothingEdited = Aucune modification.
+batch.nothingToSave = Aucun fichier n'est coché pour être enregistré.
 
 # Copier-coller. Une valeur collée va dans chaque cellule sélectionnée ; un bloc
 # copié se remplit vers la droite et vers le bas depuis le coin haut-gauche.
@@ -133,7 +137,7 @@ batch.summary.files.one = 1 fichier
 batch.summary.files.many = {0} fichiers
 batch.summary.unusable = {0} non modifiable(s)
 batch.summary.noEdits = aucune modification
-batch.summary.edited = {0} modifié(s)
+batch.summary.toSave = {0} à enregistrer
 
 batch.close.busy = Une opération par lot est encore en cours. L'arrêter et fermer ?
 batch.close.dirty.one = 1 fichier contient des modifications non enregistrées. Fermer sans enregistrer ?

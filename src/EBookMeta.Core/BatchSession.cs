@@ -92,6 +92,25 @@ public sealed class BatchEntry
     /// <summary>Whether anything about this file's metadata has been edited.</summary>
     public bool IsDirty => ChangedFields.Any();
 
+    /// <summary>
+    /// Whether the user asked for this file to be written even though its metadata
+    /// is unchanged.
+    /// </summary>
+    /// <remarks>
+    /// The way a repair found on open reaches the disk. Recovery happens in memory
+    /// and leaves the metadata identical to what was read, so such a file is not
+    /// dirty and nothing would otherwise put it through a save — the single-file
+    /// window has the same effect by simply always offering Save.
+    /// </remarks>
+    public bool SaveRequested { get; set; }
+
+    /// <summary>Whether the next save will write this file.</summary>
+    /// <remarks>
+    /// An edit always counts, so asking for a file *not* to be saved is not
+    /// something this models: the flag adds files to a save and never drops one.
+    /// </remarks>
+    public bool WillSave => IsWritable && (IsDirty || SaveRequested);
+
     /// <summary>Returns the text an editor should show for a field.</summary>
     /// <param name="field">The field to read.</param>
     /// <returns>The text, empty when the file has no such value or was not read.</returns>
@@ -121,6 +140,10 @@ public sealed class BatchEntry
     {
         _original.Clear();
 
+        // A request is spent by the save that honoured it: saving twice must not
+        // write twice, whether the second write was asked for by an edit or by hand.
+        SaveRequested = false;
+
         if (Metadata is not { } metadata)
         {
             return;
@@ -144,7 +167,7 @@ public sealed record BatchProgress(int Completed, int Total, string Path);
 
 /// <summary>What a batch save did.</summary>
 /// <param name="Saved">Files written.</param>
-/// <param name="Skipped">Files left alone because nothing had changed, or because the format cannot be written.</param>
+/// <param name="Skipped">Files left alone because nothing asked for them to be written, or because the format cannot be.</param>
 /// <param name="Failed">Files that could not be written. Each one's <see cref="BatchEntry.Error"/> says why.</param>
 public sealed record BatchSaveReport(int Saved, int Skipped, int Failed)
 {
@@ -184,6 +207,9 @@ public sealed class BatchSession
 
     /// <summary>How many files have unsaved edits.</summary>
     public int DirtyCount => _entries.Count(e => e.IsDirty);
+
+    /// <summary>How many files the next save would write.</summary>
+    public int PendingSaveCount => _entries.Count(e => e.WillSave);
 
     /// <summary>Creates a session over the given paths.</summary>
     /// <param name="paths">The files to edit. Duplicates are dropped.</param>
@@ -332,7 +358,7 @@ public sealed class BatchSession
         }
     }
 
-    /// <summary>Writes every file that has been edited.</summary>
+    /// <summary>Writes every file that has been edited or marked for saving.</summary>
     /// <param name="keepBackup">Whether to leave the previous version as a <c>.bak</c>.</param>
     /// <param name="progress">Reported once per file considered.</param>
     /// <param name="cancellationToken">Stops the save between files.</param>
@@ -348,13 +374,13 @@ public sealed class BatchSession
         int failed = 0;
         int completed = 0;
 
-        Log.Info($"Batch save starting: {DirtyCount} of {_entries.Count} file(s) edited.");
+        Log.Info($"Batch save starting: {PendingSaveCount} of {_entries.Count} file(s) to write.");
 
         foreach (BatchEntry entry in _entries)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (!entry.IsWritable || !entry.IsDirty)
+            if (!entry.WillSave)
             {
                 skipped++;
             }

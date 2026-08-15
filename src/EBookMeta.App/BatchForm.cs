@@ -27,10 +27,11 @@ internal sealed class BatchForm : Form, IPathReceiver
         (MetadataField.SortTitle, "field.sortTitle", 150),
     ];
 
-    private const int StatusColumn = 0;
-    private const int FileColumn = 1;
-    private const int FormatColumn = 2;
-    private const int FirstFieldColumn = 3;
+    private const int SaveColumn = 0;
+    private const int StatusColumn = 1;
+    private const int FileColumn = 2;
+    private const int FormatColumn = 3;
+    private const int FirstFieldColumn = 4;
 
     private readonly AppSettings _settings;
     private readonly BatchSession _session;
@@ -97,6 +98,11 @@ internal sealed class BatchForm : Form, IPathReceiver
         // grid, where CellEndEdit never runs and the edit would be lost in silence.
         // For someone typing, the two are the same moment.
         _grid.CellValueChanged += OnCellValueChanged;
+
+        // A tick box otherwise holds its new value until the cell loses focus, so
+        // the click above would appear to do nothing until the user clicked away.
+        _grid.CurrentCellDirtyStateChanged += OnCurrentCellDirtyStateChanged;
+        _grid.ColumnHeaderMouseClick += OnColumnHeaderMouseClick;
         _grid.CellFormatting += OnCellFormatting;
         _grid.CellDoubleClick += OnCellDoubleClick;
         _grid.CellMouseDown += OnCellMouseDown;
@@ -253,6 +259,15 @@ internal sealed class BatchForm : Form, IPathReceiver
 
     private void BuildColumns()
     {
+        _grid.Columns.Add(new DataGridViewCheckBoxColumn
+        {
+            HeaderText = Strings.Get("column.save"),
+            ToolTipText = Strings.Get("batch.saveTip"),
+            Width = 52,
+            Resizable = DataGridViewTriState.False,
+            SortMode = DataGridViewColumnSortMode.NotSortable,
+        });
+
         _grid.Columns.Add(ReadOnlyColumn(Strings.Get("column.status"), 110));
         _grid.Columns.Add(ReadOnlyColumn(Strings.Get("column.file"), 200));
         _grid.Columns.Add(ReadOnlyColumn(Strings.Get("column.format"), 70));
@@ -326,6 +341,8 @@ internal sealed class BatchForm : Form, IPathReceiver
 
     private void Fill(DataGridViewRow row, BatchEntry entry)
     {
+        SetTick(row, entry);
+
         row.Cells[StatusColumn].Value = StatusTextOf(entry);
         row.Cells[FormatColumn].Value = entry.Detected is { } detected
             ? detected.Format.DisplayName()
@@ -351,6 +368,21 @@ internal sealed class BatchForm : Form, IPathReceiver
         {
             row.Cells[StatusColumn].ToolTipText = error;
         }
+    }
+
+    /// <summary>Shows whether a row will be written, and whether that is the user's to decide.</summary>
+    /// <remarks>
+    /// An edited row is ticked and locked: the box adds a file to the save and never
+    /// drops one, so an edit cannot be lost by clicking the wrong cell. A file the
+    /// build cannot write is locked the other way.
+    /// </remarks>
+    private static void SetTick(DataGridViewRow row, BatchEntry entry)
+    {
+        DataGridViewCell tick = row.Cells[SaveColumn];
+
+        tick.Value = entry.WillSave;
+        tick.ReadOnly = !entry.IsWritable || entry.IsDirty;
+        tick.Style.BackColor = tick.ReadOnly ? SystemColors.Control : SystemColors.Window;
     }
 
     private static string StatusTextOf(BatchEntry entry) => entry.Status switch
@@ -390,15 +422,36 @@ internal sealed class BatchForm : Form, IPathReceiver
             : _grid.Font;
     }
 
+    private void OnCurrentCellDirtyStateChanged(object? sender, EventArgs e)
+    {
+        if (_grid.IsCurrentCellDirty && _grid.CurrentCell?.ColumnIndex == SaveColumn)
+        {
+            _grid.CommitEdit(DataGridViewDataErrorContexts.Commit);
+        }
+    }
+
     private void OnCellValueChanged(object? sender, DataGridViewCellEventArgs e)
     {
-        if (_filling || e.RowIndex < 0 || e.ColumnIndex < FirstFieldColumn ||
+        if (_filling || e.RowIndex < 0 || e.ColumnIndex < SaveColumn ||
             _grid.Rows[e.RowIndex].Tag is not BatchEntry entry)
         {
             return;
         }
 
         DataGridViewRow row = _grid.Rows[e.RowIndex];
+
+        if (e.ColumnIndex == SaveColumn)
+        {
+            entry.SaveRequested = row.Cells[SaveColumn].Value is true;
+            UpdateStatus();
+            return;
+        }
+
+        if (e.ColumnIndex < FirstFieldColumn)
+        {
+            return;
+        }
+
         var field = (MetadataField)_grid.Columns[e.ColumnIndex].Tag;
         string typed = row.Cells[e.ColumnIndex].Value?.ToString() ?? string.Empty;
 
@@ -414,6 +467,10 @@ internal sealed class BatchForm : Form, IPathReceiver
         {
             row.Cells[e.ColumnIndex].Value = entry.Read(field);
             row.Cells[StatusColumn].Value = StatusTextOf(entry);
+
+            // An edit is what ticks the box, so the row says it will be saved from
+            // the same keystroke that made it worth saving.
+            SetTick(row, entry);
         }
         finally
         {
@@ -426,7 +483,9 @@ internal sealed class BatchForm : Form, IPathReceiver
     /// <summary>Opens the double-clicked file in the single-file editor.</summary>
     private void OnCellDoubleClick(object? sender, DataGridViewCellEventArgs e)
     {
-        if (e.RowIndex < 0 || e.ColumnIndex >= FirstFieldColumn ||
+        // Not the tick column: a double click there is two clicks on a box, and
+        // opening a second window on top of them is not what either one asked for.
+        if (e.RowIndex < 0 || e.ColumnIndex == SaveColumn || e.ColumnIndex >= FirstFieldColumn ||
             _grid.Rows[e.RowIndex].Tag is not BatchEntry entry)
         {
             return;
@@ -458,10 +517,89 @@ internal sealed class BatchForm : Form, IPathReceiver
                 case Keys.Control | Keys.V:
                     PasteIntoSelection();
                     return true;
+
+                // Only over the tick column: everywhere else a space bar starts an
+                // edit with a space in it, which is what EditOnKeystrokeOrF2 is for.
+                case Keys.Space when _grid.CurrentCell?.ColumnIndex == SaveColumn:
+                    ToggleSelectedTicks();
+                    return true;
             }
         }
 
         return base.ProcessCmdKey(ref msg, keyData);
+    }
+
+    /// <summary>Ticks or unticks every row selected in the tick column.</summary>
+    private void ToggleSelectedTicks()
+    {
+        List<DataGridViewRow> rows = [.. _grid.SelectedCells
+            .Cast<DataGridViewCell>()
+            .Where(c => c.ColumnIndex == SaveColumn)
+            .Select(c => _grid.Rows[c.RowIndex])
+            .Distinct()];
+
+        if (rows.Count == 0 && _grid.CurrentCell is { } current)
+        {
+            rows.Add(_grid.Rows[current.RowIndex]);
+        }
+
+        SetTicks(rows);
+    }
+
+    /// <summary>Ticks or unticks every row in one click of the column header.</summary>
+    private void OnColumnHeaderMouseClick(object? sender, DataGridViewCellMouseEventArgs e)
+    {
+        if (!_busy && e.ColumnIndex == SaveColumn)
+        {
+            SetTicks([.. _grid.Rows.Cast<DataGridViewRow>()]);
+        }
+    }
+
+    /// <summary>
+    /// Turns a set of rows all one way: on unless every one of them is already on.
+    /// </summary>
+    /// <remarks>
+    /// Rows whose tick is not the user's to set are left out of the decision as well
+    /// as out of the change — an edited row is always on, and counting it would make
+    /// the header click look stuck.
+    /// </remarks>
+    private void SetTicks(IReadOnlyList<DataGridViewRow> rows)
+    {
+        List<(DataGridViewRow Row, BatchEntry Entry)> targets = [.. rows
+            .Where(r => r.Tag is BatchEntry { IsWritable: true, IsDirty: false })
+            .Select(r => (Row: r, Entry: (BatchEntry)r.Tag))];
+
+        if (targets.Count == 0)
+        {
+            return;
+        }
+
+        bool wanted = targets.Any(t => !t.Entry.SaveRequested);
+
+        // A box being edited holds its own copy of the value and would write it back
+        // over this one when it closed.
+        _grid.EndEdit();
+
+        _filling = true;
+
+        try
+        {
+            foreach ((DataGridViewRow row, BatchEntry entry) in targets)
+            {
+                entry.SaveRequested = wanted;
+                SetTick(row, entry);
+            }
+        }
+        finally
+        {
+            _filling = false;
+        }
+
+        // Assigning a cell's value does not repaint the current one, which would
+        // leave the row under the cursor looking like the one that was missed.
+        _grid.InvalidateColumn(SaveColumn);
+
+        UpdateStatus();
     }
 
     /// <summary>Puts the selected cells on the clipboard.</summary>
@@ -695,9 +833,9 @@ internal sealed class BatchForm : Form, IPathReceiver
             return;
         }
 
-        if (_session.DirtyCount == 0)
+        if (_session.PendingSaveCount == 0)
         {
-            SetStatus(Strings.Get("batch.nothingEdited"));
+            SetStatus(Strings.Get("batch.nothingToSave"));
             return;
         }
 
@@ -815,7 +953,7 @@ internal sealed class BatchForm : Form, IPathReceiver
         _busy = busy;
 
         _grid.Enabled = !busy;
-        _saveAll.Enabled = !busy && _session.DirtyCount > 0;
+        _saveAll.Enabled = !busy && _session.PendingSaveCount > 0;
         _cancel.Visible = busy;
         _progress.Visible = busy;
 
@@ -828,8 +966,8 @@ internal sealed class BatchForm : Form, IPathReceiver
 
     private void UpdateStatus(bool keepMessage = false)
     {
-        int dirty = _session.DirtyCount;
-        _saveAll.Enabled = !_busy && dirty > 0;
+        int pending = _session.PendingSaveCount;
+        _saveAll.Enabled = !_busy && pending > 0;
 
         if (keepMessage || _busy)
         {
@@ -847,9 +985,12 @@ internal sealed class BatchForm : Form, IPathReceiver
             parts.Add(Strings.Format("batch.summary.unusable", unusable));
         }
 
-        parts.Add(dirty == 0
+        // Counted from what a save would write rather than from what was edited: a
+        // row ticked by hand is not an edit, and saying "no edits" while Save all is
+        // lit would be the window contradicting itself.
+        parts.Add(pending == 0
             ? Strings.Get("batch.summary.noEdits")
-            : Strings.Format("batch.summary.edited", dirty));
+            : Strings.Format("batch.summary.toSave", pending));
 
         SetStatus(string.Join(" · ", parts));
     }

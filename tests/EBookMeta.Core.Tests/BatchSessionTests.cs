@@ -1,5 +1,6 @@
 using System.Text;
 using System.Threading;
+using EBookMeta.Containers;
 using EBookMeta.Formats;
 using EBookMeta.Tests.Builders;
 using Xunit;
@@ -281,6 +282,102 @@ public sealed class BatchSessionTests
         Assert.Equal(BatchEntryStatus.Saved, Entry(session, "book-1.epub").Status);
         Assert.False(Entry(session, "book-1.epub").IsDirty);
         Assert.Equal(0, session.Save(keepBackup: false).Saved);
+    }
+
+    [Fact]
+    public void A_file_marked_by_hand_is_saved_although_nothing_changed()
+    {
+        using var temp = new TempDir();
+        (BatchSession session, _) = Folder(temp);
+
+        session.Load();
+
+        BatchEntry entry = Entry(session, "book-1.epub");
+
+        // Repairs live in memory until a save, so a file that needs one is not
+        // dirty and nothing else would ever put it through Book.Save.
+        Assert.False(entry.WillSave);
+        entry.SaveRequested = true;
+
+        Assert.True(entry.WillSave);
+        Assert.Equal(1, session.PendingSaveCount);
+        Assert.Equal(0, session.DirtyCount);
+
+        BatchSaveReport report = session.Save(keepBackup: false);
+
+        Assert.Equal(1, report.Saved);
+        Assert.Equal(BatchEntryStatus.Saved, entry.Status);
+    }
+
+    [Fact]
+    public void Marking_an_untagged_comic_gives_it_a_ComicInfo()
+    {
+        using var temp = new TempDir();
+        string path = new CbzBuilder().WithoutComicInfo().WriteTo(temp.File("untagged.cbz"));
+
+        BatchSession session = BatchSession.Create([path]);
+        session.Load();
+
+        Entry(session, "untagged.cbz").SaveRequested = true;
+
+        Assert.Equal(1, session.Save(keepBackup: false).Saved);
+
+        // The point of the mark: an unedited save is what writes the correction the
+        // read reported, exactly as it does in the single-file window.
+        using ZipContainer saved = ZipContainer.Open(path);
+        Assert.Contains("ComicInfo.xml", saved.Entries.Select(e => e.Name));
+    }
+
+    [Fact]
+    public void A_mark_is_spent_by_the_save_that_used_it()
+    {
+        using var temp = new TempDir();
+        (BatchSession session, _) = Folder(temp);
+
+        session.Load();
+        Entry(session, "book-1.epub").SaveRequested = true;
+
+        Assert.Equal(1, session.Save(keepBackup: false).Saved);
+        Assert.False(Entry(session, "book-1.epub").WillSave);
+        Assert.Equal(0, session.Save(keepBackup: false).Saved);
+    }
+
+    [Fact]
+    public void An_edited_file_is_saved_even_if_it_is_unmarked()
+    {
+        using var temp = new TempDir();
+        (BatchSession session, _) = Folder(temp);
+
+        session.Load();
+
+        BatchEntry entry = Entry(session, "book-1.epub");
+        entry.Apply(MetadataField.Publisher, "Vertigo");
+
+        // The mark adds files to a save and never drops one, which is why the grid
+        // shows an edited row ticked and locked rather than merely ticked.
+        entry.SaveRequested = false;
+
+        Assert.True(entry.WillSave);
+        Assert.Equal(1, session.Save(keepBackup: false).Saved);
+    }
+
+    [Fact]
+    public void A_file_that_cannot_be_written_is_never_marked()
+    {
+        using var temp = new TempDir();
+        (BatchSession session, _) = Folder(temp);
+
+        session.Load();
+
+        byte[] before = File.ReadAllBytes(temp.File("comic-2.cbz"));
+
+        Entry(session, "comic-2.cbz").SaveRequested = true;
+        Entry(session, "broken.epub").SaveRequested = true;
+
+        Assert.All(session.Entries, e => Assert.False(e.WillSave));
+        Assert.Equal(0, session.PendingSaveCount);
+        Assert.Equal(0, session.Save(keepBackup: false).Saved);
+        Assert.Equal(before, File.ReadAllBytes(temp.File("comic-2.cbz")));
     }
 
     [Fact]

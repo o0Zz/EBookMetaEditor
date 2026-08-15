@@ -95,9 +95,13 @@ log.saveFailed = Das Protokoll konnte nicht gespeichert werden: {0}
 batch.title = Stapelverarbeitung — EBookMetaEditor
 batch.button.saveAll = &Alle speichern
 
+column.save = Speichern
 column.status = Status
 column.file = Datei
 column.format = Format
+
+# Tooltip der Kopfzeile der Kontrollkästchen-Spalte.
+batch.saveTip = Hier angehakte Dateien werden von „Alle speichern“ geschrieben. Wird eine Zeile bearbeitet, hakt sie sich selbst an; haken Sie eine Zeile von Hand an, um eine nicht bearbeitete Datei neu zu schreiben — so gelangt eine beim Öffnen gefundene Reparatur auf die Festplatte. Ein Klick auf diese Kopfzeile hakt alle Zeilen an.
 
 batch.state.reading = Wird gelesen…
 batch.state.edited = Bearbeitet
@@ -112,7 +116,7 @@ batch.progress = {0} {1} von {2} — {3}
 batch.cancelled = {0} abgebrochen.
 batch.failed = {0} fehlgeschlagen: {1}
 
-batch.nothingEdited = Es wurde nichts bearbeitet.
+batch.nothingToSave = Keine Datei ist zum Speichern angehakt.
 
 # Kopieren und Einfügen. Ein einzelner Wert geht in jede ausgewählte Zelle; ein
 # kopierter Block füllt von der linken obereren Ecke nach rechts und nach unten.
@@ -133,7 +137,7 @@ batch.summary.files.one = 1 Datei
 batch.summary.files.many = {0} Dateien
 batch.summary.unusable = {0} nicht bearbeitbar
 batch.summary.noEdits = keine Änderungen
-batch.summary.edited = {0} bearbeitet
+batch.summary.toSave = {0} zu speichern
 
 batch.close.busy = Ein Stapelvorgang läuft noch. Anhalten und schließen?
 batch.close.dirty.one = 1 Datei enthält ungespeicherte Änderungen. Ohne Speichern schließen?

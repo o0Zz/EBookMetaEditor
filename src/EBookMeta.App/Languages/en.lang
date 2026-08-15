@@ -109,9 +109,14 @@ log.saveFailed = The log could not be saved: {0}
 batch.title = Batch edit — EBookMetaEditor
 batch.button.saveAll = &Save all
 
+column.save = Save
 column.status = Status
 column.file = File
 column.format = Format
+
+# The tick column's header tooltip. Editing a row ticks it; ticking one by hand is
+# how a file the editor repaired on open gets that repair written.
+batch.saveTip = Files ticked here are written by Save all. Editing a row ticks it; tick a row by hand to rewrite a file you have not edited, which is how a repair found on opening reaches the disk. Click this header to tick every row.
 
 batch.state.reading = Reading…
 batch.state.edited = Edited
@@ -127,7 +132,7 @@ batch.progress = {0} {1} of {2} — {3}
 batch.cancelled = {0} cancelled.
 batch.failed = {0} failed: {1}
 
-batch.nothingEdited = Nothing has been edited.
+batch.nothingToSave = No file is ticked to be saved.
 
 # Copy and paste. A pasted value goes into every selected cell, or a copied block
 # fills right and down from the top-left of the selection.
@@ -148,7 +153,7 @@ batch.summary.files.one = 1 file
 batch.summary.files.many = {0} files
 batch.summary.unusable = {0} cannot be edited
 batch.summary.noEdits = no edits
-batch.summary.edited = {0} edited
+batch.summary.toSave = {0} to save
 
 batch.close.busy = A batch operation is still running. Stop it and close?
 batch.close.dirty.one = 1 file has unsaved edits. Close without saving?
