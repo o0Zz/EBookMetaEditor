@@ -40,7 +40,7 @@ internal sealed class Fb2Builder
         return this;
     }
 
-    /// <summary>Omits the base64 image the cover page points at (FB2-E030).</summary>
+    /// <summary>Omits the base64 image the cover page points at.</summary>
     internal Fb2Builder WithoutBinaries()
     {
         _binaries = string.Empty;

@@ -11,7 +11,8 @@ namespace EBookMeta.Tests;
 /// Loading through <c>XDocument</c> would hide the difference between "declared
 /// UTF-8 and is UTF-8" and "declared UTF-8, is really Windows-1252, and the parser
 /// substituted replacement characters". Telling the user which one they have is the
-/// point of rule EPUB-E050.
+/// point of detecting the encoding from the bytes rather than trusting the
+/// declaration.
 /// </remarks>
 public sealed class EncodingTests
 {

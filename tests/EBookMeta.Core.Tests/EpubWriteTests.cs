@@ -274,6 +274,64 @@ public sealed class EpubWriteTests
     private static string[] ReadOpfLines(string epubPath) =>
         ReadOpfText(epubPath).Replace("\r\n", "\n").Split('\n');
 
+    private static byte[] ReadNcx(string epubPath)
+    {
+        using ZipContainer container = ZipContainer.Open(epubPath);
+        return container.ReadAllBytes(
+            container.Entries.Single(e => e.Name.EndsWith(".ncx", StringComparison.Ordinal)));
+    }
+
+    /// <summary>
+    /// EPUB-W062. An EPUB 2 stores the book's identity twice — as the
+    /// <c>dc:identifier</c> the package points at, and again as the NCX's
+    /// <c>dtb:uid</c> — and OPF 2.0.1 requires them to match. The package is
+    /// authoritative, so the NCX is brought into line rather than reported.
+    /// </summary>
+    [Fact]
+    public void Saving_brings_a_stale_toc_identifier_back_into_line()
+    {
+        using var temp = new TempDir();
+        string path = new EpubBuilder()
+            .WithOpf(EpubBuilder.Epub2Opf)
+            .WithNcx("urn:uuid:stale")
+            .WriteTo(temp.File("stale-uid.epub"));
+
+        byte[] before = ReadNcx(path);
+        Book.Load(path).Save(keepBackup: false);
+        byte[] after = ReadNcx(path);
+
+        string text = Encoding.UTF8.GetString(after);
+        Assert.Contains("content=\"urn:uuid:1234\"", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("urn:uuid:stale", text, StringComparison.Ordinal);
+
+        // A splice, not a reserialisation: only the uid moved, and it is the one
+        // difference in the whole document.
+        Assert.Equal(
+            Encoding.UTF8.GetString(before).Replace("urn:uuid:stale", "urn:uuid:1234"),
+            text);
+    }
+
+    /// <summary>
+    /// A save must not rewrite an NCX that already agrees, or an EPUB 3's legacy
+    /// one, which nothing requires to match. Both must come back byte-identical.
+    /// </summary>
+    [Theory]
+    [InlineData(false, "urn:uuid:1234")]
+    [InlineData(true, "urn:uuid:stale")]
+    public void Saving_leaves_a_toc_it_has_no_business_touching_alone(bool epub3, string uid)
+    {
+        using var temp = new TempDir();
+        string path = new EpubBuilder()
+            .WithOpf(epub3 ? EpubBuilder.Epub3Opf : EpubBuilder.Epub2Opf)
+            .WithNcx(uid)
+            .WriteTo(temp.File($"toc-{epub3}.epub"));
+
+        byte[] before = ReadNcx(path);
+        Book.Load(path).Save(keepBackup: false);
+
+        Assert.Equal(before, ReadNcx(path));
+    }
+
     /// <summary>
     /// The correction with the most direct payoff: readers reject an EPUB outright
     /// until <c>mimetype</c> is the first entry and stored, and both defects are

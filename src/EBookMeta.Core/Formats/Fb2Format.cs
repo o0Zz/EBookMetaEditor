@@ -144,12 +144,10 @@ public sealed partial class Fb2Format : IBookFormat
         Fb2Document document = Parse(container, entry);
         BookMetadata metadata = document.ReadMetadata();
 
-        bool coverFailedToDecode = options.IncludeCover
-            && ReadCover(container, entry, document, metadata);
-
-        CheckRequiredMetadata(document, metadata);
-        CheckEncoding(document);
-        CheckCover(document, metadata, options, coverFailedToDecode);
+        if (options.IncludeCover)
+        {
+            ReadCover(container, entry, document, metadata);
+        }
 
         Log.Info(
             $"Read FictionBook metadata from '{entry.Name}': "
@@ -218,15 +216,6 @@ public sealed partial class Fb2Format : IBookFormat
                 "This archive contains no FictionBook document.", path: null);
         }
 
-        if (candidates.Count > 1)
-        {
-            Log.Rule(
-                LogLevel.Warning,
-                "FB2-W020",
-                $"The archive holds {candidates.Count} FictionBook documents; "
-                    + $"'{candidates[0].Name}' is the one being edited.");
-        }
-
         return candidates[0];
     }
 
@@ -262,13 +251,7 @@ public sealed partial class Fb2Format : IBookFormat
     /// done when a cover was asked for: the batch grid reads three hundred books
     /// with <c>ReadOptions.WithoutCover</c> and never walks a single one of them.
     /// </remarks>
-    /// <returns>
-    /// <see langword="true"/> when a declared cover was found but would not decode,
-    /// which is FB2-W031. The caller needs to know, because a missing cover and an
-    /// undecodable one are different defects and only the first is FB2-E030 —
-    /// reporting both for one broken image would be telling the user twice.
-    /// </returns>
-    private static bool ReadCover(
+    private static void ReadCover(
         IContainer container,
         ContainerEntry entry,
         Fb2Document document,
@@ -276,7 +259,7 @@ public sealed partial class Fb2Format : IBookFormat
     {
         if (document.CoverImageId() is not { } id)
         {
-            return false;
+            return;
         }
 
         var settings = new XmlReaderSettings
@@ -313,185 +296,14 @@ public sealed partial class Fb2Format : IBookFormat
                     SourceManifestId = id,
                 };
 
-                return false;
+                return;
             }
         }
         catch (Exception ex) when (ex is XmlException or FormatException)
         {
-            // A cover that will not decode is not a reason to refuse the file. The
-            // metadata is all still readable, and the rule below says what is wrong.
-            Log.Rule(
-                LogLevel.Warning,
-                "FB2-W031",
-                $"The cover image '{id}' could not be decoded: {ex.Message}",
-                entry.Name);
-
-            return true;
-        }
-
-        return false;
-    }
-
-}
-
-/// <summary>
-/// The FictionBook validation rules — the half of <see cref="Fb2Format"/> that
-/// reports rather than reads.
-/// </summary>
-/// <remarks>
-/// Every rule here works from the parsed <c>&lt;description&gt;</c>, which the read
-/// already has in hand, so running all of them costs a read essentially nothing.
-/// The one exception is the cover, which needs the binary the cover page points at
-/// and is therefore only checked when a cover was asked for.
-/// </remarks>
-public sealed partial class Fb2Format
-{
-    /// <summary>
-    /// Checks the fields a FictionBook is required to carry.
-    /// </summary>
-    private static void CheckRequiredMetadata(
-        Fb2Document document, BookMetadata metadata)
-    {
-        string location = document.EntryName;
-        XElement? titleInfo = document.Description.Elements()
-            .FirstOrDefault(e => e.Name.LocalName == "title-info");
-
-        if (titleInfo is null)
-        {
-            Log.Rule(
-                LogLevel.Error,
-                "FB2-E010",
-                "There is no <title-info>, which is where a FictionBook keeps "
-                    + "everything about the book itself.",
-                location);
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(metadata.Title))
-        {
-            Log.Rule(
-                LogLevel.Error,
-                "FB2-E011",
-                "<book-title> is missing or empty, so readers have no title to "
-                    + "show but the file name.",
-                location);
-        }
-
-        if (metadata.Language is not { } language || string.IsNullOrWhiteSpace(language))
-        {
-            Log.Rule(
-                LogLevel.Error,
-                "FB2-E012",
-                "<lang> is missing. The schema requires it, and readers use it "
-                    + "for hyphenation and sorting.",
-                location);
-        }
-        else if (!MetadataFields.IsPlausibleLanguageTag(language))
-        {
-            Log.Rule(
-                LogLevel.Warning,
-                "FB2-W013",
-                $"<lang> is '{language}', which is not a plausible language code. "
-                    + "Two or three letters is what readers expect — 'en', 'ru', 'fr'.",
-                location);
-        }
-
-        if (!metadata.PrimaryCreators.Any())
-        {
-            Log.Rule(
-                LogLevel.Warning,
-                "FB2-W014",
-                "There is no <author>. The schema requires at least one, and a "
-                    + "library will file this book under no author at all.",
-                location);
-        }
-
-        CheckSequence(titleInfo, location);
-    }
-
-    /// <summary>
-    /// Reports a series position that is not a number.
-    /// </summary>
-    private static void CheckSequence(
-        XElement titleInfo, string location)
-    {
-        foreach (XElement sequence in titleInfo.Elements()
-            .Where(e => e.Name.LocalName == "sequence"))
-        {
-            string? number = (string?)sequence.Attribute("number");
-
-            if (string.IsNullOrWhiteSpace(number) ||
-                decimal.TryParse(
-                    number!.Trim(),
-                    System.Globalization.NumberStyles.Number,
-                    System.Globalization.CultureInfo.InvariantCulture,
-                    out _))
-            {
-                continue;
-            }
-
-            Log.Rule(
-                LogLevel.Warning,
-                "FB2-W060",
-                $"The series position is '{number}', which is not a number, so "
-                    + "readers that sort a series numerically will not place this book.",
-                location);
-        }
-    }
-
-    /// <summary>
-    /// Reports bytes that do not match what the declaration claims.
-    /// </summary>
-    private static void CheckEncoding(Fb2Document document)
-    {
-        if (document.Encoding is { DeclarationMatchesBytes: false, Mismatch: { } mismatch })
-        {
-            Log.Rule(
-                LogLevel.Error,
-                "FB2-E050",
-                $"The declared encoding does not match the bytes: {mismatch}",
-                document.EntryName);
-        }
-    }
-
-    /// <summary>
-    /// Reports a cover page that points nowhere, or the absence of one.
-    /// </summary>
-    /// <remarks>
-    /// FB2-E030 needs the binary itself, which only a full pass over the document
-    /// can find, so it is reported only when the read was asked for a cover. A
-    /// batch grid reads three hundred books without covers and must not pay for
-    /// three hundred document walks to check a reference it is not displaying.
-    /// </remarks>
-    private static void CheckCover(
-        Fb2Document document,
-        BookMetadata metadata,
-        ReadOptions options,
-        bool coverFailedToDecode)
-    {
-        string? id = document.CoverImageId();
-
-        if (id is null)
-        {
-            Log.Rule(
-                LogLevel.Warning,
-                "FB2-W032",
-                "No cover is declared, so readers will show this book with a "
-                    + "blank or generated one.",
-                document.EntryName);
-            return;
-        }
-
-        // Not when the image merely failed to decode: FB2-W031 has already said so,
-        // and the binary it points at is plainly there.
-        if (options.IncludeCover && metadata.Cover is null && !coverFailedToDecode)
-        {
-            Log.Rule(
-                LogLevel.Error,
-                "FB2-E030",
-                $"The cover page points at '{id}', but the document has no "
-                    + $"<binary> with that id.",
-                document.EntryName);
+            // A cover that will not decode is not a reason to refuse the file: the
+            // metadata is all still readable, and only the image is lost.
+            Log.Debug($"The cover image '{id}' in '{entry.Name}' could not be decoded: {ex.Message}");
         }
     }
 

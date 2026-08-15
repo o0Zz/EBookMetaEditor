@@ -194,13 +194,6 @@ public sealed partial class CbzFormat : IBookFormat
             ReadCover(container, metadata);
         }
 
-        // Checked here rather than on request, because none of it costs anything:
-        // every rule below reads the parsed document or entry names the central
-        // directory already gave us, and nothing is decompressed to do it.
-        CheckLayout(container, entry);
-        CheckPages(container, entry, document);
-        CheckFields(entry, document);
-
         Log.Info(
             entry is null
                 ? $"Read comic archive metadata: no '{ComicInfoDocument.DefaultEntryName}', "
@@ -242,6 +235,17 @@ public sealed partial class CbzFormat : IBookFormat
         ContainerEntry? entry = FindComicInfo(container);
         ComicInfoDocument document =
             entry is null ? ComicInfoDocument.CreateEmpty() : Parse(container, entry);
+
+        if (entry is null)
+        {
+            // Most comics in a collection have never been tagged. Creating the
+            // document is the correction; this is the line that says a file gained
+            // an entry it did not have.
+            Log.Rule(
+                LogLevel.Warning,
+                "CBZ-W010",
+                $"There was no '{ComicInfoDocument.DefaultEntryName}'; one was created on save.");
+        }
 
         document.ApplyMetadata(metadata);
 
@@ -412,309 +416,6 @@ public sealed partial class CbzFormat : IBookFormat
     private static bool IsImage(ContainerEntry entry) =>
         ImageExtensions.Contains(Path.GetExtension(entry.Name).ToLowerInvariant());
 
-    private static bool IsMetadata(ContainerEntry entry)
-    {
-        string name = Path.GetFileName(entry.Name);
-
-        return name.Equals(ComicInfoDocument.DefaultEntryName, StringComparison.OrdinalIgnoreCase)
-            || name.Equals(CometEntryName, StringComparison.OrdinalIgnoreCase);
-    }
-
-}
-
-/// <summary>
-/// The comic archive validation rules, by stable rule ID.
-/// </summary>
-/// <remarks>
-/// Every rule here works from the parsed <c>ComicInfo.xml</c> or from entry names
-/// the ZIP central directory already supplied. Nothing is decompressed, so a
-/// 300-page comic costs no more to check than a one-page one — which is why these
-/// run on every read instead of waiting to be asked for.
-/// <para>
-/// A rule goes where its evidence is. A defect a write can prove and fix — a
-/// <c>PageCount</c> that disagrees with the images present, a nested
-/// <c>ComicInfo.xml</c> — is corrected in <c>CbzFormat.cs</c> instead, and reports
-/// what it changed.
-/// </para>
-/// </remarks>
-public sealed partial class CbzFormat
-{
-    /// <summary>
-    /// Reports where the metadata document is, or that there is none.
-    /// </summary>
-    private static void CheckLayout(
-        IContainer container, ContainerEntry? entry)
-    {
-        if (entry is null)
-        {
-            // Not a defect. Most comics in a collection have never been tagged,
-            // and this is the message that explains what saving will do.
-            Log.Rule(
-                LogLevel.Warning,
-                "CBZ-W010",
-                $"There is no '{ComicInfoDocument.DefaultEntryName}'. "
-                    + "One will be created when you save.");
-        }
-        else if (entry.Name.IndexOf('/') >= 0)
-        {
-            Log.Rule(
-                LogLevel.Error,
-                "CBZ-E011",
-                $"'{entry.Name}' is not at the archive root, so most readers "
-                    + "will not find it.",
-                entry.Name);
-        }
-
-        bool hasCoMet = container.Entries.Any(e =>
-            e.Name.Equals(CometEntryName, StringComparison.OrdinalIgnoreCase));
-        bool hasComicBookLover = !string.IsNullOrEmpty(container.ArchiveComment);
-
-        if (hasCoMet || hasComicBookLover)
-        {
-            // Disagreement between conventions is not read here — resolving it
-            // would mean parsing two more documents on open. Naming them is
-            // enough for the user to know why two applications show different
-            // titles for the same file.
-            Log.Rule(
-                LogLevel.Warning,
-                "CBZ-W012",
-                "This archive carries more than one metadata convention "
-                    + $"({string.Join(" and ", Conventions(entry, hasCoMet, hasComicBookLover))}). "
-                    + $"Only '{ComicInfoDocument.DefaultEntryName}' is written; the others are "
-                    + "left as they are, so applications reading them may disagree.");
-        }
-    }
-
-    private static IEnumerable<string> Conventions(
-        ContainerEntry? comicInfo, bool hasCoMet, bool hasComicBookLover)
-    {
-        if (comicInfo is not null)
-        {
-            yield return comicInfo.Name;
-        }
-
-        if (hasCoMet)
-        {
-            yield return CometEntryName;
-        }
-
-        if (hasComicBookLover)
-        {
-            yield return "a ComicBookLover blob in the ZIP comment";
-        }
-    }
-
-    /// <summary>
-    /// Cross-checks the declared pages against the images actually present.
-    /// </summary>
-    /// <remarks>
-    /// Every check here works from entry names alone, which the ZIP central
-    /// directory already gave us. Nothing is decompressed, so a 300-page comic
-    /// costs no more to check than a one-page one — which is why these run on every
-    /// read instead of waiting to be asked for.
-    /// </remarks>
-    private static void CheckPages(
-        IContainer container,
-        ContainerEntry? entry,
-        ComicInfoDocument? document)
-    {
-        List<ContainerEntry> images = Images(container).ToList();
-
-        if (document is not null)
-        {
-            if (document.PageCount is { } declared && declared != images.Count)
-            {
-                Log.Rule(
-                    LogLevel.Error,
-                    "CBZ-E020",
-                    $"PageCount says {declared} but the archive holds "
-                        + $"{images.Count} image{(images.Count == 1 ? "" : "s")}.",
-                    entry!.Name);
-            }
-
-            IReadOnlyList<int?> pages = document.PageImageIndexes;
-
-            if (pages.Count > 0 &&
-                (pages.Count != images.Count || pages.Any(p => p is null || p < 0 || p >= images.Count)))
-            {
-                Log.Rule(
-                    LogLevel.Warning,
-                    "CBZ-W021",
-                    $"The <Pages> block describes {pages.Count} page(s) and does not "
-                        + $"match the {images.Count} image(s) in the archive.",
-                    entry!.Name);
-            }
-        }
-
-        if (!SortsIntoReadingOrder(images))
-        {
-            Log.Rule(
-                LogLevel.Warning,
-                "CBZ-W022",
-                "The page filenames do not sort into reading order. Unpadded "
-                    + "numbers are the usual cause — '10.jpg' sorts before '2.jpg' — and "
-                    + "readers that sort by name will show the pages jumbled.");
-        }
-
-        List<string> extras = container.Entries
-            .Where(e => !e.IsDirectory && !IsImage(e) && !IsMetadata(e))
-            .Select(e => e.Name)
-            .ToList();
-
-        if (extras.Count > 0)
-        {
-            Log.Rule(LogLevel.Warning, "CBZ-W023", $"The archive holds {extras.Count} entr"
-                    + (extras.Count == 1 ? "y" : "ies")
-                    + " that are neither images nor metadata.");
-        }
-    }
-
-    /// <summary>
-    /// Checks the fields whose content can be wrong on its own terms.
-    /// </summary>
-    private static void CheckFields(
-        ContainerEntry? entry, ComicInfoDocument? document)
-    {
-        if (document is null || entry is null)
-        {
-            return;
-        }
-
-        if (document.Value("Number") is { } number && document.Value("Series") is null)
-        {
-            Log.Rule(
-                LogLevel.Warning,
-                "CBZ-W030",
-                $"Number is '{number}' but no Series is given, so a library will "
-                    + "file this issue under no series at all.",
-                entry.Name);
-        }
-
-        if (ImpossibleDate(document) is { } date)
-        {
-            Log.Rule(
-                LogLevel.Warning,
-                "CBZ-W031",
-                $"Year, Month and Day do not form a real date ({date}).",
-                entry.Name);
-        }
-
-        if (document.Value("LanguageISO") is { } language && !IsIso639Part1(language))
-        {
-            Log.Rule(
-                LogLevel.Warning,
-                "CBZ-W032",
-                $"LanguageISO is '{language}', which is not an ISO 639-1 code. "
-                    + "The schema wants two letters, such as 'en' or 'fr'.",
-                entry.Name);
-        }
-    }
-
-    /// <summary>
-    /// Returns the offending date when Year, Month and Day cannot all be true at
-    /// once, or <see langword="null"/> when they can.
-    /// </summary>
-    private static string? ImpossibleDate(ComicInfoDocument document)
-    {
-        string? rawYear = document.Value("Year");
-        string? rawMonth = document.Value("Month");
-        string? rawDay = document.Value("Day");
-
-        if (rawYear is null && rawMonth is null && rawDay is null)
-        {
-            return null;
-        }
-
-        string described = string.Join(
-            "-", new[] { rawYear, rawMonth, rawDay }.Where(p => p is not null));
-
-        int? year = ParseNumber(rawYear);
-        int? month = ParseNumber(rawMonth);
-        int? day = ParseNumber(rawDay);
-
-        if ((rawYear is not null && year is null) ||
-            (rawMonth is not null && month is null) ||
-            (rawDay is not null && day is null))
-        {
-            return described;
-        }
-
-        if (month is < 1 or > 12)
-        {
-            return described;
-        }
-
-        if (day is null)
-        {
-            return null;
-        }
-
-        // A day with no month cannot be checked and cannot be right either: the
-        // schema has no way to express one, and readers ignore it.
-        if (month is null)
-        {
-            return day is < 1 or > 31 ? described : null;
-        }
-
-        int daysInMonth = DateTime.DaysInMonth(year ?? 2000, month.Value);
-        return day < 1 || day > daysInMonth ? described : null;
-    }
-
-    private static int? ParseNumber(string? value) =>
-        value is not null &&
-        int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int number)
-            ? number
-            : null;
-
-    /// <summary>
-    /// Whether a language tag is a two-letter code a real language uses.
-    /// </summary>
-    /// <remarks>
-    /// Two checks, not one: the shape, because ComicInfo's schema says ISO 639-1
-    /// and <c>en-US</c> is a BCP 47 tag rather than one; and membership of the
-    /// neutral-culture table, because <c>zz</c> has the right shape and means
-    /// nothing. <c>CultureInfo.GetCultureInfo("zz")</c> is not the check — Windows
-    /// hands back a synthesised culture for any well-formed tag, so it accepts
-    /// every two-letter string there is.
-    /// </remarks>
-    private static bool IsIso639Part1(string language) =>
-        language.Length == 2 &&
-        language.All(char.IsLetter) &&
-        KnownLanguageCodes.Value.Contains(language);
-
-    /// <summary>
-    /// Every two-letter language code this machine knows about.
-    /// </summary>
-    /// <remarks>
-    /// Lazy on purpose: enumerating the culture table costs several hundred
-    /// allocations, and a validation rule nobody has run yet has no business
-    /// spending them against a 400 ms launch budget.
-    /// </remarks>
-    private static readonly Lazy<HashSet<string>> KnownLanguageCodes = new(() =>
-        new HashSet<string>(
-            CultureInfo.GetCultures(CultureTypes.NeutralCultures)
-                .Select(culture => culture.TwoLetterISOLanguageName)
-                .Where(code => code.Length == 2),
-            StringComparer.OrdinalIgnoreCase));
-
-    /// <summary>
-    /// Whether an ordinary name sort produces the same order as a numeric-aware
-    /// one.
-    /// </summary>
-    private static bool SortsIntoReadingOrder(List<ContainerEntry> images)
-    {
-        if (images.Count < 2)
-        {
-            return true;
-        }
-
-        List<string> names = images.Select(e => e.Name).ToList();
-
-        List<string> ordinal = [.. names.OrderBy(n => n, StringComparer.OrdinalIgnoreCase)];
-        List<string> natural = [.. names.OrderBy(n => n, NaturalNameComparer.Instance)];
-
-        return ordinal.SequenceEqual(natural, StringComparer.OrdinalIgnoreCase);
-    }
 }
 
 /// <summary>
@@ -807,22 +508,6 @@ public sealed class ComicInfoDocument
         int.TryParse(Value("PageCount"), NumberStyles.Integer, CultureInfo.InvariantCulture, out int count)
             ? count
             : null;
-
-    /// <summary>
-    /// The <c>Image</c> index of every <c>&lt;Page&gt;</c> element, in document
-    /// order; null for one whose index is missing or unparseable.
-    /// </summary>
-    public IReadOnlyList<int?> PageImageIndexes =>
-        FindChild("Pages") is not { } pages
-            ? []
-            : [.. pages
-                .Elements()
-                .Where(e => e.Name.LocalName == "Page")
-                .Select(e => int.TryParse(
-                    (string?)e.Attribute("Image"), NumberStyles.Integer,
-                    CultureInfo.InvariantCulture, out int index)
-                        ? index
-                        : (int?)null)];
 
     /// <summary>Returns the text of a top-level element, trimmed.</summary>
     /// <param name="elementName">The element's local name.</param>

@@ -112,7 +112,7 @@ public sealed class EpubReadTests
     {
         using var temp = new TempDir();
 
-        // A cover declaration pointing at a missing entry is EPUB-E030's business.
+        // A cover declaration pointing at a missing entry must not break the read.
         BookMetadata m = Read(new EpubBuilder()
             .WithoutCoverImage()
             .WriteTo(temp.File("broken-epub-e030-missing-cover.epub")));

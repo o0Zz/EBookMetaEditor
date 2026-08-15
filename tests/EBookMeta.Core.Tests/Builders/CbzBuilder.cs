@@ -55,7 +55,7 @@ internal sealed class CbzBuilder
         return this;
     }
 
-    /// <summary>Adds a CoMet document alongside <c>ComicInfo.xml</c> (CBZ-W012).</summary>
+    /// <summary>Adds a CoMet document alongside <c>ComicInfo.xml</c>.</summary>
     internal CbzBuilder WithCoMet(string? xml = null)
     {
         _cometXml = xml ?? DefaultCoMet;
@@ -280,7 +280,7 @@ internal sealed class CbzBuilder
         </ComicInfo>
         """;
 
-    /// <summary>A CoMet document that disagrees with <see cref="DefaultComicInfo"/> (CBZ-W012).</summary>
+    /// <summary>A CoMet document that disagrees with <see cref="DefaultComicInfo"/>.</summary>
     internal const string DefaultCoMet = """
         <?xml version="1.0" encoding="utf-8"?>
         <comet xmlns:comet="http://www.denvog.com/comet/">

@@ -245,7 +245,7 @@ public sealed class CbzWriteTests
 
     /// <summary>
     /// Clearing a field removes its element, and a cleared series takes its issue
-    /// number with it — a number left behind is what rule CBZ-W030 reports.
+    /// number with it, rather than leaving an issue number behind with no series.
     /// </summary>
     [Fact]
     public void Clearing_a_field_removes_its_element()

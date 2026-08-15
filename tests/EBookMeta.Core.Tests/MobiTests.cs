@@ -466,29 +466,6 @@ public sealed class MobiTests
         Assert.Null(metadata.Title);
     }
 
-    [Theory]
-    [InlineData(100, "MOBI-W011")]
-    [InlineData(524, "MOBI-W012")]
-    public void A_missing_field_is_reported(int removedExth, string rule)
-    {
-        using var temp = new TempDir();
-
-        var builder = new MobiBuilder().WithFullName("A Title").WithTextRecord("text");
-
-        if (removedExth != 100)
-        {
-            builder.WithExth(100, "Neil Gaiman");
-        }
-
-        if (removedExth != 524)
-        {
-            builder.WithExth(524, "en");
-        }
-
-        string path = builder.WriteTo(temp.File("book.mobi"));
-
-    }
-
     [Fact]
     public void Detection_and_registration_are_wired_up()
     {

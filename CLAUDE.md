@@ -8,14 +8,16 @@ Guidance for Claude Code working in this repository.
 the Explorer right-click menu. Two things make it different from calibre,
 Sigil, ComicTagger or epub-metadata-editor:
 
-1. **It checks, without being asked.** Every file is examined for structural and
-   semantic consistency as it is opened, and whatever is wrong is written to the
-   session log under a stable rule ID.
-2. **It repairs, quietly.** Broken XML and inconsistent metadata are recovered
-   on open, so a file that no other tool will load becomes editable. The
-   correction lives in memory: the bytes on disk are untouched until the user
-   saves, and saving writes the correction along with their edits — and fixes
-   whatever else it can prove wrong while it is there.
+1. **It repairs, without being asked.** Broken XML is recovered on open, so a file
+   that no other tool will load becomes editable. The correction lives in memory:
+   the bytes on disk are untouched until the user saves, and saving writes the
+   correction along with their edits.
+2. **It fixes what it can prove, and says nothing about the rest.** A save
+   recomputes a comic's page count from the images actually present, puts an EPUB's
+   `mimetype` back where the specification requires it, and brings a stale table of
+   contents back into line with the package. It deliberately does *not* enumerate
+   everything that is wrong with a file — a checker that reports forty defects and
+   repairs none is a worse tool than one that quietly fixes four. See **Repairs**.
 
 Non-goals: reading books, editing content/XHTML/CSS, format conversion, DRM,
 library management, page-image processing. If a feature request drifts toward
@@ -579,160 +581,94 @@ what you want *after* something looked wrong, not while you are typing a title.
   without them asking.
 - `Log.Error` for failures, and `Log.Error(message, exception)` to keep the type
   and message of the cause.
-- `Log.Rule` for a validation rule, which puts the rule ID first in the line.
+- `Log.Rule` for a repair or a refusal, which puts the rule ID first in the line.
 - `Log.Debug` for detail that only matters once something has gone wrong.
 
 Core logs; Core never writes to the console. `Log` holds no opinion about
 presentation — the UI decides that, and `LogForm` renders `Log.Entries` directly
 rather than reading the file back.
 
-## Validation rules
+## Repairs
 
-Checking is the core value of this project, and **it is not a feature the user
-invokes.** There is no Validate button, no Validate menu item, no findings panel
-and no `Validate` method on `IBookFormat` — those existed once and were removed
-deliberately. Do not reintroduce them.
+**This tool fixes; it does not lecture.** There is no Validate button, no findings
+panel, no `Finding` type and no rule that exists only to tell the user something is
+wrong. A checker that reports forty defects and repairs none is a worse product
+than one that silently fixes the four it can prove — so the rule for adding
+anything to this section is blunt:
 
-The reason is that a separate validate step gets the model backwards. A user does
-not want to be told their file is broken; they want to edit it. So:
+> **A rule earns its place only if it changes the file.** If all it can do is
+> report, it does not go in. That is a deliberate reversal of an earlier design
+> which had ~45 read-time rules across the four formats; they were deleted, not
+> disabled, and re-adding one needs a better reason than "epubcheck flags it".
 
-- **Loading reports.** Every rule works from the parsed metadata document and from
-  container entry *names*, which the central directory has already supplied — so
-  running all of them costs a read essentially nothing, and there is no reason to
-  defer any of it. Anything recoverable is recovered in memory on the way in.
-- **Saving corrects.** `Write` reports what it fixed. A correction must be provable
-  from the file alone: a page count recomputed from the images present, a `mimetype`
-  entry put back where the specification requires it, a namespace declaration a
-  published spec fixes. Anything needing an assumption is reported by the read and
-  left alone.
-- **A rule logs where it fires.** `Log.Rule(level, ruleId, message, location)`, at
-  the point of discovery. There is no findings type and no sink threaded through
-  `Read` and `Write` — that existed once and was removed deliberately, along with
-  `Book.LoadFindings` and `Book.SaveFindings`. Do not reintroduce them: a rule that
-  fires says so, once, where it fired.
-- **Nothing reaches the disk without a save.** A repair found on open lives in
-  memory. There is no repair-specific write path, which is what makes "the file on
-  disk is what the user last saved" true by construction.
+The three exceptions are refusals, which are not reports: a file this build cannot
+parse, or must not rewrite, throws.
 
-The cost of that simplicity, stated so nobody rediscovers it as a surprise: rules
-are no longer assertable in tests. Verifying one means reading `Log.Entries`, which
-is a global that four parallel batch threads write to, so tests assert on behaviour
-— the metadata that came out, the bytes that were written — and not on which rules
-fired.
+### What actually gets corrected
 
-Rules are plain code inside the format's own file, grouped by the question they
-answer (`CheckRequiredMetadata`, `CheckReferences`, `CheckArchive`, `CheckLayout`,
-`CheckPages`, `CheckFields`). The rule IDs are the stable part. Follow the existing
-shape when adding one; a rule engine would be its own change and is not needed to
-add a rule.
+Every one of these is provable from the file alone — no assumption, no guess — and
+every one is logged as a warning, because a repair is the one thing that changes a
+user's file without them asking and must never be silent.
 
-IDs are namespaced by metadata document, not by container, so the `CBZ-` rules
-below cover CBT unchanged — it is the same `ComicInfo.xml` being checked. A second
-table under a `CBT-` prefix would be one more thing to keep in step for no gain.
-`F` = fatal (cannot edit — reported *and* thrown, so the ID reaches the log before
-the open fails), `E` = error, `W` = warning.
-
-### General
-
-| ID | Sev | Check |
+| ID | When | What the save does |
 |---|---|---|
-| GEN-F001 | fatal | Container unreadable or truncated |
-| GEN-W002 | warn | Extension disagrees with sniffed content |
-| GEN-E003 | error | Entry name is absolute or contains `..` |
-| GEN-W004 | warn | Format is recognised but not supported |
+| EPUB-W070 | The OPF uses a namespace prefix it never declares | Recovered in memory on open, persisted on save |
+| EPUB-E040 | `mimetype` missing, compressed, or not first | Written back as the first entry, stored |
+| EPUB-W062 | EPUB 2 only: the NCX's `dtb:uid` disagrees with the package identifier | The NCX is spliced back into line |
+| CBZ-W010 | The archive carries no `ComicInfo.xml` | One is created |
+| CBZ-E011 | `ComicInfo.xml` sits below the archive root | Moved up to the root |
+| CBZ-E020 | `PageCount` disagrees with the images present | Recomputed from the images |
+| MOBI-W030 | A joint MOBI/KF8 file was edited | Both headers were written |
 
-### EPUB
+### Refusals
 
-| ID | Sev | Check |
-|---|---|---|
-| EPUB-F001 | fatal | OPF is not well-formed XML |
-| EPUB-F002 | fatal | `META-INF/container.xml` missing, unparseable, or `rootfile/@full-path` points nowhere |
-| EPUB-E010 | error | `package/@unique-identifier` absent |
-| EPUB-E011 | error | No `dc:identifier` whose `@id` matches `@unique-identifier` |
-| EPUB-E012 | error | `dc:title` missing or empty |
-| EPUB-E013 | error | `dc:language` missing |
-| EPUB-W014 | warn | `dc:language` not a plausible BCP 47 tag |
-| EPUB-E020 | error | `spine/itemref/@idref` has no matching manifest `@id` |
-| EPUB-E021 | error | Manifest item `@href` not present in the container |
-| EPUB-E022 | error | Duplicate `@id` in manifest |
-| EPUB-W023 | warn | Container entry not referenced by the manifest |
-| EPUB-E030 | error | Cover metadata points to a nonexistent manifest id |
-| EPUB-W031 | warn | No cover declared |
-| EPUB-W032 | warn | Cover declared in only one of the two conventions |
-| EPUB-E040 | error | `mimetype` missing, not first, compressed, or wrong content |
-| EPUB-E050 | error | Declared encoding does not match actual bytes |
-| EPUB-W060 | warn | `meta/@refines` targets a nonexistent id |
-| EPUB-W061 | warn | Series present in only one of the two conventions |
-| EPUB-W070 | warn | Undeclared namespace prefix used |
-
-### Comic archives
-
-| ID | Sev | Check |
-|---|---|---|
-| CBZ-F001 | fatal | `ComicInfo.xml` present but not well-formed |
-| CBZ-W010 | warn | No `ComicInfo.xml` — metadata will be created on save |
-| CBZ-E011 | error | `ComicInfo.xml` not at archive root |
-| CBZ-W012 | warn | Multiple metadata conventions present and disagreeing |
-| CBZ-E020 | error | `PageCount` disagrees with the actual image count |
-| CBZ-W021 | warn | `<Page>` entries do not match archive images |
-| CBZ-W022 | warn | Image filenames do not sort into a stable reading order |
-| CBZ-W023 | warn | Non-image, non-metadata entries present |
-| CBZ-W030 | warn | `Number` present without `Series` |
-| CBZ-W031 | warn | `Year`/`Month`/`Day` form an impossible date |
-| CBZ-W032 | warn | `LanguageISO` not a valid ISO 639-1 code |
-
-### FictionBook
-
-| ID | Sev | Check |
-|---|---|---|
-| FB2-F001 | fatal | Not well-formed XML, or the root is not `FictionBook` |
-| FB2-F002 | fatal | No `<description>`, so there is no metadata to edit |
-| FB2-E010 | error | No `<title-info>` |
-| FB2-E011 | error | `<book-title>` missing or empty |
-| FB2-E012 | error | `<lang>` missing |
-| FB2-W013 | warn | `<lang>` not a plausible language code |
-| FB2-W014 | warn | No `<author>` |
-| FB2-W020 | warn | More than one `.fb2` in the archive |
-| FB2-E030 | error | The cover page points at a `<binary>` that is not there |
-| FB2-W031 | warn | The cover image will not base64-decode |
-| FB2-W032 | warn | No cover declared |
-| FB2-E050 | error | Declared encoding does not match actual bytes |
-| FB2-W060 | warn | `sequence/@number` is not a number |
-
-FB2-E030 and FB2-W031 are the two rules that are not free: they need the
-`<binary>`, which is past the body and outside the span this format parses. They
-run only when the read was asked for a cover, which the batch grid never is.
-
-### MOBI family
-
-| ID | Sev | Check |
-|---|---|---|
-| MOBI-F001 | fatal | Record 0 carries no MOBI header, or the header is malformed |
-| MOBI-F002 | fatal | The text is DRM-encrypted |
-| MOBI-E010 | error | No title, in either the header's name field or EXTH 503 |
-| MOBI-W011 | warn | No author (EXTH 100) |
-| MOBI-W012 | warn | No language (EXTH 524) |
-| MOBI-W020 | warn | The MOBI and KF8 halves carry different titles |
-| MOBI-W021 | warn | The declared cover record does not begin like an image |
-| MOBI-W022 | warn | No cover declared (EXTH 201) |
-| MOBI-E023 | error | The cover points outside the database, or the image index is unstated |
-| MOBI-W030 | warn | Reported on save: the edited fields were written to both headers of a joint file |
-| MOBI-W031 | warn | EXTH 121 points at a record that is not a MOBI header |
+| ID | Why |
+|---|---|
+| EPUB-F001 / F002 | The OPF or `container.xml` cannot be parsed or located |
+| CBZ-F001 | `ComicInfo.xml` is present but not well-formed |
+| FB2-F001 / F002 | Not well-formed, or no `<description>` to edit |
+| MOBI-F001 | No MOBI header in record 0 |
+| MOBI-F002 | The text is DRM-encrypted |
+| GEN-W002 | The extension disagrees with the content |
+| GEN-W004 | The format is recognised but unsupported |
 
 **MOBI-F002 is a refusal, not a warning.** DRM is a non-goal, and rewriting the
 header of an encrypted book produces a file no reader will open — so the read
 throws rather than handing back metadata the user could try to save.
 
-**MOBI-W020 is reported and left alone, and the reason is a rule worth keeping.**
-When a joint file's two halves disagree, neither is provably the right one, and
-copying the KF8 half over the MOBI 6 one would delete every field the older half
-carries and the newer one does not. So a save propagates *the fields the user
-edited* and nothing else: `MobiFormat.Merge` overlays the difference between what
-`Read` handed out and what came back onto each header's own metadata. Applying the
-edited `BookMetadata` wholesale to both headers is the obvious implementation and
-is wrong — it turns an unedited save of a mismatched file into data loss, which
+Also refused rather than warned about: a CBZ carrying a ZIP comment.
+`System.IO.Compression` cannot write one back, so `CbzFormat.Write` throws instead
+of dropping a user's ComicBookLover metadata on their behalf.
+
+### Corrections that were considered and rejected
+
+**MOBI-W020 — the two halves of a joint file disagreeing — is left alone on
+purpose.** Neither half is provably right, and copying the KF8 one over the MOBI 6
+one would delete every field the older half carries and the newer one does not. So
+a save propagates *the fields the user edited* and nothing else: `MobiFormat.Merge`
+overlays the difference between what `Read` handed out and what came back onto each
+header's own metadata. Applying the edited `BookMetadata` wholesale to both headers
+is the obvious implementation and is wrong — it turns an unedited save of a
+mismatched file into data loss, which
 `MobiTests.Saving_a_joint_file_does_not_overwrite_one_half_with_the_other` exists
 to catch.
+
+That is the shape of the test: *is the right answer provable, or merely likely?*
+A page count recomputed from the images present is provable. A missing `dc:title`
+is not — nothing in the file says what the title should have been — so there is no
+EPUB-E012 any more.
+
+### Where a repair lives
+
+In the format's own file, in `Write`, next to the other corrections — `RepairMimetype`
+and `RepairNcxIdentifier` are the models to copy. It reports what it changed through
+`Log.Rule`, and it must be provable from the file alone.
+
+The one repair that happens on *open* rather than on save is EPUB-W070, because a
+document that will not parse cannot be read at all otherwise. It is recovered in
+memory; the bytes on disk are untouched until the user saves. There is deliberately
+no repair-specific write path, which is what makes "the file on disk is what the
+user last saved" true by construction.
 
 ## Interface language
 
@@ -924,14 +860,12 @@ This is a product requirement — the whole point is right-click, fix, close.
   same change.
 - MOBI reads record 0 and nothing else. The record table gives every other record's
   length without touching it, so a cover is only pulled when one was asked for.
-- **Every rule runs on open, and that is affordable because of what they read.**
-  Cross-checks like `EPUB-E021`, `EPUB-W023`, `CBZ-E020` and `CBZ-W021` compare
-  entry *names* against the metadata document, and `ZipContainer.Open` has already
-  parsed the central directory — so they walk an in-memory list and decompress
-  nothing. A 300-page CBZ costs no more to check than a one-page one, which
-  `CbzValidateTests.Validating_a_long_comic_reads_only_the_metadata_document`
-  exists to keep true. The thing to never do is decompress or hash entries; it was
-  never enumeration that was expensive.
+- **Almost nothing runs on open, which is most of why this is fast.** A read parses
+  the metadata document and stops. The corrections all happen in `Write`, where the
+  archive is being rebuilt anyway and the cost is already paid — so opening a
+  300-page comic costs what opening a one-page one costs, which
+  `DetectionTests.A_long_comic_opens_without_reading_its_pages` keeps true.
+  The thing to never do on open is decompress or hash entries.
 - Decode the cover image off the UI thread.
 - Single instance: a named mutex decides who is first, and later launches hand
   their paths over a named pipe and exit (`SingleInstance`). Both names are
@@ -977,10 +911,9 @@ This is a product requirement — the whole point is right-click, fix, close.
   so that `ls Formats/` answers "what is supported" and the file answers "what does
   it depend on". Do not split one back out because it got long; they are meant to
   be long.
-- A new rule goes where its evidence is. If the answer is in the parsed document or
-  in entry names, it belongs in `Read`. If it is something a write can prove and
-  fix, it belongs in `Write` and must report what it changed. Never add a third
-  place for it to live.
+- **A new rule has to fix something.** If all it can do is report, it does not get
+  written — see **Repairs**. A correction goes in `Write`, must be provable from
+  the file alone, and must log what it changed.
 - When a change touches serialisation, run round-trip and golden-file tests
   first.
 - Resist scope creep back toward the formats listed as out of scope. They were

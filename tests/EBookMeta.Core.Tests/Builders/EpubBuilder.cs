@@ -28,6 +28,41 @@ internal sealed class EpubBuilder
         return this;
     }
 
+    /// <summary>
+    /// Adds an EPUB 2 table of contents declaring <paramref name="uid"/> as the
+    /// book's identifier, and an EPUB 2 OPF that lists it in the manifest.
+    /// </summary>
+    /// <param name="uid">
+    /// What the NCX should claim. Pass the same value as the OPF's
+    /// <c>dc:identifier</c> for a consistent book, or a different one to trip
+    /// EPUB-W062.
+    /// </param>
+    internal EpubBuilder WithNcx(string uid)
+    {
+        _opfText ??= Epub2Opf;
+        _opfText = _opfText.Replace(
+            "<item id=\"ch1\"",
+            "<item id=\"ncx\" href=\"toc.ncx\" media-type=\"application/x-dtbncx+xml\"/>\n"
+                + "            <item id=\"ch1\"");
+
+        return WithEntry("OEBPS/toc.ncx", $"""
+            <?xml version="1.0" encoding="UTF-8"?>
+            <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+              <head>
+                <meta name="dtb:uid" content="{uid}"/>
+                <meta name="dtb:depth" content="1"/>
+              </head>
+              <docTitle><text>Neverwhere</text></docTitle>
+              <navMap>
+                <navPoint id="n1" playOrder="1">
+                  <navLabel><text>Chapter 1</text></navLabel>
+                  <content src="text/chapter1.xhtml"/>
+                </navPoint>
+              </navMap>
+            </ncx>
+            """);
+    }
+
     /// <summary>Uses raw OPF bytes, for encoding fixtures.</summary>
     internal EpubBuilder WithOpfBytes(byte[] opf)
     {

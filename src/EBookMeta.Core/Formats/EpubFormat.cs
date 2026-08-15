@@ -219,12 +219,6 @@ public sealed partial class EpubFormat : IBookFormat
             ReadCover(container, opf, metadata);
         }
 
-        // Checked on every read, because it is all but free: the package document
-        // is already parsed and its manifest, spine and refinements are already
-        // cached, and the cross-checks against the archive compare entry names the
-        // central directory has already supplied.
-        CheckPackage(container, opf);
-
         Log.Info(
             $"Read EPUB {opf.Version ?? "(unversioned)"} metadata from '{opf.EntryName}': "
             + $"title={Log.Describe(metadata.Title)}, creators={metadata.Creators.Count}, "
@@ -273,6 +267,7 @@ public sealed partial class EpubFormat : IBookFormat
         }
 
         RepairMimetype(entries);
+        RepairNcxIdentifier(container, opf, entries);
 
         container.Rebuild(entries, targetPath);
 
@@ -355,6 +350,146 @@ public sealed partial class EpubFormat : IBookFormat
                     ? $"'{MimetypeEntryName}' was not the first entry; moved to the front on save."
                     : $"'{MimetypeEntryName}' was compressed; stored on save.",
             MimetypeEntryName);
+    }
+
+    /// <summary>The NCX media type, which is how the table of contents is found.</summary>
+    private const string NcxMediaType = "application/x-dtbncx+xml";
+
+    /// <summary>
+    /// Puts the NCX's <c>dtb:uid</c> back in step with the package's unique
+    /// identifier, which EPUB 2 requires to be the same string.
+    /// </summary>
+    /// <remarks>
+    /// An EPUB 2 stores the book's identity twice — as the <c>dc:identifier</c> the
+    /// package points at, and again as <c>&lt;meta name="dtb:uid"&gt;</c> in the
+    /// NCX — and OPF 2.0.1 requires them to match. Converters leave them
+    /// disagreeing constantly; epubcheck 3.0.1 reported it and KDP still rejects it.
+    /// <para>
+    /// Which one is right is not a judgement call, which is what makes this a
+    /// correction rather than a report: the package document is authoritative on the
+    /// book's identity by specification, and <c>dtb:uid</c> is required to be a copy
+    /// of it. So the OPF value wins and the NCX is brought into line.
+    /// </para>
+    /// <para>
+    /// The edit is a splice at the offsets of the existing <c>content="…"</c>, not a
+    /// parse and re-emit. Every other byte of the NCX — every <c>navPoint</c>, every
+    /// line ending — is the original. That is hard invariant 16 applied to a
+    /// document this build does not otherwise model, and it is why the NCX is never
+    /// handed to <c>XDocument</c>.
+    /// </para>
+    /// <para>
+    /// EPUB 3 is skipped: the nav document supersedes the NCX and nothing requires
+    /// the two to agree, so rewriting a legacy NCX there would be changing a file
+    /// for no reason.
+    /// </para>
+    /// </remarks>
+    private static void RepairNcxIdentifier(
+        IContainer container, OpfDocument opf, List<PendingEntry> entries)
+    {
+        if (opf.Version is { Length: > 0 } version && version.StartsWith('3'))
+        {
+            return;
+        }
+
+        if (UniqueIdentifierValue(opf) is not { Length: > 0 } expected)
+        {
+            return;
+        }
+
+        ManifestItem? ncx = opf.Manifest.FirstOrDefault(
+            i => string.Equals(i.MediaType, NcxMediaType, StringComparison.OrdinalIgnoreCase));
+
+        if (ncx is null || ncx.Href.Length == 0)
+        {
+            return;
+        }
+
+        string resolved = ResolveHref(opf.EntryName, ncx.Href);
+        ContainerEntry? entry = FindEntry(container, resolved);
+
+        if (entry is null)
+        {
+            return;
+        }
+
+        byte[] original = container.ReadAllBytes(entry);
+        XmlEncodingInfo encoding = XmlEncodingDetector.Detect(original);
+        string text = XmlEncodingDetector.Decode(original, encoding);
+
+        if (DtbUidSpan(text) is not var (start, length) || length < 0)
+        {
+            return;
+        }
+
+        string actual = text.Substring(start, length);
+
+        if (actual.Trim().Equals(expected, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        string patched = text.Substring(0, start) + expected + text.Substring(start + length);
+
+        int index = entries.FindIndex(e => e.Name.Equals(entry.Name, StringComparison.Ordinal));
+        if (index < 0)
+        {
+            return;
+        }
+
+        entries[index] = PendingEntry.Replacing(entry, XmlEncodingDetector.Encode(patched, encoding));
+
+        Log.Rule(
+            LogLevel.Warning,
+            "EPUB-W062",
+            $"The table of contents said the book's identifier was '{actual.Trim()}' but the "
+                + $"package says '{expected}'; corrected on save so readers cannot treat this "
+                + "as two different books.",
+            entry.Name);
+    }
+
+    /// <summary>
+    /// Locates the value inside <c>&lt;meta name="dtb:uid" content="…"&gt;</c>.
+    /// </summary>
+    /// <returns>
+    /// The offset and length of the value, or <see langword="null"/> when the NCX
+    /// declares no uid — in which case there is nothing to bring into line.
+    /// </returns>
+    private static (int Start, int Length)? DtbUidSpan(string text)
+    {
+        int name = text.IndexOf("dtb:uid", StringComparison.OrdinalIgnoreCase);
+        if (name < 0)
+        {
+            return null;
+        }
+
+        int content = text.IndexOf("content", name, StringComparison.OrdinalIgnoreCase);
+        if (content < 0)
+        {
+            return null;
+        }
+
+        int open = text.IndexOfAny(['"', '\''], content);
+        if (open < 0)
+        {
+            return null;
+        }
+
+        int close = text.IndexOf(text[open], open + 1);
+        return close < 0 ? null : (open + 1, close - open - 1);
+    }
+
+    /// <summary>The value of the <c>dc:identifier</c> the package points at.</summary>
+    private static string? UniqueIdentifierValue(OpfDocument opf)
+    {
+        if (opf.UniqueIdentifierRef is not { Length: > 0 } id || opf.Metadata is null)
+        {
+            return null;
+        }
+
+        return opf.Metadata
+            .Elements(OpfDocument.DcNs + "identifier")
+            .FirstOrDefault(e => (string?)e.Attribute("id") == id)
+            ?.Value.Trim();
     }
 
     /// <summary>
@@ -470,355 +605,6 @@ public sealed partial class EpubFormat : IBookFormat
             _ => "application/octet-stream",
         };
     }
-}
-
-/// <summary>
-/// The EPUB validation rules, by stable rule ID.
-/// </summary>
-/// <remarks>
-/// Every rule here runs on every read, which is affordable because of what they
-/// read: the package document is already parsed, and the cross-checks against the
-/// archive compare entry names the ZIP central directory has already supplied.
-/// Nothing is decompressed, so a 500-entry EPUB costs no more to check than a
-/// three-entry one.
-/// <para>
-/// A rule goes where its evidence is. These are the ones answerable from the
-/// parsed document and from entry names, so they belong to the read. A defect a
-/// write can prove and fix — <c>mimetype</c> in the wrong place — is corrected in
-/// <c>EpubFormat.cs</c> instead, and reports what it changed.
-/// </para>
-/// </remarks>
-public sealed partial class EpubFormat
-{
-    /// <summary>
-    /// Checks the package document against itself and against the archive.
-    /// </summary>
-    private static void CheckPackage(
-        IContainer container, OpfDocument opf)
-    {
-        CheckRequiredMetadata(opf);
-        CheckReferences(opf);
-        CheckArchive(container, opf);
-    }
-
-    /// <summary>
-    /// Checks the metadata every EPUB is required to carry.
-    /// </summary>
-    private static void CheckRequiredMetadata(OpfDocument opf)
-    {
-        string? location = opf.EntryName;
-
-        if (opf.Encoding is { DeclarationMatchesBytes: false, Mismatch: { } mismatch })
-        {
-            Log.Rule(
-                LogLevel.Error,
-                "EPUB-E050",
-                $"The declared encoding does not match the bytes: {mismatch}",
-                location);
-        }
-
-        if (opf.UniqueIdentifierRef is null)
-        {
-            Log.Rule(
-                LogLevel.Error,
-                "EPUB-E010",
-                "package/@unique-identifier is absent, so nothing says which "
-                    + "identifier identifies this book.",
-                location);
-        }
-        else if (!Identifiers(opf).Contains(opf.UniqueIdentifierRef, StringComparer.Ordinal))
-        {
-            Log.Rule(
-                LogLevel.Error,
-                "EPUB-E011",
-                $"package/@unique-identifier is '{opf.UniqueIdentifierRef}' but no "
-                    + "dc:identifier carries that id.",
-                location);
-        }
-
-        if (string.IsNullOrWhiteSpace(DcValue(opf, "title")))
-        {
-            Log.Rule(LogLevel.Error, "EPUB-E012", "dc:title is missing or empty.", location);
-        }
-
-        string? language = DcValue(opf, "language");
-
-        if (string.IsNullOrWhiteSpace(language))
-        {
-            Log.Rule(LogLevel.Error, "EPUB-E013", "dc:language is missing.", location);
-        }
-        else if (!MetadataFields.IsPlausibleLanguageTag(language!))
-        {
-            Log.Rule(
-                LogLevel.Warning,
-                "EPUB-W014",
-                $"dc:language is '{language}', which is not a plausible BCP 47 tag. "
-                    + "Two or three letters, optionally followed by a subtag, is what readers "
-                    + "expect — 'en', 'fr', 'pt-BR'.",
-                location);
-        }
-    }
-
-    /// <summary>
-    /// Checks that the ids the package document points at actually exist in it.
-    /// </summary>
-    private static void CheckReferences(OpfDocument opf)
-    {
-        string? location = opf.EntryName;
-        var ids = new HashSet<string>(StringComparer.Ordinal);
-        var duplicates = new List<string>();
-
-        foreach (ManifestItem item in opf.Manifest)
-        {
-            if (item.Id is { Length: > 0 } id && !ids.Add(id))
-            {
-                duplicates.Add(id);
-            }
-        }
-
-        foreach (string duplicate in duplicates.Distinct(StringComparer.Ordinal))
-        {
-            Log.Rule(
-                LogLevel.Error,
-                "EPUB-E022",
-                $"Two manifest items share the id '{duplicate}', so any reference "
-                    + "to it is ambiguous.",
-                location);
-        }
-
-        foreach (SpineItemRef itemRef in opf.Spine)
-        {
-            if (itemRef.IdRef is { Length: > 0 } idRef && !ids.Contains(idRef))
-            {
-                Log.Rule(
-                    LogLevel.Error,
-                    "EPUB-E020",
-                    $"The spine refers to '{idRef}', which is not in the manifest, "
-                        + "so that part of the reading order does not exist.",
-                    location);
-            }
-        }
-
-        foreach (MetaRefinement refinement in opf.Refinements)
-        {
-            string target = (refinement.Refines ?? string.Empty).TrimStart('#');
-
-            // Refinements point at metadata elements as well as manifest items, so
-            // an id that is not in the manifest is only dangling if it is nowhere
-            // in the document at all.
-            if (target.Length > 0 && !ids.Contains(target) && !ElementIdExists(opf, target))
-            {
-                Log.Rule(
-                    LogLevel.Warning,
-                    "EPUB-W060",
-                    $"A meta/@refines points at '{target}', which nothing in the "
-                        + "package document declares, so the refinement is ignored.",
-                    location);
-            }
-        }
-
-        CheckCoverDeclarations(opf, ids);
-        CheckSeriesDeclarations(opf);
-    }
-
-    /// <summary>
-    /// Checks the two cover conventions against each other and against the manifest.
-    /// </summary>
-    private static void CheckCoverDeclarations(
-        OpfDocument opf, HashSet<string> manifestIds)
-    {
-        string? location = opf.EntryName;
-        string? legacy = CoverMetaContent(opf);
-        bool epub3 = opf.Manifest.Any(i => i.IsCoverImage);
-
-        if (legacy is { Length: > 0 } && !manifestIds.Contains(legacy))
-        {
-            Log.Rule(
-                LogLevel.Error,
-                "EPUB-E030",
-                $"The cover metadata names manifest item '{legacy}', which does "
-                    + "not exist.",
-                location);
-            return;
-        }
-
-        if (legacy is null && !epub3)
-        {
-            Log.Rule(
-                LogLevel.Warning,
-                "EPUB-W031",
-                "No cover is declared. Saving will not invent one, so shelves will "
-                    + "show this book without a thumbnail.",
-                location);
-        }
-        else if (legacy is null || !epub3)
-        {
-            Log.Rule(LogLevel.Warning, "EPUB-W032", epub3
-                    ? "The cover is declared the EPUB 3 way only, so EPUB 2 readers will not "
-                        + "find it. Editing the cover writes both conventions."
-                    : "The cover is declared the EPUB 2 way only, so EPUB 3 readers may not "
-                        + "find it. Editing the cover writes both conventions.", location);
-        }
-    }
-
-    /// <summary>
-    /// Checks the two series conventions against each other.
-    /// </summary>
-    private static void CheckSeriesDeclarations(OpfDocument opf)
-    {
-        if (opf.Metadata is not { } metadata)
-        {
-            return;
-        }
-
-        bool calibre = metadata
-            .Elements(OpfDocument.OpfNs + "meta")
-            .Any(m => (string?)m.Attribute("name") == "calibre:series");
-
-        bool epub3 = metadata
-            .Elements(OpfDocument.OpfNs + "meta")
-            .Any(m => (string?)m.Attribute("property") == "belongs-to-collection");
-
-        if (calibre != epub3)
-        {
-            Log.Rule(
-                LogLevel.Warning,
-                "EPUB-W061",
-                calibre
-                    ? "The series is recorded the calibre way only, so EPUB 3 readers will "
-                        + "not see it. Editing the series writes both conventions."
-                    : "The series is recorded the EPUB 3 way only, so calibre and EPUB 2 "
-                        + "readers will not see it. Editing the series writes both conventions.",
-                opf.EntryName);
-        }
-    }
-
-    /// <summary>
-    /// Cross-checks the manifest against what the archive actually holds.
-    /// </summary>
-    /// <remarks>
-    /// Entry names only, compared against resolved hrefs. The single exception is
-    /// <c>mimetype</c>, whose twenty bytes have to be read to know whether they say
-    /// the right thing — readers reject the file when they do not.
-    /// </remarks>
-    private static void CheckArchive(
-        IContainer container, OpfDocument opf)
-    {
-        var present = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (ContainerEntry entry in container.Entries)
-        {
-            if (!entry.IsDirectory)
-            {
-                present.Add(entry.Name);
-            }
-        }
-
-        var referenced = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            MimetypeEntryName,
-            ContainerXml.EntryName,
-            opf.EntryName,
-        };
-
-        foreach (ManifestItem item in opf.Manifest)
-        {
-            if (item.Href is not { Length: > 0 } href)
-            {
-                continue;
-            }
-
-            string resolved = ResolveHref(opf.EntryName, href);
-            referenced.Add(resolved);
-
-            if (!present.Contains(resolved))
-            {
-                Log.Rule(
-                    LogLevel.Error,
-                    "EPUB-E021",
-                    $"The manifest lists '{href}', which is not in the archive.",
-                    opf.EntryName);
-            }
-        }
-
-        List<string> orphans = present
-            .Where(name => !referenced.Contains(name)
-                && !name.StartsWith("META-INF/", StringComparison.OrdinalIgnoreCase))
-            .ToList();
-
-        if (orphans.Count > 0)
-        {
-            Log.Rule(LogLevel.Warning, "EPUB-W023", $"The archive holds {orphans.Count} file"
-                    + (orphans.Count == 1 ? "" : "s")
-                    + " the manifest does not list, so readers will ignore "
-                    + (orphans.Count == 1 ? "it" : "them") + ".");
-        }
-
-        CheckMimetype(container);
-    }
-
-    /// <summary>
-    /// Checks the one entry whose position and storage are dictated by the spec.
-    /// </summary>
-    private static void CheckMimetype(IContainer container)
-    {
-        ContainerEntry? first = container.Entries.Count > 0 ? container.Entries[0] : null;
-
-        if (first is null || !first.Name.Equals(MimetypeEntryName, StringComparison.Ordinal))
-        {
-            Log.Rule(
-                LogLevel.Error,
-                "EPUB-E040",
-                $"'{MimetypeEntryName}' must be the archive's first entry. "
-                    + "Saving puts it back.",
-                MimetypeEntryName);
-            return;
-        }
-
-        if (first.CompressionMethod != ZipCompressionMethods.Stored)
-        {
-            Log.Rule(
-                LogLevel.Error,
-                "EPUB-E040",
-                $"'{MimetypeEntryName}' is compressed and must be stored. "
-                    + "Saving stores it.",
-                MimetypeEntryName);
-        }
-
-        string content = Encoding.ASCII.GetString(container.ReadAllBytes(first));
-
-        if (!content.Equals(EpubMediaType, StringComparison.Ordinal))
-        {
-            Log.Rule(
-                LogLevel.Error,
-                "EPUB-E040",
-                $"'{MimetypeEntryName}' must contain exactly '{EpubMediaType}', "
-                    + $"with no BOM and no trailing newline, but contains '{content.Trim()}'.",
-                MimetypeEntryName);
-        }
-    }
-
-    private static IEnumerable<string> Identifiers(OpfDocument opf) =>
-        opf.Metadata is null
-            ? []
-            : opf.Metadata
-                .Elements(OpfDocument.DcNs + "identifier")
-                .Select(e => (string?)e.Attribute("id"))
-                .Where(id => id is { Length: > 0 })
-                .Select(id => id!);
-
-    private static string? DcValue(OpfDocument opf, string localName) =>
-        opf.Metadata?.Elements(OpfDocument.DcNs + localName).FirstOrDefault()?.Value;
-
-    private static string? CoverMetaContent(OpfDocument opf) =>
-        opf.Metadata
-            ?.Elements(OpfDocument.OpfNs + "meta")
-            .Where(m => (string?)m.Attribute("name") == "cover")
-            .Select(m => (string?)m.Attribute("content"))
-            .FirstOrDefault();
-
-    private static bool ElementIdExists(OpfDocument opf, string id) =>
-        opf.Package?.Descendants().Any(e => (string?)e.Attribute("id") == id) == true;
 }
 
 /// <summary>
@@ -2374,8 +2160,6 @@ public sealed class ContainerXml
 {
     /// <summary>The entry name, which the EPUB specification fixes.</summary>
     public const string EntryName = "META-INF/container.xml";
-
-    private static readonly XNamespace Ns = "urn:oasis:names:tc:opendocument:xmlns:container";
 
     private ContainerXml(IReadOnlyList<string> rootfilePaths)
     {

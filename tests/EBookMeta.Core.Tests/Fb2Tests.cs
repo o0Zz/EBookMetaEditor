@@ -272,9 +272,12 @@ public sealed class Fb2Tests
         Assert.Null(Read(path, ReadOptions.WithoutCover).Cover);
     }
 
-    /// <summary>FB2-E030: the cover page points at a binary that is not there.</summary>
+    /// <summary>
+    /// A cover page pointing at a binary that is not there must not stop the read:
+    /// the metadata is all still there, and only the image is missing.
+    /// </summary>
     [Fact]
-    public void A_dangling_cover_reference_is_reported()
+    public void A_dangling_cover_reference_still_reads_the_metadata()
     {
         using var temp = new TempDir();
 
@@ -282,25 +285,10 @@ public sealed class Fb2Tests
             .WithoutBinaries()
             .WriteTo(temp.File("book.fb2"));
 
-        using RawContainer container = RawContainer.Open(path);
-        new Fb2Format().Read(container, ReadOptions.Default);
+        BookMetadata metadata = Read(path, ReadOptions.Default);
 
-    }
-
-    [Theory]
-    [InlineData("<book-title>The Doll's House</book-title>", "FB2-E011")]
-    [InlineData("<lang>en</lang>", "FB2-E012")]
-    public void A_missing_required_field_is_reported(string removed, string rule)
-    {
-        using var temp = new TempDir();
-
-        string path = new Fb2Builder()
-            .WithDescription(Fb2Builder.MinimalDescription.Replace(removed, string.Empty))
-            .WriteTo(temp.File("book.fb2"));
-
-        using RawContainer container = RawContainer.Open(path);
-        new Fb2Format().Read(container, ReadOptions.WithoutCover);
-
+        Assert.Equal("The Doll's House", metadata.Title);
+        Assert.Null(metadata.Cover);
     }
 
     /// <summary>FB2-F002: no description at all, so there is nothing to edit.</summary>

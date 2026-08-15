@@ -127,10 +127,6 @@ public sealed partial class MobiFormat : IBookFormat
             ReadCover(container, preferred, metadata);
         }
 
-        CheckRequiredMetadata(preferred, metadata);
-        CheckHeaders(container, headers);
-        CheckCover(container, preferred);
-
         Log.Info(
             $"Read MOBI metadata from {headers.Count} header record"
             + $"{(headers.Count == 1 ? "" : "s")}: title={Log.Describe(metadata.Title)}, "
@@ -302,13 +298,11 @@ public sealed partial class MobiFormat : IBookFormat
         }
         catch (BookFormatException)
         {
-            // A boundary pointing at something that is not a header is worth
-            // saying, but the MOBI 6 half is still perfectly editable.
-            Log.Rule(
-                LogLevel.Warning,
-                "MOBI-W031",
+            // A boundary pointing at something that is not a header leaves the
+            // MOBI 6 half perfectly editable, so only that one is updated.
+            Log.Debug(
                 $"EXTH record 121 says the KF8 part starts at record {boundary}, "
-                    + "but no MOBI header is there. Only the first header will be updated.");
+                + "but no MOBI header is there.");
         }
 
         return headers;
@@ -363,12 +357,7 @@ public sealed partial class MobiFormat : IBookFormat
 
         if (MediaTypeOf(data) is not { } mediaType)
         {
-            Log.Rule(
-                LogLevel.Warning,
-                "MOBI-W021",
-                $"Record {index} is declared as the cover but does not begin like "
-                    + "an image.",
-                container.Entries[index].Name);
+            Log.Debug($"Record {index} is declared as the cover but does not begin like an image.");
             return;
         }
 
@@ -413,131 +402,6 @@ public sealed partial class MobiFormat : IBookFormat
         return null;
     }
 
-}
-
-/// <summary>
-/// The MOBI validation rules — the half of <see cref="MobiFormat"/> that reports
-/// rather than reads.
-/// </summary>
-/// <remarks>
-/// Every rule works from the header record the read already parsed, or from the
-/// PalmDB record table the container already walked, so running all of them costs
-/// a read nothing. Nothing here decompresses a text record: this build has no
-/// reason to look at a book's contents and does not.
-/// </remarks>
-public sealed partial class MobiFormat
-{
-    /// <summary>
-    /// Checks the fields a book needs before a library can file it.
-    /// </summary>
-    private static void CheckRequiredMetadata(
-        MobiDocument header, BookMetadata metadata)
-    {
-        string location = header.Location;
-
-        if (string.IsNullOrWhiteSpace(metadata.Title))
-        {
-            Log.Rule(
-                LogLevel.Error,
-                "MOBI-E010",
-                "The book has no title, in either the header's name field or "
-                    + "EXTH record 503.",
-                location);
-        }
-
-        if (!metadata.PrimaryCreators.Any())
-        {
-            Log.Rule(
-                LogLevel.Warning,
-                "MOBI-W011",
-                "There is no author (EXTH record 100), so a library will file "
-                    + "this book under no author at all.",
-                location);
-        }
-
-        if (metadata.Language is null)
-        {
-            Log.Rule(
-                LogLevel.Warning,
-                "MOBI-W012",
-                "There is no language (EXTH record 524). The MOBI header's own "
-                    + "locale field is not read as a substitute, because mapping its "
-                    + "numeric code back to a language tag would be a guess.",
-                location);
-        }
-    }
-
-    /// <summary>
-    /// Reports what the database's header records say about each other.
-    /// </summary>
-    private static void CheckHeaders(
-        IContainer container, List<MobiDocument> headers)
-    {
-        if (headers.Count < 2)
-        {
-            return;
-        }
-
-        // Both halves are read, so a disagreement can be stated rather than
-        // guessed at. It is reported and left alone: neither half is provably the
-        // right one, and copying the KF8 half over the MOBI 6 one would delete
-        // whatever fields only the older half carries. A save propagates what the
-        // user edits and nothing else.
-        BookMetadata first = headers[0].ReadMetadata();
-        BookMetadata second = headers[1].ReadMetadata();
-
-        if (!string.Equals(first.Title, second.Title, StringComparison.Ordinal))
-        {
-            Log.Rule(
-                LogLevel.Warning,
-                "MOBI-W020",
-                "The MOBI and KF8 halves of this file carry different titles "
-                    + $"('{first.Title}' and '{second.Title}'). The KF8 one is shown, "
-                    + "because that is the half readers use. Editing the title writes both; "
-                    + "saving without editing changes neither.");
-        }
-    }
-
-    /// <summary>
-    /// Reports a cover reference that points outside the database.
-    /// </summary>
-    private static void CheckCover(
-        IContainer container, MobiDocument header)
-    {
-        if (header.CoverImageOffset is not { } offset)
-        {
-            Log.Rule(
-                LogLevel.Warning,
-                "MOBI-W022",
-                "No cover is declared (EXTH record 201), so readers will show "
-                    + "this book with a generated one.",
-                header.Location);
-            return;
-        }
-
-        if (header.FirstImageIndex < 0)
-        {
-            Log.Rule(
-                LogLevel.Error,
-                "MOBI-E023",
-                $"A cover is declared at image {offset}, but the header does not "
-                    + "say which record the images start at, so it cannot be found.",
-                header.Location);
-            return;
-        }
-
-        long index = (long)header.FirstImageIndex + offset;
-
-        if (index <= 0 || index >= container.Entries.Count)
-        {
-            Log.Rule(
-                LogLevel.Error,
-                "MOBI-E023",
-                $"The cover points at record {index}, which is outside this "
-                    + $"database's {container.Entries.Count} records.",
-                header.Location);
-        }
-    }
 }
 
 /// <summary>
