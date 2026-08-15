@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using EBookMeta.Containers;
@@ -187,6 +187,122 @@ public sealed record BatchSaveReport(int Saved, int Skipped, int Failed)
 
         return string.Join(" · ", parts);
     }
+}
+
+/// <summary>
+/// Orders batch rows by one column, the way a grid header click asks for.
+/// </summary>
+/// <remarks>
+/// The two rules a plain text comparison does not give:
+/// <list type="bullet">
+/// <item><description>
+/// A blank sorts last whichever way the column is pointing. A row that has not
+/// been read yet reads blank in every field, and the grid fills in as reads
+/// complete, so a descending sort that stacked the unread rows on top would hide
+/// the answer the click asked for.
+/// </description></item>
+/// <item><description>
+/// Equal values keep reading order — file name, ascending, in both directions —
+/// so sorting by a column that repeats groups the rows without shuffling them
+/// inside a group.
+/// </description></item>
+/// </list>
+/// </remarks>
+public sealed class BatchEntryComparer : IComparer<BatchEntry>
+{
+    private readonly Func<BatchEntry, string> _key;
+    private readonly MetadataField? _field;
+    private readonly bool _descending;
+
+    private BatchEntryComparer(Func<BatchEntry, string> key, MetadataField? field, bool descending)
+    {
+        _key = key;
+        _field = field;
+        _descending = descending;
+    }
+
+    /// <summary>Orders by a metadata field, as the editors show it.</summary>
+    /// <param name="field">The field to order by. Exactly one flag.</param>
+    /// <param name="descending">Whether to reverse the order.</param>
+    /// <returns>The comparer.</returns>
+    /// <remarks>
+    /// A series index is compared as a number and a date chronologically, because
+    /// both are stored as the characters the file used: <c>10</c> before <c>2</c>
+    /// and <c>2011</c> after <c>2011-05</c> are what comparing their text gives.
+    /// </remarks>
+    public static BatchEntryComparer ByField(MetadataField field, bool descending) =>
+        new(entry => entry.Read(field), field, descending);
+
+    /// <summary>Orders by any text a row can be asked for.</summary>
+    /// <param name="key">The text to order by, read from an entry.</param>
+    /// <param name="descending">Whether to reverse the order.</param>
+    /// <returns>The comparer.</returns>
+    public static BatchEntryComparer ByText(Func<BatchEntry, string> key, bool descending)
+    {
+        Throw.IfNull(key);
+        return new BatchEntryComparer(key, null, descending);
+    }
+
+    /// <summary>Orders by file name, the way a person reads one.</summary>
+    /// <param name="descending">Whether to reverse the order.</param>
+    /// <returns>The comparer.</returns>
+    public static BatchEntryComparer ByFileName(bool descending) =>
+        ByText(entry => entry.FileName, descending);
+
+    /// <inheritdoc />
+    public int Compare(BatchEntry? x, BatchEntry? y)
+    {
+        if (ReferenceEquals(x, y))
+        {
+            return 0;
+        }
+
+        if (x is null || y is null)
+        {
+            return x is null ? 1 : -1;
+        }
+
+        string left = _key(x) ?? string.Empty;
+        string right = _key(y) ?? string.Empty;
+
+        if (left.Length == 0 || right.Length == 0)
+        {
+            // Not negated: a blank is the absence of a value rather than a small
+            // one, so it belongs at the bottom of both directions.
+            return left.Length == right.Length
+                ? ByName(x, y)
+                : left.Length == 0 ? 1 : -1;
+        }
+
+        int result = CompareValues(left, right, x, y);
+
+        return result == 0 ? ByName(x, y) : _descending ? -result : result;
+    }
+
+    private int CompareValues(string left, string right, BatchEntry x, BatchEntry y)
+    {
+        if (_field == MetadataField.SeriesIndex &&
+            TryIndex(left, out decimal first) &&
+            TryIndex(right, out decimal second))
+        {
+            return first.CompareTo(second);
+        }
+
+        if (_field == MetadataField.PublicationDate &&
+            x.Metadata?.PublicationDate?.Value is { } earlier &&
+            y.Metadata?.PublicationDate?.Value is { } later)
+        {
+            return earlier.CompareTo(later);
+        }
+
+        return NaturalNameComparer.Instance.Compare(left, right);
+    }
+
+    private static bool TryIndex(string text, out decimal value) =>
+        decimal.TryParse(text, NumberStyles.Number, CultureInfo.InvariantCulture, out value);
+
+    private static int ByName(BatchEntry x, BatchEntry y) =>
+        NaturalNameComparer.Instance.Compare(x.FileName, y.FileName);
 }
 
 /// <summary>

@@ -1,4 +1,5 @@
-﻿using System.Runtime.InteropServices;
+﻿using System.Collections;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -65,6 +66,11 @@ internal sealed class BatchForm : Form, IPathReceiver
 
     private CancellationTokenSource? _work;
     private bool _busy;
+
+    /// <summary>The column the grid is ordered by, or null while it is in the order the files arrived.</summary>
+    private DataGridViewColumn? _sortedColumn;
+
+    private bool _sortDescending;
 
     /// <summary>
     /// Whether the grid is being written to by this form rather than by the user.
@@ -279,7 +285,11 @@ internal sealed class BatchForm : Form, IPathReceiver
             {
                 HeaderText = Strings.Get(headerKey),
                 Width = width,
-                SortMode = DataGridViewColumnSortMode.NotSortable,
+                // Programmatic rather than Automatic: the grid would otherwise
+                // order the rows by the text in its own cells, which sorts 10
+                // before 2 and a bare year after a full date. The comparison lives
+                // in Core, where the values came from.
+                SortMode = DataGridViewColumnSortMode.Programmatic,
                 Tag = field,
                 MaxInputLength = 4000,
             });
@@ -291,7 +301,7 @@ internal sealed class BatchForm : Form, IPathReceiver
         HeaderText = header,
         Width = width,
         ReadOnly = true,
-        SortMode = DataGridViewColumnSortMode.NotSortable,
+        SortMode = DataGridViewColumnSortMode.Programmatic,
         DefaultCellStyle = new DataGridViewCellStyle { BackColor = SystemColors.Control },
     };
 
@@ -554,13 +564,111 @@ internal sealed class BatchForm : Form, IPathReceiver
         SetTicks(rows);
     }
 
-    /// <summary>Ticks or unticks every row in one click of the column header.</summary>
+    /// <summary>
+    /// Ticks or unticks every row in one click of the tick column's header, and
+    /// orders the grid by any other.
+    /// </summary>
     private void OnColumnHeaderMouseClick(object? sender, DataGridViewCellMouseEventArgs e)
     {
-        if (!_busy && e.ColumnIndex == SaveColumn)
+        if (_busy || e.ColumnIndex < 0)
+        {
+            return;
+        }
+
+        if (e.ColumnIndex == SaveColumn)
         {
             SetTicks([.. _grid.Rows.Cast<DataGridViewRow>()]);
+            return;
         }
+
+        SortBy(_grid.Columns[e.ColumnIndex]);
+    }
+
+    /// <summary>
+    /// Orders the grid by a column, reversing when it is already the one in use.
+    /// </summary>
+    private void SortBy(DataGridViewColumn column)
+    {
+        _sortDescending = ReferenceEquals(column, _sortedColumn) && !_sortDescending;
+        _sortedColumn = column;
+
+        ApplySort();
+    }
+
+    /// <summary>
+    /// Puts the rows in the order the last header click asked for.
+    /// </summary>
+    /// <remarks>
+    /// Reapplied when a read finishes, because a row that arrives blank and fills in
+    /// later would otherwise sit wherever the sort left it when it had nothing to
+    /// say. Not on an edit: a row that jumped out from under the cursor as it was
+    /// typed into would be worse than one in the wrong place.
+    /// </remarks>
+    private void ApplySort()
+    {
+        if (_sortedColumn is null || _grid.Rows.Count == 0)
+        {
+            return;
+        }
+
+        // A cell being edited holds its own copy of the value and would write it
+        // back into whichever row landed underneath it.
+        _grid.EndEdit();
+
+        IComparer<BatchEntry> order = _sortedColumn.Tag is MetadataField field
+            ? BatchEntryComparer.ByField(field, _sortDescending)
+            : BatchEntryComparer.ByText(KeyOf(_sortedColumn.Index), _sortDescending);
+
+        _grid.Sort(new RowComparer(order));
+
+        foreach (DataGridViewColumn column in _grid.Columns)
+        {
+            column.HeaderCell.SortGlyphDirection = SortOrder.None;
+        }
+
+        _sortedColumn.HeaderCell.SortGlyphDirection =
+            _sortDescending ? SortOrder.Descending : SortOrder.Ascending;
+    }
+
+    /// <summary>The text a column that holds no metadata field is ordered by.</summary>
+    private static Func<BatchEntry, string> KeyOf(int column) => column switch
+    {
+        FileColumn => entry => entry.FileName,
+        FormatColumn => entry => entry.Detected is { } detected
+            ? detected.Format.DisplayName()
+            : string.Empty,
+        StatusColumn => StatusTextOf,
+        _ => _ => string.Empty,
+    };
+
+    /// <summary>
+    /// Orders grid rows by the entries behind them.
+    /// </summary>
+    /// <remarks>
+    /// The grid sorts rows and Core compares entries, so something has to look one
+    /// up from the other. Sorting reads the model rather than the cells, which is
+    /// what lets a date sort chronologically while still being shown as the
+    /// characters the file used.
+    /// </remarks>
+    private sealed class RowComparer(IComparer<BatchEntry> entries) : IComparer
+    {
+        public int Compare(object? x, object? y)
+        {
+            BatchEntry? left = EntryOf(x);
+            BatchEntry? right = EntryOf(y);
+
+            // A row with no entry behind it has nothing to be compared by. The
+            // interface is the net48 one, whose parameters are not annotated, so
+            // this is the check rather than a suppression.
+            if (left is null || right is null)
+            {
+                return left is null && right is null ? 0 : left is null ? 1 : -1;
+            }
+
+            return entries.Compare(left, right);
+        }
+
+        private static BatchEntry? EntryOf(object? row) => (row as DataGridViewRow)?.Tag as BatchEntry;
     }
 
     /// <summary>
@@ -958,6 +1066,10 @@ internal sealed class BatchForm : Form, IPathReceiver
                 {
                     RefreshRow(row);
                 }
+
+                // Rows that were blank when the sort ran now have values, and rows
+                // added since are sitting at the bottom in the order they arrived.
+                ApplySort();
 
                 bool cancelled = task.IsCanceled ||
                     task.Exception?.InnerExceptions.Any(e => e is OperationCanceledException) == true;

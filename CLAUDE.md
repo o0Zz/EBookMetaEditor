@@ -277,6 +277,16 @@ no batch write path. A row is a `Book`; `SaveOne` is a call to `Book.Save`.
   with `SaveRequested` as the grid's leftmost column. It only ever *adds* files —
   an edited row is ticked and its box locked, so no click can drop an edit.
 - **Covers are not read** (`ReadOptions.WithoutCover`).
+- **Sorting is display only.** A header click orders the grid through
+  `BatchEntryComparer`; `Entries` keeps the order the files arrived in, so what a
+  save writes and in what order does not depend on how the grid is looking at it.
+  The comparer reads the model rather than the cells — a series index compares as a
+  number and a date chronologically, though both are shown as the characters the
+  file used. A blank sorts last in *both* directions, because a row that has not
+  been read yet is blank in every field and a descending sort would otherwise stack
+  the unread rows on top of the answer; equal values keep file-name order. The grid
+  re-sorts when a read finishes, never on an edit — a row that jumped out from
+  under the cursor as it was typed into would be worse than one in the wrong place.
 - **Capabilities gate per cell, not per window**, so `Sort title` is dead on a
   comic and live on a book in the same column. `BatchEntry.Apply` refuses a field
   the format cannot store even if a caller asks, and every refusal is counted and
