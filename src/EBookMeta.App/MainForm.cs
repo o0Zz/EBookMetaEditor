@@ -344,10 +344,42 @@ internal sealed class MainForm : Form, IPathReceiver
         if (arrived.Length == 1 && _book is null && !Directory.Exists(arrived[0]))
         {
             Open(arrived[0]);
+
+            // This window may be hidden behind a grid it handed its last file to.
+            Show();
+            Activate();
             return;
         }
 
-        OpenBatch(_book is null ? arrived : [_book.Path, .. arrived]);
+        string[] all = _book is null ? arrived : [_book.Path, .. arrived];
+
+        // Ownership moves to the grid rather than being copied. A window still
+        // holding a Book for a file the grid now owns would hand that same file to
+        // the *next* selection as well — which is how the first selection's first
+        // book turned up at the top of the second selection's window, edited in two
+        // places, last save winning.
+        Release();
+
+        OpenBatch(all);
+    }
+
+    /// <summary>Lets go of the open file, leaving the window as it starts up.</summary>
+    private void Release()
+    {
+        _book = null;
+        _saveItem.Enabled = false;
+
+        foreach ((_, TextBox box) in _fields)
+        {
+            box.Text = string.Empty;
+            box.Enabled = true;
+            box.BackColor = SystemColors.Window;
+        }
+
+        ShowCover(null);
+
+        Text = Strings.Get("app.name");
+        SetStatus(Strings.Get("main.status.begin"));
     }
 
     /// <summary>
@@ -357,9 +389,12 @@ internal sealed class MainForm : Form, IPathReceiver
     {
         var batch = new BatchForm(_settings, paths);
 
-        batch.FormClosed += (_, _) =>
+        batch.FormClosed += (closed, _) =>
         {
-            if (!IsDisposed)
+            // Only when this was the last grid. Coming back while another one is
+            // still open would put a closable window under the user's mouse whose
+            // closing ends the process — taking that grid's unsaved edits with it.
+            if (!IsDisposed && !AnyBatchOpen(closed))
             {
                 Show();
                 Activate();
@@ -368,6 +403,37 @@ internal sealed class MainForm : Form, IPathReceiver
 
         Hide();
         batch.Show();
+    }
+
+    /// <summary>
+    /// Whether a batch window other than the one that just closed is still up.
+    /// </summary>
+    /// <param name="closing">
+    /// The window whose <see cref="Form.FormClosed"/> is running. It can still be
+    /// listed as open at that point, so it is excluded by identity rather than
+    /// trusted to have been removed already.
+    /// </param>
+    private static bool AnyBatchOpen(object? closing) =>
+        Application.OpenForms
+            .OfType<BatchForm>()
+            .Any(form => !ReferenceEquals(form, closing) && !form.IsDisposed);
+
+    /// <inheritdoc />
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        // This window is what Application.Run was handed, so it is the process's
+        // lifetime: closing it while a grid is open ends the message loop and
+        // disposes that grid without ever asking about its unsaved edits. Step
+        // aside instead — it comes back when the last grid closes.
+        if (e.CloseReason == CloseReason.UserClosing && AnyBatchOpen(null))
+        {
+            e.Cancel = true;
+            Release();
+            Hide();
+            return;
+        }
+
+        base.OnFormClosing(e);
     }
 
     private void Open(string path)
