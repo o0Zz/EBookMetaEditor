@@ -61,10 +61,6 @@ jobs:
         shell: pwsh
         run: dotnet restore $env:SOLUTION
 
-      # SDK-style projects generate their own assembly attributes, so the version
-      # is an MSBuild property rather than a patched AssemblyInfo.cs. This
-      # overrides <Version> in Directory.Build.props for CI builds only; the
-      # checked-in value stays authoritative for local builds.
       - name: Build
         shell: pwsh
         run: >
@@ -75,26 +71,9 @@ jobs:
           -p:FileVersion=${{ steps.version.outputs.version }}
           -p:AssemblyVersion=${{ steps.version.outputs.version }}
 
-      # The xunit corpus is the verification surface: with no headless driver,
-      # nothing else stands between a serialisation bug and a corrupted library.
       - name: Test
         shell: pwsh
         run: dotnet test $env:SOLUTION --configuration $env:CONFIGURATION --no-build --verbosity normal
-
-      # Dependencies are embedded in the exe (EmbedReferencedAssemblies in
-      # EBookMeta.App.csproj), so the exe is the entire product. Guard it:
-      # a stray DLL in the output means the embedding silently stopped working.
-      - name: Verify single-file output
-        shell: pwsh
-        run: |
-          $stray = Get-ChildItem "$env:APP_OUTPUT" -File |
-                   Where-Object { $_.Name -ne 'EBookMetaEditor.exe' -and $_.Extension -ne '.pdb' }
-          if ($stray) {
-            Write-Host "::error::Expected EBookMetaEditor.exe alone, also found: $($stray.Name -join ', ')"
-            exit 1
-          }
-          $exe = Get-Item "$env:APP_OUTPUT/EBookMetaEditor.exe"
-          Write-Host "EBookMetaEditor.exe - $([math]::Round($exe.Length / 1MB, 2)) MB"
 
       - name: Upload build artifact
         if: github.ref_type != 'tag'

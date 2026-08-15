@@ -65,7 +65,14 @@ internal sealed class SettingsForm : Form
         _contextMenu.Click += OnContextMenuClicked;
         UpdateContextMenuButton();
 
-        Label registrationNote = Note("settings.registrationNote", indent: 0);
+        Label registrationNote = new()
+        {
+            Text = Strings.Get("settings.registrationNote"),
+            AutoSize = true,
+            MaximumSize = new Size(414, 0),
+            Margin = new Padding(3, 2, 3, 6),
+            ForeColor = SystemColors.GrayText,
+        };
 
         Controls.Add(BuildLayout(extensionsLabel, registrationNote));
         Controls.Add(BuildButtons());
@@ -135,22 +142,6 @@ internal sealed class SettingsForm : Form
 
         return buttons;
     }
-
-    /// <summary>
-    /// A greyed explanatory paragraph that grows downwards instead of clipping.
-    /// </summary>
-    private static Label Note(string key, int indent) => new()
-    {
-        Text = Strings.Get(key),
-        AutoSize = true,
-
-        // Wrap at the dialog's width and take as many lines as that needs. A
-        // fixed Size here is what turns a longer translation into a truncated
-        // sentence.
-        MaximumSize = new Size(414 - indent, 0),
-        Margin = new Padding(indent + 3, 2, 3, 6),
-        ForeColor = SystemColors.GrayText,
-    };
 
     /// <summary>
     /// Offers every language embedded in the exe, plus following Windows.

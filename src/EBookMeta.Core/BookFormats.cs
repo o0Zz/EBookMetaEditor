@@ -104,8 +104,17 @@ public static class BookFormats
         try
         {
             // The answers no registered format is there to give, taken first
-            // because none of them has a container this build can open.
-            FormatId? unsupported = Unsupported(source);
+            // because none of them has a container this build can open. Nothing is
+            // registered for any of these, so there is nobody to ask: recognising
+            // one costs a few magic-number comparisons and lets the app tell a user
+            // their .cbz is really a RAR, while supporting one would cost a
+            // container and a metadata document.
+            FormatId? unsupported = source.ContainerKind switch
+            {
+                ContainerKind.Rar => FormatId.Cbr,
+                ContainerKind.SevenZip => FormatId.Cb7,
+                _ => source.HeadStartsWith(PdfMagic) ? FormatId.Pdf : null,
+            };
 
             if (unsupported is { } id)
             {
@@ -231,22 +240,6 @@ public static class BookFormats
     public static bool IsAcceptableSubstitute(FormatId claimed, FormatId actual) =>
         claimed == actual ||
         (claimed is FormatId.Mobi or FormatId.Azw3 && actual is FormatId.Mobi or FormatId.Azw3);
-
-    /// <summary>
-    /// Names a format this build recognises and cannot open.
-    /// </summary>
-    /// <remarks>
-    /// Not something a format could answer: nothing is registered for any of these,
-    /// so there is nobody to ask. Recognising one costs a few magic-number
-    /// comparisons and lets the app tell a user their <c>.cbz</c> is really a RAR;
-    /// supporting one costs a container and a metadata document.
-    /// </remarks>
-    private static FormatId? Unsupported(BookSource source) => source.ContainerKind switch
-    {
-        ContainerKind.Rar => FormatId.Cbr,
-        ContainerKind.SevenZip => FormatId.Cb7,
-        _ => source.HeadStartsWith(PdfMagic) ? FormatId.Pdf : null,
-    };
 
     private static DetectedFormat Describe(
         FormatId format, BookSource source, FormatId claimedByExtension, string? detail) =>

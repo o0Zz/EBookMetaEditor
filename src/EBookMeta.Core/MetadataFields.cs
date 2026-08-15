@@ -75,7 +75,7 @@ public static class MetadataFields
         Throw.IfNull(metadata);
         Throw.IfNull(value);
 
-        string? text = Blank(value) ? null : value.Trim();
+        string? text = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
         return field switch
         {
@@ -263,6 +263,4 @@ public static class MetadataFields
             .Split(separator, StringSplitOptions.RemoveEmptyEntries)
             .Select(part => part.Trim())
             .Where(part => part.Length > 0)];
-
-    private static bool Blank(string value) => string.IsNullOrWhiteSpace(value);
 }

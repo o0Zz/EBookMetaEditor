@@ -45,7 +45,10 @@ internal static class Program
             }
         };
 
-        string[] paths = ExistingPaths(args);
+        // Only the arguments that name something on disk.
+        string[] paths =
+            [.. args.Where(arg => !string.IsNullOrWhiteSpace(arg))
+                    .Where(arg => File.Exists(arg) || Directory.Exists(arg))];
 
         // Selecting thirty files in Explorer starts up to thirty processes. All but
         // the first hand their paths over and exit, so the user gets one window with
@@ -81,13 +84,6 @@ internal static class Program
             ? new MainForm(settings, null)
             : new BatchForm(settings, paths);
     }
-
-    /// <summary>
-    /// Keeps the arguments that name something on disk.
-    /// </summary>
-    private static string[] ExistingPaths(string[] args) =>
-        [.. args.Where(arg => !string.IsNullOrWhiteSpace(arg))
-                .Where(arg => File.Exists(arg) || Directory.Exists(arg))];
 
     /// <summary>
     /// Points the log at a file beside the settings and records what we started with.
