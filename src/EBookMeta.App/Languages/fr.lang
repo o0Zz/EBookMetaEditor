@@ -60,9 +60,9 @@ dialog.number.start = Commencer à
 dialog.number.step = Incrémenter de
 dialog.number.hint = Les lignes sélectionnées sont numérotées de haut en bas, dans l'ordre où le tableau les affiche. Une ligne sans nom de série est laissée telle quelle.
 
-filter.supported = Fichiers pris en charge (*.epub;*.cbz;*.cbt;*.fb2;*.fb2.zip;*.mobi;*.prc;*.azw;*.azw3)
+filter.supported = Fichiers pris en charge (*.epub;*.cbz;*.cbt;*.cbr;*.fb2;*.fb2.zip;*.mobi;*.prc;*.azw;*.azw3)
 filter.epub = EPUB (*.epub)
-filter.cbz = Archive de bande dessinée (*.cbz;*.cbt)
+filter.cbz = Archive de bande dessinée (*.cbz;*.cbt;*.cbr)
 filter.fb2 = FictionBook (*.fb2;*.fb2.zip)
 filter.mobi = Livre Kindle (*.mobi;*.prc;*.azw;*.azw3)
 filter.all = Tous les fichiers (*.*)

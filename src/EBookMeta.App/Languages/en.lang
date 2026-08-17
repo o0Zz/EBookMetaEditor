@@ -72,9 +72,9 @@ dialog.number.hint = The selected rows are numbered top to bottom, in the order 
 
 # File-dialog filters. Translate the description; leave the patterns in brackets
 # exactly as they are.
-filter.supported = Supported files (*.epub;*.cbz;*.cbt;*.fb2;*.fb2.zip;*.mobi;*.prc;*.azw;*.azw3)
+filter.supported = Supported files (*.epub;*.cbz;*.cbt;*.cbr;*.fb2;*.fb2.zip;*.mobi;*.prc;*.azw;*.azw3)
 filter.epub = EPUB (*.epub)
-filter.cbz = Comic archive (*.cbz;*.cbt)
+filter.cbz = Comic archive (*.cbz;*.cbt;*.cbr)
 filter.fb2 = FictionBook (*.fb2;*.fb2.zip)
 filter.mobi = Kindle book (*.mobi;*.prc;*.azw;*.azw3)
 filter.all = All files (*.*)

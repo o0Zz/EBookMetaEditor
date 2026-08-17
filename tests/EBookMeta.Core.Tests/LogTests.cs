@@ -236,10 +236,8 @@ public sealed class LogTests : IDisposable
     public void A_misleading_extension_is_logged_as_a_warning()
     {
         using var temp = new TempDir();
-        string path = temp.File("rar-disguised-as-cbz.cbz");
-        File.WriteAllBytes(
-            path,
-            [.. Encoding.ASCII.GetBytes("Rar!\x1a\x07\x00"), .. new byte[64]]);
+        string path = temp.File("7z-disguised-as-cbz.cbz");
+        File.WriteAllBytes(path, [0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C, .. new byte[64]]);
 
         Log.Clear();
 
@@ -255,13 +253,11 @@ public sealed class LogTests : IDisposable
     {
         using var temp = new TempDir();
 
-        // Named .cbr, and really a RAR — so the extension agrees with the content
+        // Named .cb7, and really a 7z — so the extension agrees with the content
         // and GEN-W002 stays silent. What is left is the answer no registered
         // format can give: this build knows what the file is and cannot edit it.
-        string path = temp.File("comic.cbr");
-        File.WriteAllBytes(
-            path,
-            [.. Encoding.ASCII.GetBytes("Rar!\x1a\x07\x00"), .. new byte[64]]);
+        string path = temp.File("comic.cb7");
+        File.WriteAllBytes(path, [0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C, .. new byte[64]]);
 
         Log.Clear();
 
@@ -270,7 +266,7 @@ public sealed class LogTests : IDisposable
         LogEntry rule = Assert.Single(Log.Entries, e => e.Message.StartsWith("GEN-W004:", StringComparison.Ordinal));
 
         Assert.Equal(LogLevel.Error, rule.Level);
-        Assert.Contains("CBR", rule.Message, StringComparison.Ordinal);
+        Assert.Contains("CB7", rule.Message, StringComparison.Ordinal);
         Assert.DoesNotContain(Log.Entries, e => e.Message.StartsWith("GEN-W002:", StringComparison.Ordinal));
     }
 

@@ -288,14 +288,14 @@ internal sealed class MainForm : Form, IPathReceiver
     internal static string BookFilter() =>
         $"{Strings.Get("filter.supported")}|{AllPatterns}"
         + $"|{Strings.Get("filter.epub")}|*.epub"
-        + $"|{Strings.Get("filter.cbz")}|*.cbz;*.cbt"
+        + $"|{Strings.Get("filter.cbz")}|*.cbz;*.cbt;*.cbr"
         + $"|{Strings.Get("filter.fb2")}|*.fb2;*.fb2.zip"
         + $"|{Strings.Get("filter.mobi")}|*.mobi;*.prc;*.azw;*.azw3"
         + $"|{Strings.Get("filter.all")}|*.*";
 
     /// <summary>Every pattern the app can open, for the combined filter.</summary>
     private const string AllPatterns =
-        "*.epub;*.cbz;*.cbt;*.fb2;*.fb2.zip;*.mobi;*.prc;*.azw;*.azw3";
+        "*.epub;*.cbz;*.cbt;*.cbr;*.fb2;*.fb2.zip;*.mobi;*.prc;*.azw;*.azw3";
 
     private void OpenFolder()
     {
@@ -489,7 +489,7 @@ internal sealed class MainForm : Form, IPathReceiver
             Log.Warning(ex.Message);
 
             // Naming the format precisely is the point: "this .cbz is really
-            // a RAR archive" is more useful than "unsupported file". The
+            // a 7z archive" is more useful than "unsupported file". The
             // format's own name is not translated — it is what the format is
             // called everywhere.
             string name = ex.Detected.Format.DisplayName();

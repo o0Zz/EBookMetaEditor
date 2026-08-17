@@ -55,7 +55,7 @@ public sealed class Book
     /// <returns>The open book.</returns>
     /// <exception cref="UnsupportedFormatException">
     /// The file was recognised but no registered <see cref="IBookFormat"/> can
-    /// edit it — most often a RAR archive with a <c>.cbz</c> extension.
+    /// edit it — a 7z archive with a <c>.cbz</c> extension, or a PDF.
     /// </exception>
     /// <exception cref="BookFormatException">
     /// The file is damaged beyond what can be recovered on the way in.
@@ -154,7 +154,7 @@ public sealed class Book
     {
         foreach (ContainerEntry entry in container.Entries)
         {
-            if (!EscapesArchive(entry.Name))
+            if (!ContainerEntry.EscapesArchive(entry.Name))
             {
                 continue;
             }
@@ -165,28 +165,5 @@ public sealed class Book
                 "Entry name is absolute or escapes the archive.",
                 entry.Name);
         }
-    }
-
-    private static bool EscapesArchive(string name)
-    {
-        if (string.IsNullOrEmpty(name))
-        {
-            return false;
-        }
-
-        if (name[0] is '/' or '\\' || System.IO.Path.IsPathRooted(name) || name.IndexOf(':') >= 0)
-        {
-            return true;
-        }
-
-        foreach (string segment in name.Split('/', '\\'))
-        {
-            if (segment == "..")
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 }

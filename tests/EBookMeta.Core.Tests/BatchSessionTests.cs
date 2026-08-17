@@ -10,7 +10,7 @@ public sealed class BatchSessionTests
 {
     /// <summary>
     /// A folder holding one of everything: two books, a comic, a comic that is
-    /// really a RAR archive, a truncated book, and a file that is none of our
+    /// really a 7z archive, a truncated book, and a file that is none of our
     /// business.
     /// </summary>
     private static (BatchSession Session, string[] Paths) Folder(TempDir temp)
@@ -20,7 +20,7 @@ public sealed class BatchSessionTests
             new EpubBuilder().WriteTo(temp.File("book-1.epub")),
             new EpubBuilder().WithOpf(EpubBuilder.Epub2Opf).WriteTo(temp.File("book-2.epub")),
             new CbzBuilder().WriteTo(temp.File("comic-1.cbz")),
-            RarDisguisedAsCbz(temp.File("comic-2.cbz")),
+            SevenZipDisguisedAsCbz(temp.File("comic-2.cbz")),
             new EpubBuilder().WithContainerXml(null).WriteTo(temp.File("broken.epub")),
         ];
 
@@ -29,12 +29,13 @@ public sealed class BatchSessionTests
         return (BatchSession.Create(paths), paths);
     }
 
-    private static string RarDisguisedAsCbz(string path)
+    /// <summary>
+    /// A disguised archive this build recognises and cannot open. RAR filled this
+    /// role until CBR became readable; 7z is what is left that still cannot.
+    /// </summary>
+    private static string SevenZipDisguisedAsCbz(string path)
     {
-        File.WriteAllBytes(
-            path,
-            [.. Encoding.ASCII.GetBytes("Rar!\x1a\x07\x00"), .. new byte[64]]);
-
+        File.WriteAllBytes(path, [0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C, .. new byte[64]]);
         return path;
     }
 
@@ -113,9 +114,9 @@ public sealed class BatchSessionTests
 
         BatchEntry entry = Entry(session, "comic-2.cbz");
 
-        // "This .cbz is really a RAR archive" is more useful than "unsupported file".
-        Assert.Equal(FormatId.Cbr, entry.Detected?.Format);
-        Assert.Contains("CBR", entry.Error!, StringComparison.Ordinal);
+        // "This .cbz is really a 7z archive" is more useful than "unsupported file".
+        Assert.Equal(FormatId.Cb7, entry.Detected?.Format);
+        Assert.Contains("CB7", entry.Error!, StringComparison.Ordinal);
         Assert.Null(entry.Book);
         Assert.False(entry.IsWritable);
     }

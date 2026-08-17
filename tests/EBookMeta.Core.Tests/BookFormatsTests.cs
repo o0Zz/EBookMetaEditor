@@ -24,7 +24,6 @@ public sealed class BookFormatsTests
     }
 
     [Theory]
-    [InlineData(FormatId.Cbr)]
     [InlineData(FormatId.Cb7)]
     [InlineData(FormatId.Pdf)]
     [InlineData(FormatId.UnknownZip)]
@@ -34,9 +33,8 @@ public sealed class BookFormatsTests
         // Recognising a format and supporting it are different things, and the
         // registry is where that difference is expressed.
         //
-        // CBR and CB7 are the ones to keep an eye on: both are readable, and
-        // neither is writable, so registering them would produce an editor that
-        // cannot save. PDF needs incremental update and is a project of its own.
+        // 7z is the one to keep an eye on: readable, not writable, and nothing has
+        // asked for it. PDF needs incremental update and is a project of its own.
         Assert.Null(BookFormats.For(format));
         Assert.False(BookFormats.IsSupported(format));
     }
@@ -45,6 +43,7 @@ public sealed class BookFormatsTests
     [InlineData(FormatId.Epub)]
     [InlineData(FormatId.Cbz)]
     [InlineData(FormatId.Cbt)]
+    [InlineData(FormatId.Cbr)]
     [InlineData(FormatId.Fb2)]
     [InlineData(FormatId.Fb2Zip)]
     [InlineData(FormatId.Mobi)]
@@ -59,6 +58,11 @@ public sealed class BookFormatsTests
 
         // Reading without writing is not what this tool is for; a format that
         // cannot save has no business in the registry.
+        //
+        // CBR is in this list on purpose. Its capabilities are ComicInfo.xml's, and
+        // ComicInfo.xml can store a title wherever it sits — what a CBR cannot do is
+        // be rebuilt, which is RarContainer's answer and not the format's. Asserting
+        // it here is what keeps the two questions from being merged back into one.
         Assert.True(registered.Capabilities.CanWrite);
     }
 
@@ -83,10 +87,8 @@ public sealed class BookFormatsTests
     public void An_unsupported_file_still_reports_what_it_is()
     {
         using var temp = new TempDir();
-        string path = temp.File("rar-disguised-as-cbz.cbz");
-        File.WriteAllBytes(
-            path,
-            [.. Encoding.ASCII.GetBytes("Rar!\x1a\x07\x00"), .. new byte[64]]);
+        string path = temp.File("7z-disguised-as-cbz.cbz");
+        File.WriteAllBytes(path, [0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C, .. new byte[64]]);
 
         // The case that makes the registry's own answer worth keeping: every format
         // declines, so nothing can open this file, and the user is still told what
@@ -94,8 +96,8 @@ public sealed class BookFormatsTests
         using BookSource? source = BookFormats.TryOpen(path, out DetectedFormat detected);
 
         Assert.Null(source);
-        Assert.Equal(FormatId.Cbr, detected.Format);
-        Assert.Equal(ContainerKind.Rar, detected.Container);
+        Assert.Equal(FormatId.Cb7, detected.Format);
+        Assert.Equal(ContainerKind.SevenZip, detected.Container);
         Assert.False(detected.ExtensionAgrees);
     }
 

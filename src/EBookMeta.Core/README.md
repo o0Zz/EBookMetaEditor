@@ -16,8 +16,8 @@ by review.
 | 5 | `BookContainers.cs` | The container factory, and the magic-number sniff. |
 | 6 | `Formats/CbzFormat.cs` | The smallest real format. Read one before reading four. |
 
-After that, `Formats/` and `Containers/` are four files each and can be read in any
-order, or not at all until you need one.
+After that, `Formats/` is four files and `Containers/` five, and they can be read in
+any order, or not at all until you need one.
 
 ## Adding a format
 

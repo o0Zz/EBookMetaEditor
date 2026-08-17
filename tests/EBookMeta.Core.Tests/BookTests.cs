@@ -29,19 +29,21 @@ public sealed class BookTests
         Assert.True(book.EntryCount > 0);
     }
 
+    /// <summary>
+    /// 7z, which this build recognises and opens with nothing. RAR used to stand
+    /// here and now reads, so the case moved to the format that still cannot.
+    /// </summary>
     [Fact]
     public void A_recognised_but_unsupported_format_names_itself()
     {
         using var temp = new TempDir();
-        string path = temp.File("rar-disguised-as-cbz.cbz");
-        File.WriteAllBytes(
-            path,
-            [.. Encoding.ASCII.GetBytes("Rar!\x1a\x07\x00"), .. new byte[64]]);
+        string path = temp.File("7z-disguised-as-cbz.cbz");
+        File.WriteAllBytes(path, [0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C, .. new byte[64]]);
 
         UnsupportedFormatException ex =
             Assert.Throws<UnsupportedFormatException>(() => Book.Load(path));
 
-        Assert.Equal(FormatId.Cbr, ex.Detected.Format);
+        Assert.Equal(FormatId.Cb7, ex.Detected.Format);
         Assert.Equal(FormatId.Cbz, ex.Detected.ClaimedByExtension);
     }
 

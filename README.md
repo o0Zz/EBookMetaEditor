@@ -20,7 +20,7 @@ There are already excellent ebook-management tools, but none quite matched the w
 
 * **Edit files directly from Explorer.** No library import or database required.
 * **Batch-edit an entire collection.** Select multiple files, open a folder, or paste values across dozens of books at once.
-* **Support the formats I actually use.** EPUB, CBZ, CBT, FB2, MOBI, AZW, and AZW3.
+* **Support the formats I actually use.** EPUB, CBZ, CBT, CBR, FB2, MOBI, AZW, and AZW3.
 * **Write metadata correctly.** The editor does not just insert values into an OPF or `ComicInfo.xml`; it validates and normalizes the surrounding metadata where possible.
 * **Avoid pretending formats support things they do not.** Fields that cannot be stored safely are disabled instead of being silently discarded or written into undocumented locations.
 
@@ -31,18 +31,23 @@ There are already excellent ebook-management tools, but none quite matched the w
 | EPUB 2 / 3 | ✅    | ✅     | ZIP       | OPF package document |
 | CBZ        | ✅    | ✅     | ZIP       | `ComicInfo.xml`      |
 | CBT        | ✅    | ✅     | TAR       | `ComicInfo.xml`      |
+| CBR        | ✅    | ⚙️     | RAR       | `ComicInfo.xml`      |
 | FB2        | ✅    | ✅     | Plain XML | `<description>`      |
 | FB2.ZIP    | ✅    | ✅     | ZIP       | `<description>`      |
 | MOBI / PRC | ✅    | ✅     | PalmDB    | EXTH records         |
 | AZW / AZW3 | ✅    | ✅     | PalmDB    | EXTH records         |
 
-**Not supported:** CBR, CB7, PDF, KFX, AZW4, LIT, PDB, RB, DjVu, and audiobooks.
+**⚙️ CBR reads on its own; saving one needs WinRAR installed.**.
+So EBookMetaEditor reads CBR files out of the box, and to save one it uses the `Rar.exe` that comes with WinRAR:
+it looks for your WinRAR installation in the registry, then for `rar.exe` on your `PATH`.
+
+**Not supported:** CB7, PDF, KFX, AZW4, LIT, PDB, RB, DjVu, and audiobooks.
 
 ## Editable metadata
 
 Not every format can store the same metadata. EBookMetaEditor disables fields that a particular file cannot preserve rather than accepting a value that would later be lost.
 
-| Field                    | EPUB         | CBZ / CBT    | FB2          | MOBI / AZW3  |
+| Field                    | EPUB         | CBZ / CBT / CBR | FB2       | MOBI / AZW3  |
 | ------------------------ | ------------ | ------------ | ------------ | ------------ |
 | Title                    | read + write | read + write | read + write | read + write |
 | Sort title               | read + write | —            | —            | —            |
@@ -102,7 +107,9 @@ Unmodified files are not rewritten — they are not even opened for writing. Eve
 
 Each row reports its own result, so one bad file does not stop the rest of the batch. For example:
 
-* A `.cbz` that is actually a RAR archive is reported as unsupported.
+* A `.cbz` that is actually a 7z archive is reported as unsupported, by name.
+* A `.cbz` that is actually a RAR opens as a CBR, and the mismatch is still reported.
+* A CBR row reads and edits like any other; on save it either goes through the `Rar.exe` found on the machine or reports that the save failed.
 * A DRM-protected AZW is reported as non-editable.
 * A file that fails to save fails independently without aborting the remaining files.
 

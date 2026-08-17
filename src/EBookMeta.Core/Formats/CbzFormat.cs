@@ -16,12 +16,23 @@ namespace EBookMeta.Formats;
 /// and the corrections a write can prove, such as a <c>PageCount</c> recomputed
 /// from the images actually present.
 /// <para>
-/// One instance serves CBZ and another serves CBT, because the two differ only in
+/// One instance serves CBZ, one CBT and one CBR, because the three differ only in
 /// the container they are stored in: the metadata document, the rules and the
 /// corrections are identical, and nothing here names <c>ZipContainer</c>. The
-/// rule IDs stay <c>CBZ-</c> prefixed for both — they are namespaced by metadata
-/// convention rather than by container, and a second copy of the table under a
-/// <c>CBT-</c> prefix would be one more thing to keep in step for no gain.
+/// rule IDs stay <c>CBZ-</c> prefixed for all three — they are namespaced by
+/// metadata convention rather than by container, and a second copy of the table
+/// under a <c>CBT-</c> prefix would be one more thing to keep in step for no gain.
+/// The two <c>CBR-</c> rules are the exception that proves it: they are facts about
+/// the archive, not about <c>ComicInfo.xml</c>, and they live in
+/// <c>RarContainer</c>.
+/// </para>
+/// <para>
+/// Nothing here treats CBR as a lesser format. <see cref="Capabilities"/> says a
+/// comic's fields are writable because <c>ComicInfo.xml</c> can hold them, which is
+/// true whatever the archive is; <see cref="Write"/> composes the new entry list the
+/// same way and hands it to <c>Rebuild</c>, and it is <c>RarContainer</c> that
+/// refuses. Special-casing the format here would put the same refusal in two places
+/// and make it the metadata document's business, which it is not.
 /// </para>
 /// </remarks>
 public sealed partial class CbzFormat : IBookFormat
@@ -32,8 +43,9 @@ public sealed partial class CbzFormat : IBookFormat
 
     /// <summary>Creates the format for one flavour of comic archive.</summary>
     /// <param name="id">
-    /// Which one — <see cref="FormatId.Cbz"/> or <see cref="FormatId.Cbt"/>. The
-    /// default is what every caller outside <see cref="BookFormats"/> wants.
+    /// Which one — <see cref="FormatId.Cbz"/>, <see cref="FormatId.Cbt"/> or
+    /// <see cref="FormatId.Cbr"/>. The default is what every caller outside
+    /// <see cref="BookFormats"/> wants.
     /// </param>
     public CbzFormat(FormatId id = FormatId.Cbz)
     {
@@ -63,7 +75,16 @@ public sealed partial class CbzFormat : IBookFormat
                 MetadataField.Subjects,
         };
 
-        Extensions = id == FormatId.Cbt ? [".cbt"] : [".cbz"];
+        // Declared even for CBR, whose save is refused by its container. The list is
+        // what the Settings form builds its context-menu checkboxes from, and a user
+        // who right-clicks a comic to look at its metadata is served whether or not
+        // this build can write it back.
+        Extensions = id switch
+        {
+            FormatId.Cbt => [".cbt"],
+            FormatId.Cbr => [".cbr"],
+            _ => [".cbz"],
+        };
     }
 
     /// <inheritdoc />
@@ -88,15 +109,22 @@ public sealed partial class CbzFormat : IBookFormat
 
     /// <inheritdoc />
     /// <remarks>
-    /// The two registered instances answer for different containers and never for
-    /// each other's: a TAR is a CBT, a ZIP is a CBZ, and neither has to know the
-    /// other exists. A TAR needs nothing further, because CBT is the only
-    /// TAR-based format this build reads.
+    /// The three registered instances answer for different containers and never for
+    /// each other's: a TAR is a CBT, a RAR is a CBR, a ZIP is a CBZ, and none has to
+    /// know the others exist. TAR and RAR need nothing further, because CBT and CBR
+    /// are the only formats this build reads out of either.
     /// <para>
     /// Confidence is what keeps a comic from outbidding an EPUB over the same ZIP.
     /// A <c>ComicInfo.xml</c> or a <c>comet.xml</c> is a document only a comic
     /// carries; "nothing but images" is the ComicRack convention for an untagged
     /// comic and no more than a good guess, so it is claimed as weak.
+    /// </para>
+    /// <para>
+    /// The RAR arm claims on the container alone and never reaches for
+    /// <see cref="BookSource.Container"/>. Opening one can throw — a solid or
+    /// encrypted archive is refused as CBR-F001 — and <see cref="TryOpen"/> must
+    /// not, so the refusal is left to happen in <c>Book.Load</c> where it is a real
+    /// error rather than a reason to try the next format.
     /// </para>
     /// </remarks>
     public FormatClaim? TryOpen(BookSource source)
@@ -107,6 +135,15 @@ public sealed partial class CbzFormat : IBookFormat
         {
             return source.ContainerKind == ContainerKind.Tar
                 ? Claim(FormatId.Cbt, "TAR archive", MatchConfidence.Strong)
+                : null;
+        }
+
+        if (Id == FormatId.Cbr)
+        {
+            // The container detail carries the RAR version, which is what the log
+            // and a GEN-W002 report want to say.
+            return source.ContainerKind == ContainerKind.Rar
+                ? Claim(FormatId.Cbr, source.ContainerDetail ?? "RAR archive", MatchConfidence.Strong)
                 : null;
         }
 

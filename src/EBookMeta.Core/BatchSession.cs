@@ -15,10 +15,7 @@ public enum BatchEntryStatus
     /// <summary>Read, and editable.</summary>
     Loaded = 1,
 
-    /// <summary>
-    /// Recognised as a format this build cannot edit — commonly a <c>.cbz</c>
-    /// that is really a RAR archive.
-    /// </summary>
+    /// <summary>Recognised as a format but not supported yet</summary>
     Unsupported = 2,
 
     /// <summary>Could not be read or could not be written. <see cref="BatchEntry.Error"/> says why.</summary>

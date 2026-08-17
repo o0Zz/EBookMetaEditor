@@ -65,8 +65,9 @@ public sealed class DetectionTests
         Assert.Equal(FormatId.Cbr, result.Format);
         Assert.Equal(ContainerKind.Rar, result.Container);
 
-        // GEN-W002. Naming the format precisely is what tells the user why it will
-        // not open.
+        // GEN-W002. The file opens now that CBR is readable, and the disagreement
+        // is still worth reporting — naming the format precisely is what tells the
+        // user why a .cbz they will not be able to save is a RAR.
         Assert.False(result.ExtensionAgrees);
         Assert.Equal(FormatId.Cbz, result.ClaimedByExtension);
         Assert.Contains(what, result.Detail);

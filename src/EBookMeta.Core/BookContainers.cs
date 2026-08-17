@@ -16,10 +16,12 @@ namespace EBookMeta;
 /// <see cref="BookFormats.TryOpen"/> has already refused the ones no format can
 /// edit.
 /// <para>
-/// RAR and 7z are deliberately absent. Both can be read, and neither can be
-/// written: RAR compression is proprietary and no writer for either ships in this
-/// build's dependencies, so a CBR or CB7 would open into an editor that cannot
-/// save. See <see cref="IContainer.IsWritable"/>.
+/// 7z is deliberately absent: readable, not writable, and nothing has asked for it.
+/// RAR is here despite the same being true of it, because a comic library is full of
+/// CBRs and reading one is worth having on its own. <see cref="ContainerKind.Rar"/>
+/// is the one kind whose container refuses the rebuild rather than the open, so
+/// every caller of <see cref="Open"/> must be prepared for
+/// <see cref="IContainer.Rebuild"/> to fail on a file it read happily.
 /// </para>
 /// </remarks>
 /// <seealso cref="BookFormats" />
@@ -45,6 +47,7 @@ public static class BookContainers
         {
             ContainerKind.Zip => ZipContainer.Open(path),
             ContainerKind.Tar => TarContainer.Open(path),
+            ContainerKind.Rar => RarContainer.Open(path),
             ContainerKind.Raw => RawContainer.Open(path),
             ContainerKind.PalmDb => PalmDbContainer.Open(path),
             _ => throw new NotSupportedException(
@@ -55,9 +58,13 @@ public static class BookContainers
     /// <summary>Whether this build has an implementation for a container.</summary>
     /// <param name="kind">The container to test.</param>
     /// <returns><see langword="true"/> when the container can be opened.</returns>
+    /// <remarks>
+    /// Opened, not necessarily rebuilt — <see cref="ContainerKind.Rar"/> is
+    /// supported here and still refuses <see cref="IContainer.Rebuild"/>.
+    /// </remarks>
     public static bool IsSupported(ContainerKind kind) =>
-        kind is ContainerKind.Zip or ContainerKind.Tar or ContainerKind.Raw
-            or ContainerKind.PalmDb;
+        kind is ContainerKind.Zip or ContainerKind.Tar or ContainerKind.Rar
+            or ContainerKind.Raw or ContainerKind.PalmDb;
 
     private static ReadOnlySpan<byte> Rar4Magic => "Rar!\x1a\x07\x00"u8;
     private static ReadOnlySpan<byte> Rar5Magic => "Rar!\x1a\x07\x01\x00"u8;
@@ -85,10 +92,10 @@ public static class BookContainers
     /// container, so which of them this is stays a question for the formats,
     /// asked through <see cref="IBookFormat.TryOpen"/>.
     /// <para>
-    /// RAR and 7z are named here even though nothing can open them. Recognising a
-    /// format costs a few magic-number comparisons and lets the app tell a user
-    /// their <c>.cbz</c> is really a RAR, which is worth far more than the
-    /// comparison costs; supporting one costs a container implementation.
+    /// 7z is named here even though nothing can open it. Recognising a format costs
+    /// a few magic-number comparisons and lets the app tell a user what their
+    /// <c>.cbz</c> really is, which is worth far more than the comparison costs;
+    /// supporting one costs a container implementation.
     /// </para>
     /// </remarks>
     public static (ContainerKind Kind, string? Detail) Sniff(ReadOnlySpan<byte> head)

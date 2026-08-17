@@ -22,12 +22,13 @@ the main design risk in this codebase.
 | EPUB 2 / 3 | ZIP | OPF |
 | CBZ | ZIP | `ComicInfo.xml` |
 | CBT | TAR | `ComicInfo.xml` |
+| CBR | RAR | `ComicInfo.xml` |
 | FB2 | none (raw XML) | `<description>` |
 | FB2.ZIP | ZIP | `<description>` |
 | MOBI / PRC | PalmDB | EXTH |
 | AZW / AZW3 | PalmDB | EXTH (one or two) |
 
-All seven are writable. **A format that reuses an existing metadata document is a
+All are writable. **A format that reuses an existing metadata document is a
 container; one that needs a new document is a project.** `CbzFormat`, `Fb2Format`
 and `MobiFormat` are each registered under two `FormatId`s, and none of them names
 a container.
@@ -37,6 +38,111 @@ the ZIP comment. Read all three, write `ComicInfo.xml`, leave the others untouch
 `System.IO.Compression` cannot write a ZIP comment back, so `CbzFormat.Write` logs
 `CBZ-W012` and throws rather than dropping the blob. It fires on write, not on
 open — reading such a file is safe.
+
+### CBR writes through someone else's archiver
+
+Reading a CBR needs nothing but SharpCompress. **Writing one needs a program this
+build cannot ship**, so it finds one already on the machine and runs that.
+
+RAR compression is proprietary. SharpCompress decompresses RAR 4 and RAR 5 and
+writes neither; the UnRAR source licence forbids using it to build a compatible
+compressor; no free RAR compressor exists to depend on. Bundling `rar.exe` is not an
+option either — WinRAR's licence forbids redistributing it, and it would break "a
+single executable" and the no-copyleft dependency rule at the same time. What is
+left is to run one that is already on the machine, which is what
+`RarContainer.RarLocation` finds.
+
+**Core finds it; there is no setting.** `RarContainer.RarLocation` is one function,
+called where it is needed, that looks in two places and stops at the first answer:
+
+1. `App Paths\WinRAR.exe` under `SOFTWARE\Microsoft\Windows\CurrentVersion` — where an
+   installer records a program's full path under its bare file name. Its `Path` value
+   is the install directory and its default value is `WinRAR.exe`'s own path, which
+   names the same one; `Rar.exe` in it is the answer. Both bitness views and `HKLM`
+   then `HKCU`, because a 32-bit WinRAR on 64-bit Windows registers under
+   `Wow6432Node` and whether a CBR saves must not depend on how this build was
+   compiled.
+2. `Rar.exe` on `PATH`, for one unpacked by hand.
+
+Two things it deliberately does not do: it **never falls back to `WinRAR.exe`**,
+because the switches in `BuildArguments` are the console ones and the windowed build
+puts a progress window on screen mid-save, so a WinRAR install somehow missing
+`Rar.exe` counts as no archiver rather than a half-working hand-off; and it guesses no
+directories and reads no version number.
+
+**No caching, no lock and no setting** — it is a registry read and, only if that
+misses, a walk of `PATH`. `Locator` is the one seam, internal, and exists solely
+because no build machine has WinRAR: the tests point it at `StandInArchiver` or at
+`() => null`, so **whether CBR-F002 fires never depends on whether the machine running
+the suite has WinRAR installed.** Do not grow this back into a cached, lockable,
+host-configurable property; it was that once and it was far more machinery than the
+question deserves.
+
+**The refusal belongs to the container, not to the format.** `CbzFormat` treats CBR
+exactly as it treats CBZ and CBT: same capabilities, same corrections, same `Write`,
+because `ComicInfo.xml` can hold a title whatever archive it arrived in.
+`RarContainer.Rebuild` is what refuses, as `CBR-F002`, when the machine has none. So
+a save runs the whole ordinary path — `Book.Save`, `AtomicFileWriter`,
+`CbzFormat.Write` — and either reaches an archiver or fails at the last step with the
+user's file untouched.
+
+Three decisions here look like oversights and are not:
+
+- **The editor is never read-only, archiver or not.** Fields are live and
+  `Book.CanSave` is true, because both are driven by `FormatCapabilities`, which is
+  a fact about `ComicInfo.xml`. Declaring CBR unwritable would grey out every field
+  in both editors and turn a refusal that happens once into a permanent mode.
+- **Do not "fix" a missing archiver by writing a ZIP instead.** Producing a ZIP at
+  the target path leaves a `.cbr` that is not a RAR, which is the disguised-archive
+  problem this tool exists to report. A conversion is a separate, user-initiated
+  verb, and it is not implemented.
+- **A full rebuild, not an update.** Every entry is staged to a sibling directory
+  and the whole set archived in one go. `rar u` against a copy would be far cheaper,
+  and is not worth being sure of: the pending list can add, move and drop entries as
+  well as replace one, and getting that diff subtly wrong is how an archive loses a
+  page.
+
+#### Failure is deliberately one answer
+
+Running someone else's program fails in a dozen ways — not there, not executable,
+malformed path, will not start, hangs, refuses the arguments, disk full, folder
+denied. **There is no ladder of checks and no message per cause.** Nothing probes for
+the file, nothing checks a version, and nothing names a vendor. It is handed to the
+operating system, and anything at all going wrong produces the same
+`BookIoException($"Could not write '{targetPath}'.")` that `ZipContainer.Create`
+throws — the particulars go to `Log.Debug` for whoever goes looking.
+
+The reason is that the user can do exactly one thing about any of them, which is check
+their WinRAR installation, so telling them which of nine things went wrong buys
+nothing and costs a maintenance surface. `IsWriteFailure` is that one bucket; note it
+names `Win32Exception` and deliberately *not* its base `SystemException`, so a
+null-reference bug in this file still crashes instead of being reported as a polite
+save failure.
+
+Two refusals stay specific because they are about the archive rather than the tool:
+an entry name that escapes, and a duplicate name (below), both `BookFormatException`.
+
+#### Writing a CBR is the only place Core extracts to disk
+
+Which makes **hard invariant 4 enforceable here rather than advisory**. `GEN-E003` is
+report-only everywhere else because reading a container never resolves a name against
+the file system; `RarContainer.Stage` does, so a name that is absolute or contains
+`..` is refused outright, before a single byte is written. The predicate is
+`ContainerEntry.EscapesArchive`, shared with `Book.Load` so the two cannot come to
+disagree about what "escapes" means, and it is backed by a full-path containment
+check on where the file actually landed.
+
+Staging also refuses a **duplicate entry name**. Archives may legally repeat one and
+malformed ones in the wild do; on disk the second copy would overwrite the first and
+a page would quietly vanish from the saved comic.
+
+#### Solid and encrypted archives
+
+Two shapes are refused at open, as `CBR-F001`: a **solid** archive, which stores
+every file in one compression stream so no entry can be served on its own, and an
+**encrypted** one, which needs a password this build never asks for. Both are
+refused in `RarContainer.Open` rather than at `OpenRead`, because the entry list of
+an archive whose `ComicInfo.xml` cannot be read is not a book.
 
 ## Target and deployment
 
@@ -70,8 +176,9 @@ src/EBookMeta.Core/      net48 — all logic. ZERO UI dependencies.
   MetadataFields.cs      the text projection of a field, shared by both editors
   NaturalNameComparer.cs so 2.jpg sorts before 10.jpg
   Log.cs, Compat.cs
-  Containers/            ZipContainer, TarContainer, PalmDbContainer, RawContainer
-  Formats/               EpubFormat, CbzFormat (CBZ+CBT), Fb2Format (FB2+FB2.ZIP),
+  Containers/            ZipContainer, TarContainer, RarContainer (writes only
+                         through an archiver it finds), PalmDbContainer, RawContainer
+  Formats/               EpubFormat, CbzFormat (CBZ+CBT+CBR), Fb2Format (FB2+FB2.ZIP),
                          MobiFormat (MOBI/PRC + AZW/AZW3) — each holding its own
                          detection, read, write, repairs and metadata document
   Xml/                   XmlEncodingDetector, XmlSourceFormat, XmlExactWriter,
@@ -154,6 +261,20 @@ mistake silently discards what the source container was holding on to.
   refuses a rebuild whose record *count* differs from the source, because record
   numbers are referenced from inside the file and this build cannot find every such
   pointer. Resizing a record is fine and recomputes the offset table.
+- `RarContainer` is the only one that cannot rebuild itself unaided: `IsWritable`
+  follows `RarContainer.RarLocation`, and `Rebuild` either shells out to what it found
+  or reports `CBR-F002` and throws. It is also the only container built on
+  a dependency rather than hand-rolled, because reading RAR means decompressing RAR
+  and nothing here is going to reimplement that. Entry names are
+  normalised from backslashes — RAR records a Windows path, and `CbzFormat` decides
+  whether `ComicInfo.xml` is nested by looking for a slash, so `sub\ComicInfo.xml`
+  left alone would read as a root entry and `CBZ-E011` would never fire.
+  **`Stage` is also the one place a directory entry has to be handled rather than
+  copied through**: RAR records a folder marker with no trailing separator, so only
+  `IsDirectory` tells it from a page, and writing it as a file fails on the directory
+  its own pages just created. Every format-level consumer already skips directories;
+  ZIP and TAR reproduce their markers as zero-length entries and must keep doing so,
+  or a CBZ with a folder loses them and breaks byte-identity.
 - `TarContainer` retains each entry's raw 512-byte header blocks and re-emits them
   byte for byte, patching only the length and checksum of the entry that changed —
   which preserves the mode, uid, gid, uname and gname this build has no field for.
@@ -221,6 +342,7 @@ one format shares the answer.
 | CBZ | ZIP holding `ComicInfo.xml` or `comet.xml` | Strong |
 | CBZ | ZIP of nothing but images — the ComicRack convention | Weak |
 | CBT | TAR, which no other supported format uses | Strong |
+| CBR | RAR, which no other supported format uses | Strong |
 | FB2.ZIP | ZIP holding a `.fb2` entry | Strong |
 | FB2 | a `<FictionBook` root element in the first 2 KB of text | Certain |
 | MOBI | PalmDB | Strong |
@@ -237,9 +359,16 @@ for non-XML and opens no `RawContainer` to decline a file.
 
 Two answers no format can give, both in `BookFormats`: **which container the bytes
 are** (`BookContainers.Sniff`, run first), and **"recognised but not openable"** —
-RAR → CBR, 7z → CB7, `%PDF-` → PDF. Saying a `.cbz` is really a RAR (`GEN-W002`,
+7z → CB7, `%PDF-` → PDF. Saying a `.cbz` is really something else (`GEN-W002`,
 `GEN-W004`) is a headline feature; naming a format costs a few magic-number
 comparisons, supporting it costs a container and a document.
+
+RAR used to be on that list and is not any more: a `.cbz` that is really a RAR now
+**opens**, and `GEN-W002` still reports the disagreement. The CBR arm of
+`CbzFormat.TryOpen` claims on the container alone and never touches
+`BookSource.Container`, because opening one can throw `CBR-F001` and `TryOpen` must
+not throw — the refusal is left to `Book.Load`, where it is a real error rather than
+a reason to try the next format.
 
 Never decompress an entry to decide what a file is. Beyond the 8 KB header a format
 may read **entry names** (already supplied by the ZIP central directory) and at
@@ -319,12 +448,20 @@ Not style preferences. Violating these corrupts users' libraries.
 3. Entries other than the metadata document are copied **byte for byte**. Never
    round-trip XHTML, CSS or images through a parser.
 4. Reject and report absolute paths and `..` traversal in entry names and manifest
-   hrefs rather than following them.
+   hrefs rather than following them. `ContainerEntry.EscapesArchive` is the one
+   predicate. Reading only reports it (`GEN-E003`); `RarContainer.Stage` refuses,
+   because writing a CBR is the only place Core puts entries on disk.
 5. **Round-tripping a valid file is a no-op**: open, save unedited, get identical
    bytes. There is a test per format; keep them green. An *invalid* file
    round-trips to a corrected one, and that is the point — the property to protect
    is "saving does not gratuitously rewrite", not "saving never changes anything".
    A change with no logged rule behind it is the bug.
+
+   *Not applicable to CBR.* Its bytes are produced by an archiver this build does not
+   control and cannot ask to reproduce a compression setting, so there is no
+   byte-identity test for it and there cannot be. The reason is a licence rather than
+   a design choice — see **CBR writes through someone else's archiver**. Do not treat
+   it as precedent: it is the only format whose writer is not in this repository.
 
    *Accepted limitation, ZIP only:* `System.IO.Compression` does not preserve ZIP
    extra fields, timestamps or the archive comment, so byte-identity holds for
@@ -422,6 +559,8 @@ Provable from the file alone, and logged as a warning through `Log.Rule`.
 | EPUB-F001 / F002 | The OPF or `container.xml` cannot be parsed or located |
 | CBZ-F001 | `ComicInfo.xml` is present but not well-formed |
 | CBZ-W012 | The archive carries a ZIP comment a rebuild cannot write back |
+| CBR-F001 | The RAR is solid or encrypted, so its entries cannot be read |
+| CBR-F002 | Saving a CBR on a machine where no archiver was found. Everything that can go wrong *with* one is a plain `BookIoException` and carries no rule ID, on purpose |
 | FB2-F001 / F002 | Not well-formed, or no `<description>` to edit |
 | MOBI-F001 | No MOBI header in record 0 |
 | MOBI-F002 | DRM-encrypted — rewriting the header produces a file no reader opens |
@@ -435,8 +574,10 @@ method onto the wrong entry. It throws `BookFormatException` without logging a r
 **GEN-E003 is the one rule that only reports, and invariant 5 is why it is allowed
 to.** An entry name that is absolute or contains `..` is logged by `Book.Load` and
 nothing else happens: no correction, because nothing says what the name should have
-been, and no refusal, because Core never extracts to disk. It is the exception the
-invariant names, not a door left open.
+been, and no refusal, because reading resolves nothing against the file system. It
+is the exception the invariant names, not a door left open — and the door is shut
+where it matters, because `RarContainer.Stage`, the one place Core does write entries
+out, refuses the same names outright.
 
 **MOBI-W020 was considered and rejected.** When the two halves of a joint file
 disagree, neither is provably right, and copying the KF8 half over the MOBI 6 one
@@ -510,9 +651,17 @@ owner and a ten-kilobyte tail; a record table and an EXTH block with records thi
 build has no field for. **A fixture generated by the code under test cannot prove
 that code reads real files**, and for these two formats that is the whole question.
 
+`RarBuilder` has no choice about it: nothing in this build writes RAR, which is the
+whole point of CBR. It assembles the published RAR 4 block layout — marker, main
+header, one header per file, end block, and the CRCs each carries — and stores every
+file with method `0x30`, meaning the data is copied in verbatim. **It is not a RAR
+writer and must not become one:** the compression is exactly the part that is never
+touched, and storing is fine for three one-pixel PNGs and useless for a real comic.
+There is nothing here to promote into `EBookMeta.Core`.
+
 Required coverage:
 
-- byte-identical round-trip for every format
+- byte-identical round-trip for every format except CBR, which is never written
 - a CBT whose headers carry a real archive's mode, uid, gid, uname and gname, and a
   blocking factor above the minimum — what keeps `TarContainer` honest
 - a MOBI carrying EXTH records this build does not map, asserted to survive a write
@@ -525,7 +674,33 @@ Required coverage:
 - the repair path: an undeclared prefix, an unknown prefix that must *not* be
   bound, an unclosed tag
 - a compressed `mimetype`; a Latin-1 file declaring UTF-8
-- `rar-disguised-as-cbz.cbz` — a format recognised but not supported
+- a real RAR: read through, entry order kept, a Windows path normalised, and — with
+  the search stubbed to find nothing — a save refused as `CBR-F002` with the file
+  byte-for-byte unchanged and no `.tmp` or `.bak` left beside it
+- the archiver search: a directory holding `Rar.exe` is the answer, junk and quoted
+  entries survive, and the real search does not throw. Every test that asserts a
+  refusal points `Locator` at nothing first, because a suite whose result depends on
+  whether the machine has WinRAR installed is worse than no suite
+- a solid RAR and an encrypted one, both refused as `CBR-F001` on the way in
+- a CBR save through `StandInArchiver`: every entry staged under its own relative
+  name in reading order, the file swapped in, the staging directory gone. **No build
+  machine has a RAR archiver and none should need one**, so the stand-in is a tiny
+  console program compiled at test time that parses the same command line and reads
+  the same UTF-16 list file, and writes a manifest of what it was handed instead of
+  compressing it. It proves the hand-off; it cannot prove a real `rar.exe` likes the
+  switches, and **that is the one part of this build verified by hand**
+- a CBR save with the archiver missing, not a program, and returning non-zero — all
+  three the same `BookIoException`, original untouched, nothing left behind
+- an entry name that escapes the archive and a name that appears twice, both refused
+  by `RarContainer.Stage` before anything is written
+- a CBR whose pages sit in a folder, which is how comics in the wild are packed: the
+  folder marker is staged as a directory and never listed for the archiver. RAR records
+  it with **no trailing separator**, so `IsDirectory` is the only thing separating it
+  from a page, and staging it as a file is a save that fails on the directory its own
+  pages just created
+- `7z-disguised-as-cbz.cbz` — a format recognised but not supported. This was
+  `rar-disguised-as-cbz.cbz` until CBR became readable; a RAR named `.cbz` now opens
+  and reports `GEN-W002`, so 7z is what is left that still cannot be opened at all
 - a 300-page comic, for order preservation and to prove open does not read pages
 
 Repair and write tests assert on exact resulting bytes, so an accidental reformat
@@ -536,13 +711,15 @@ fails loudly.
 - **Microsoft.NETFramework.ReferenceAssemblies** (in `Directory.Build.props`) —
   build-time only. Lets `net48` build without Visual Studio.
 - **System.Memory** — `Span<T>` and `BinaryPrimitives` on `net48`.
-- **SharpCompress** (MIT) — **ZIP writing only.** Not a convenience: on .NET
-  Framework `System.IO.Compression` cannot emit a stored ZIP entry at all
-  (`CompressionLevel.NoCompression` produces deflate at level 0, method 8, not
-  method 0), which makes a spec-compliant EPUB impossible since `mimetype` must be
-  stored. The identical code emits method 0 on .NET 5+. Reading stays on
-  `ZipArchive`. SharpCompress also reads RAR/7z/TAR and writes TAR; none of that is
-  used, and the package supporting a format is not a reason to route it there.
+- **SharpCompress** (MIT) — **ZIP writing and RAR reading.** Neither is a
+  convenience. On .NET Framework `System.IO.Compression` cannot emit a stored ZIP
+  entry at all (`CompressionLevel.NoCompression` produces deflate at level 0, method
+  8, not method 0), which makes a spec-compliant EPUB impossible since `mimetype`
+  must be stored; the identical code emits method 0 on .NET 5+. ZIP reading stays on
+  `ZipArchive`. RAR decompression is the other capability with no alternative — it
+  is not something to hand-roll against a specification the way TAR and PalmDB were.
+  SharpCompress also reads 7z and writes TAR; neither is used, and the package
+  supporting a format is not a reason to route it there.
 - **xunit** — tests only.
 
 **The project is Apache-2.0.** MIT dependencies are fine; copyleft ones are not. Do
@@ -602,6 +779,10 @@ a product requirement — the whole point is right-click, fix, close.
   scan.
 - **Opening a file costs one open, not two.** `BookFormats.TryOpen` shares one
   container with every format and hands it to the winner still open.
+- **Looking for a RAR archiver happens where it is needed, not at launch.**
+  `RarContainer.RarLocation` runs when a RAR container is asked whether it can be
+  written, so nothing but a CBR pays for it. It is a registry read plus, only when that
+  misses, a walk of `PATH`.
 - **Almost nothing runs on open, which is most of why this is fast.** A read parses
   the metadata document and stops; the corrections all happen in `Write`, where the
   archive is being rebuilt anyway. Never decompress or hash entries on open.
@@ -636,11 +817,13 @@ a product requirement — the whole point is right-click, fix, close.
 
 - **Never touch a serialisation path while any round-trip or golden-byte test is
   red.** They are the only thing between a bug and a corrupted library.
-- **Every format has a byte-identity test, and it is the load-bearing one.** EPUB
-  and CBZ reach it by reproducing the archive, CBT by re-emitting retained TAR
-  headers, FB2 by splicing an edited `<description>` back into the original text,
-  MOBI by returning record 0 untouched when nothing changed. If a new format cannot
-  be given that test, the design is wrong, not the test.
+- **Every format that writes has a byte-identity test, and it is the load-bearing
+  one.** EPUB and CBZ reach it by reproducing the archive, CBT by re-emitting
+  retained TAR headers, FB2 by splicing an edited `<description>` back into the
+  original text, MOBI by returning record 0 untouched when nothing changed. If a new
+  format cannot be given that test, the design is wrong, not the test — CBR is not a
+  precedent for skipping it, because CBR's writer is not in this repository and its
+  tests assert the hand-off and the refusals instead.
 - Prefer Core changes + tests over touching the UI. UI is the last step of a
   feature, not the first.
 - When adding a format the order is builder → `TryOpen` → read → repairs → write,

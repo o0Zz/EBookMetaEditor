@@ -18,9 +18,9 @@ namespace EBookMeta;
 /// </para>
 /// <para>
 /// What the registry adds on top is the one answer no format can give. A format
-/// only ever says "that is mine", so nothing registered can identify a RAR, a 7z or
-/// a PDF — this build recognises all three and opens none of them, and saying so
-/// (<c>GEN-W002</c>, <c>GEN-W004</c>) is one of the more useful things it does.
+/// only ever says "that is mine", so nothing registered can identify a 7z or a PDF —
+/// this build recognises both and opens neither, and saying so (<c>GEN-W002</c>,
+/// <c>GEN-W004</c>) is one of the more useful things it does.
 /// </para>
 /// </remarks>
 /// <seealso cref="BookContainers" />
@@ -33,10 +33,13 @@ public static class BookFormats
         Register(new EpubFormat());
         Register(new CbzFormat(FormatId.Cbz));
 
-        // The same implementation twice: a CBT is a CBZ in a TAR, with the same
-        // ComicInfo.xml and the same rules. All that differs is the container,
-        // which BookContainers picks.
+        // The same implementation twice more: a CBT is a CBZ in a TAR and a CBR is
+        // a CBZ in a RAR, with the same ComicInfo.xml and the same rules. All that
+        // differs is the container, which BookContainers picks. CBR is registered
+        // like any other because reading and editing one is ordinary; only the save
+        // is different, and that difference belongs to RarContainer.Rebuild.
         Register(new CbzFormat(FormatId.Cbt));
+        Register(new CbzFormat(FormatId.Cbr));
 
         // And again for FictionBook, which is one document either bare or zipped.
         Register(new Fb2Format(FormatId.Fb2));
@@ -105,13 +108,12 @@ public static class BookFormats
         {
             // The answers no registered format is there to give, taken first
             // because none of them has a container this build can open. Nothing is
-            // registered for any of these, so there is nobody to ask: recognising
-            // one costs a few magic-number comparisons and lets the app tell a user
-            // their .cbz is really a RAR, while supporting one would cost a
+            // registered for either, so there is nobody to ask: recognising one
+            // costs a few magic-number comparisons and lets the app tell a user
+            // their .cbz is really a 7z, while supporting one would cost a
             // container and a metadata document.
             FormatId? unsupported = source.ContainerKind switch
             {
-                ContainerKind.Rar => FormatId.Cbr,
                 ContainerKind.SevenZip => FormatId.Cb7,
                 _ => source.HeadStartsWith(PdfMagic) ? FormatId.Pdf : null,
             };
@@ -223,7 +225,6 @@ public static class BookFormats
 
         return ext switch
         {
-            ".cbr" => FormatId.Cbr,
             ".cb7" => FormatId.Cb7,
             ".pdf" => FormatId.Pdf,
             _ => FormatId.Unknown,

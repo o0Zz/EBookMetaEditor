@@ -76,7 +76,7 @@ public interface IBookFormat
     /// say "that is mine": which physical container the bytes are, which is
     /// <see cref="BookContainers.Sniff"/>'s job and is already done by the time this
     /// is called, and what a file is when this build recognises but cannot open it,
-    /// such as RAR — which <see cref="BookFormats"/> answers.
+    /// such as 7z — which <see cref="BookFormats"/> answers.
     /// </para>
     /// </remarks>
     FormatClaim? TryOpen(BookSource source);
@@ -121,11 +121,11 @@ public interface IBookFormat
 /// </summary>
 /// <remarks>
 /// The metadata-document half of the two axes. More ids than there are
-/// implementations: <see cref="Cbr"/>, <see cref="Cb7"/> and <see cref="Pdf"/> are
-/// recognised and opened by nothing, which is what lets the app say what a file is
-/// rather than merely refusing it. Ids also outnumber implementations in the other
-/// direction — one <see cref="IBookFormat"/> is registered under two ids whenever
-/// the same metadata document arrives in a different wrapper, as CBZ and CBT do.
+/// implementations: <see cref="Cb7"/> and <see cref="Pdf"/> are recognised and
+/// opened by nothing, which is what lets the app say what a file is rather than
+/// merely refusing it. Ids also outnumber implementations in the other direction —
+/// one <see cref="IBookFormat"/> is registered under several ids whenever the same
+/// metadata document arrives in a different wrapper, as CBZ, CBT and CBR do.
 /// </remarks>
 public enum FormatId
 {
@@ -138,7 +138,10 @@ public enum FormatId
     /// <summary>Comic archive, ZIP. <c>ComicInfo.xml</c>.</summary>
     Cbz,
 
-    /// <summary>Comic archive, RAR. Read-only by necessity.</summary>
+    /// <summary>
+    /// Comic archive, RAR. <c>ComicInfo.xml</c>, read but never written — see
+    /// <c>RarContainer</c>.
+    /// </summary>
     Cbr,
 
     /// <summary>Comic archive, 7z.</summary>
@@ -400,8 +403,8 @@ public sealed class BookSource : IDisposable
 
     /// <summary>Whether this build has a container implementation for these bytes.</summary>
     /// <remarks>
-    /// <see langword="false"/> for RAR and 7z, which are recognised and not opened.
-    /// <see cref="Container"/> throws for those, so a format must check its own
+    /// <see langword="false"/> for 7z, which is recognised and not opened.
+    /// <see cref="Container"/> throws for it, so a format must check its own
     /// <see cref="ContainerKind"/> before reaching for it — which every format does
     /// anyway, since the wrong container is the cheapest possible way to decline.
     /// </remarks>

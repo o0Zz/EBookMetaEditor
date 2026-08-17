@@ -21,12 +21,16 @@ public interface IContainer : IDisposable
     /// Whether this container can be rebuilt.
     /// </summary>
     /// <remarks>
-    /// <see langword="false"/> for RAR, and callers must handle that rather
-    /// than assume. RAR compression is proprietary: SharpCompress reads but
-    /// cannot write, and the UnRAR binary's licence forbids using it to build a
-    /// compatible compressor. This is not a bug to work around: a CBR would open
-    /// into an editor that cannot save, so no container is registered for one at
-    /// all and <c>Book.Load</c> refuses it by name as GEN-W004.
+    /// <see langword="false"/> for RAR, and callers must handle that rather than
+    /// assume. RAR compression is proprietary: SharpCompress reads both RAR 4 and
+    /// RAR 5 and writes neither, the UnRAR licence forbids using it to build a
+    /// compatible compressor, and no free RAR compressor exists to depend on.
+    /// <para>
+    /// This is not the same question as whether the file can be edited. A CBR opens,
+    /// reads and edits like any other comic, because <c>CbzFormat.Capabilities</c> is
+    /// a property of <c>ComicInfo.xml</c> rather than of the archive around it — the
+    /// save is what fails, as <c>CBR-F002</c>, with the user's file untouched.
+    /// </para>
     /// </remarks>
     bool IsWritable { get; }
 
@@ -57,8 +61,11 @@ public interface IContainer : IDisposable
     /// The path to write to. Supplied by <c>AtomicFileWriter</c> and normally a
     /// temporary sibling of the real target, never the user's file.
     /// </param>
-    /// <exception cref="NotSupportedException">
-    /// <see cref="IsWritable"/> is <see langword="false"/>.
+    /// <exception cref="BookFormatException">
+    /// <see cref="IsWritable"/> is <see langword="false"/>, or the container cannot
+    /// be reproduced without losing something. Thrown rather than
+    /// <see cref="NotSupportedException"/> because the reason is worth showing the
+    /// user, and because <c>AtomicFileWriter</c> passes it through unwrapped.
     /// </exception>
     /// <exception cref="BookIoException">The target could not be written.</exception>
     void Rebuild(IEnumerable<PendingEntry> entries, string targetPath);
@@ -76,10 +83,10 @@ public interface IContainer : IDisposable
 /// format they hold. <see cref="BookContainers.Open"/> maps it to an
 /// <see cref="IContainer"/> implementation.
 /// <para>
-/// <see cref="Rar"/> and <see cref="SevenZip"/> are named and never opened. This
-/// build recognises both so it can tell a user their <c>.cbz</c> is really a RAR,
-/// which costs a few magic-number comparisons; opening one would cost a container
-/// implementation, and neither can be written at all.
+/// <see cref="SevenZip"/> is named and never opened. This build recognises it so it
+/// can tell a user what their <c>.cbz</c> really is, which costs a few magic-number
+/// comparisons; opening one would cost a container implementation, and it cannot be
+/// written in any case.
 /// </para>
 /// </remarks>
 public enum ContainerKind
@@ -93,7 +100,7 @@ public enum ContainerKind
     /// <summary>ZIP.</summary>
     Zip,
 
-    /// <summary>RAR, versions 4 and 5. Readable, never writable.</summary>
+    /// <summary>RAR, versions 4 and 5. Readable; never rebuilt.</summary>
     Rar,
 
     /// <summary>7z.</summary>
@@ -202,6 +209,49 @@ public sealed record ContainerEntry
 
     /// <summary>Returns the name and size, for diagnostics.</summary>
     public override string ToString() => $"{Name} ({Length} bytes, method {CompressionMethod})";
+
+    /// <summary>
+    /// Whether an entry name is absolute, or walks out of the archive with
+    /// <c>..</c>.
+    /// </summary>
+    /// <param name="name">An entry name, as stored.</param>
+    /// <returns><see langword="true"/> when the name points outside the archive.</returns>
+    /// <remarks>
+    /// Hard invariant 4. It lives here rather than in either caller because there
+    /// are now two, and they do different things with the answer:
+    /// <c>Book.Load</c> reports it as <c>GEN-E003</c> and carries on, because
+    /// reading a container never resolves a name against the file system, while
+    /// <c>RarContainer</c> refuses outright, because writing a CBR is the one place
+    /// in Core that puts entries on disk and a name that escapes would land
+    /// somewhere the user did not ask for. One predicate, so the two cannot come to
+    /// disagree about what "escapes" means.
+    /// <para>
+    /// A colon counts: on Windows it introduces a drive or an alternate data
+    /// stream, and neither is a relative name.
+    /// </para>
+    /// </remarks>
+    public static bool EscapesArchive(string? name)
+    {
+        if (string.IsNullOrEmpty(name))
+        {
+            return false;
+        }
+
+        if (name![0] is '/' or '\\' || System.IO.Path.IsPathRooted(name) || name.IndexOf(':') >= 0)
+        {
+            return true;
+        }
+
+        foreach (string segment in name.Split('/', '\\'))
+        {
+            if (segment == "..")
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }
 
 /// <summary>
