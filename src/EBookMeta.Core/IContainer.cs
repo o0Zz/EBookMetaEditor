@@ -5,38 +5,13 @@ namespace EBookMeta;
 /// raw file presented as one entry. The physical axis of the design, and one of
 /// Core's two seams.
 /// </summary>
-/// <remarks>
-/// It knows nothing about books: entries in the container's own order, byte
-/// access to one of them, and an atomic rebuild. Everything that understands
-/// what those entries mean lives behind <see cref="IBookFormat"/>.
-/// <para>
-/// Implementations are opened through <see cref="BookContainers.Open"/> rather
-/// than being named by callers, so the choice of container lives in one place.
-/// </para>
-/// </remarks>
 /// <seealso cref="IBookFormat" />
 public interface IContainer : IDisposable
 {
-    /// <summary>
-    /// Whether this container can be rebuilt.
-    /// </summary>
-    /// <remarks>
-    /// <see langword="false"/> for RAR, and callers must handle that rather than
-    /// assume. RAR compression is proprietary: SharpCompress reads both RAR 4 and
-    /// RAR 5 and writes neither, the UnRAR licence forbids using it to build a
-    /// compatible compressor, and no free RAR compressor exists to depend on.
-    /// <para>
-    /// This is not the same question as whether the file can be edited. A CBR opens,
-    /// reads and edits like any other comic, because <c>CbzFormat.Capabilities</c> is
-    /// a property of <c>ComicInfo.xml</c> rather than of the archive around it — the
-    /// save is what fails, as <c>CBR-F002</c>, with the user's file untouched.
-    /// </para>
-    /// </remarks>
+    /// <summary>Whether this container can be rebuilt.</summary>
     bool IsWritable { get; }
 
-    /// <summary>
-    /// The entries, in the container's own order.
-    /// </summary>
+    /// <summary>The entries, in the container's own order.</summary>
     IReadOnlyList<ContainerEntry> Entries { get; }
 
     /// <summary>
@@ -46,9 +21,11 @@ public interface IContainer : IDisposable
     /// </summary>
     string? ArchiveComment { get; }
 
-    /// <summary>Opens a readable stream over an entry's decompressed content.</summary>
-    /// <param name="entry">An entry from <see cref="Entries"/>.</param>
-    /// <returns>A readable stream; the caller disposes it.</returns>
+    /// <summary>
+    /// Opens a readable stream over an entry's decompressed content. Implementations
+    /// share one handle on the archive, so <b>reads must not overlap</b> — dispose one
+    /// entry stream before opening the next.
+    /// </summary>
     /// <exception cref="BookFormatException">The entry's content is unreadable.</exception>
     Stream OpenRead(ContainerEntry entry);
 
@@ -75,20 +52,6 @@ public interface IContainer : IDisposable
 /// The physical container a file turned out to be, independent of the metadata
 /// document inside it.
 /// </summary>
-/// <remarks>
-/// The container half of the two axes, and the answer <see cref="BookContainers.Sniff"/>
-/// gives. It lives here rather than beside <see cref="FormatId"/> because several
-/// formats share one container — EPUB and CBZ are both ZIP, MOBI and AZW3 are both
-/// PalmDB — so which container the bytes are is never the same question as which
-/// format they hold. <see cref="BookContainers.Open"/> maps it to an
-/// <see cref="IContainer"/> implementation.
-/// <para>
-/// <see cref="SevenZip"/> is named and never opened. This build recognises it so it
-/// can tell a user what their <c>.cbz</c> really is, which costs a few magic-number
-/// comparisons; opening one would cost a container implementation, and it cannot be
-/// written in any case.
-/// </para>
-/// </remarks>
 public enum ContainerKind
 {
     /// <summary>Not recognised.</summary>
@@ -113,15 +76,7 @@ public enum ContainerKind
     PalmDb,
 }
 
-/// <summary>
-/// Convenience over <see cref="IContainer"/> that every format needs.
-/// </summary>
-/// <remarks>
-/// Reading one entry whole is what a metadata document always requires, and each
-/// format having its own copy of the three-line stream drain was three chances
-/// for them to disagree about buffer sizing. It belongs on the physical seam
-/// rather than in the formats, because it is a fact about entries, not books.
-/// </remarks>
+/// <summary>Convenience over <see cref="IContainer"/> that every format needs.</summary>
 public static class ContainerExtensions
 {
     /// <summary>Reads an entry's whole decompressed content.</summary>
@@ -150,12 +105,6 @@ public static class ContainerExtensions
 /// One entry inside a container, described well enough that
 /// <see cref="IContainer.Rebuild"/> can reproduce it.
 /// </summary>
-/// <remarks>
-/// The read half of a pair: this describes an entry <em>as found</em>, while
-/// <see cref="PendingEntry"/> is an instruction to write one. They carry nearly
-/// the same fields and flow in opposite directions —
-/// <see cref="PendingEntry.CopyOf"/> is what turns one into the other.
-/// </remarks>
 /// <seealso cref="PendingEntry" />
 public sealed record ContainerEntry
 {
@@ -169,19 +118,15 @@ public sealed record ContainerEntry
     /// Position in the container's own ordering, zero-based. Stable for the
     /// lifetime of the container and used to address the entry.
     /// </summary>
-    /// <remarks>
-    /// Entries are addressed by index rather than name because names are not
-    /// reliably unique. A ZIP may legally contain two entries with the same
-    /// name, and malformed archives in the wild do.
-    /// </remarks>
     public required int Index { get; init; }
 
     /// <summary>The uncompressed size in bytes.</summary>
     public required long Length { get; init; }
 
     /// <summary>
-    /// The compression method as read, using ZIP method codes: 0 for stored,
-    /// 8 for deflate.
+    /// The compression method as read, using ZIP method codes: 0 for stored, 8 for
+    /// deflate. Carried per entry because reproducing it on rebuild is a hard
+    /// invariant — a stored <c>mimetype</c> re-emitted as deflate breaks EPUB readers.
     /// </summary>
     public ushort CompressionMethod { get; init; }
 
@@ -198,12 +143,6 @@ public sealed record ContainerEntry
     /// <see langword="true"/> when <see cref="CompressionMethod"/> is one this
     /// build can reproduce on write: stored or deflate.
     /// </summary>
-    /// <remarks>
-    /// ZIP permits bzip2, LZMA, Zstandard and others.
-    /// <c>System.IO.Compression</c> can read some and write none of them, so an
-    /// archive containing one cannot be rebuilt byte-faithfully. Callers check
-    /// this and warn rather than silently re-encoding.
-    /// </remarks>
     public bool IsReproducibleCompression =>
         CompressionMethod is ZipCompressionMethods.Stored or ZipCompressionMethods.Deflate;
 
@@ -211,25 +150,10 @@ public sealed record ContainerEntry
     public override string ToString() => $"{Name} ({Length} bytes, method {CompressionMethod})";
 
     /// <summary>
-    /// Whether an entry name is absolute, or walks out of the archive with
-    /// <c>..</c>.
+    /// Whether an entry name is absolute, or walks out of the archive with <c>..</c>.
+    /// Hard invariant 4, and the one predicate for it, so the read path and
+    /// <c>RarContainer.Stage</c> cannot disagree about what "escapes" means.
     /// </summary>
-    /// <param name="name">An entry name, as stored.</param>
-    /// <returns><see langword="true"/> when the name points outside the archive.</returns>
-    /// <remarks>
-    /// Hard invariant 4. It lives here rather than in either caller because there
-    /// are now two, and they do different things with the answer:
-    /// <c>Book.Load</c> reports it as <c>GEN-E003</c> and carries on, because
-    /// reading a container never resolves a name against the file system, while
-    /// <c>RarContainer</c> refuses outright, because writing a CBR is the one place
-    /// in Core that puts entries on disk and a name that escapes would land
-    /// somewhere the user did not ask for. One predicate, so the two cannot come to
-    /// disagree about what "escapes" means.
-    /// <para>
-    /// A colon counts: on Windows it introduces a drive or an alternate data
-    /// stream, and neither is a relative name.
-    /// </para>
-    /// </remarks>
     public static bool EscapesArchive(string? name)
     {
         if (string.IsNullOrEmpty(name))
@@ -254,9 +178,7 @@ public sealed record ContainerEntry
     }
 }
 
-/// <summary>
-/// ZIP compression method codes, as they appear in the central directory.
-/// </summary>
+/// <summary>ZIP compression method codes, as they appear in the central directory.</summary>
 public static class ZipCompressionMethods
 {
     /// <summary>No compression. Required for an EPUB's <c>mimetype</c> entry.</summary>
@@ -296,27 +218,13 @@ public static class ZipCompressionMethods
     };
 }
 
-/// <summary>
-/// An entry to be written by <see cref="IContainer.Rebuild"/>.
-/// </summary>
-/// <remarks>
-/// The write half of a pair: <see cref="ContainerEntry"/> describes an entry as
-/// found, this one instructs a rebuild to produce one.
-/// <para>
-/// Content is supplied as a stream factory rather than a byte array so that a
-/// rebuild copies entries through without holding the whole archive in memory.
-/// A 300-page comic is a few hundred megabytes; the startup budget and the
-/// memory footprint both depend on streaming it.
-/// </para>
-/// </remarks>
+/// <summary>An entry to be written by <see cref="IContainer.Rebuild"/>.</summary>
 /// <seealso cref="ContainerEntry" />
 public sealed class PendingEntry
 {
     private readonly Func<Stream> _openContent;
 
-    /// <summary>
-    /// Creates an entry whose content is produced on demand.
-    /// </summary>
+    /// <summary>Creates an entry whose content is produced on demand.</summary>
     /// <param name="name">The entry name, with forward slashes.</param>
     /// <param name="openContent">
     /// Opens a readable stream over the content. Called once, during the
@@ -367,14 +275,6 @@ public sealed class PendingEntry
     /// The entry this one reproduces, or <see langword="null"/> when the content
     /// is new — a rewritten <c>ComicInfo.xml</c>, or one being added.
     /// </summary>
-    /// <remarks>
-    /// A rebuild needs a way back to the original to reproduce what
-    /// <see cref="ContainerEntry"/> does not model. <c>TarContainer</c> uses it to
-    /// re-emit an entry's 512-byte header byte for byte, preserving the mode, uid,
-    /// gid, uname and gname that tar records and this build has no other reason to
-    /// understand. Only the container that produced the entry may interpret this;
-    /// to anyone else it is opaque.
-    /// </remarks>
     public ContainerEntry? Source { get; }
 
     /// <summary>Opens the content stream. Called once per rebuild.</summary>
@@ -382,18 +282,10 @@ public sealed class PendingEntry
     public Stream OpenContent() => _openContent();
 
     /// <summary>
-    /// Creates an entry that copies an existing one through unchanged,
-    /// preserving its name, compression method and timestamp.
+    /// Creates an entry that copies an existing one through unchanged, preserving its
+    /// name, compression method and timestamp. Hard invariant 3: content files are
+    /// copied byte for byte, never round-tripped through a parser.
     /// </summary>
-    /// <param name="source">The container the entry is read from.</param>
-    /// <param name="entry">The entry to copy.</param>
-    /// <returns>A pending entry that reproduces <paramref name="entry"/>.</returns>
-    /// <remarks>
-    /// This is the path every non-metadata entry takes. Content files,
-    /// stylesheets and images are copied byte for byte and never round-tripped
-    /// through a parser — an XHTML file that goes through an XML writer comes
-    /// out reformatted, and the user did not ask for that.
-    /// </remarks>
     public static PendingEntry CopyOf(IContainer source, ContainerEntry entry)
     {
         Throw.IfNull(source);
@@ -408,20 +300,12 @@ public sealed class PendingEntry
     }
 
     /// <summary>
-    /// Creates an entry that takes an existing one's place with new content,
-    /// keeping its name, compression method and timestamp.
+    /// Creates an entry that takes an existing one's place with new content, keeping
+    /// its name, compression method and timestamp. Use this rather than
+    /// <see cref="FromBytes"/> whenever new content stands in for an existing entry —
+    /// <see cref="FromBytes"/> has no <see cref="Source"/>, so a container that retains
+    /// more about an entry than <see cref="ContainerEntry"/> models silently loses it.
     /// </summary>
-    /// <param name="source">The entry being replaced.</param>
-    /// <param name="content">The new content bytes.</param>
-    /// <returns>A pending entry that stands in for <paramref name="source"/>.</returns>
-    /// <remarks>
-    /// The path a rewritten OPF or <c>ComicInfo.xml</c> takes. Distinct from
-    /// <see cref="FromBytes"/> because the entry is not new: a container that
-    /// retains more about an entry than <see cref="ContainerEntry"/> models can
-    /// reach it through <see cref="Source"/> and keep it. <c>TarContainer</c>
-    /// preserves the original header this way, changing only the length field and
-    /// the checksum over it.
-    /// </remarks>
     public static PendingEntry Replacing(ContainerEntry source, byte[] content)
     {
         Throw.IfNull(source);
@@ -464,22 +348,7 @@ public sealed class PendingEntry
         $"{Name} ({ZipCompressionMethods.ToName(CompressionMethod)})";
 }
 
-/// <summary>
-/// A read-only window onto part of another stream.
-/// </summary>
-/// <remarks>
-/// What a container hands back for an entry stored uncompressed at a known
-/// offset: TAR and PalmDB records, and the whole of a raw file. Reading one is a
-/// bounded read rather than a decompression, so there is nothing to wrap it in
-/// but bounds.
-/// <para>
-/// Seeks to its own position on every read, so a container that hands out several
-/// of these over one shared stream does not have them lose each other's place.
-/// <see cref="Dispose"/> closes the underlying stream only when this window was
-/// given ownership of it — a caller's <c>using</c> must never close the
-/// container's handle.
-/// </para>
-/// </remarks>
+/// <summary>A read-only window onto part of another stream.</summary>
 internal sealed class SectionStream : Stream
 {
     private readonly Stream _inner;

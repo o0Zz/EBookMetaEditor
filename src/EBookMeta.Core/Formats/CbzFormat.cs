@@ -11,30 +11,6 @@ namespace EBookMeta.Formats;
 /// Reads and writes comic archive metadata: an archive of page images plus
 /// <c>ComicInfo.xml</c>.
 /// </summary>
-/// <remarks>
-/// This file is the <see cref="IBookFormat"/> implementation — reading, writing,
-/// and the corrections a write can prove, such as a <c>PageCount</c> recomputed
-/// from the images actually present.
-/// <para>
-/// One instance serves CBZ, one CBT and one CBR, because the three differ only in
-/// the container they are stored in: the metadata document, the rules and the
-/// corrections are identical, and nothing here names <c>ZipContainer</c>. The
-/// rule IDs stay <c>CBZ-</c> prefixed for all three — they are namespaced by
-/// metadata convention rather than by container, and a second copy of the table
-/// under a <c>CBT-</c> prefix would be one more thing to keep in step for no gain.
-/// The two <c>CBR-</c> rules are the exception that proves it: they are facts about
-/// the archive, not about <c>ComicInfo.xml</c>, and they live in
-/// <c>RarContainer</c>.
-/// </para>
-/// <para>
-/// Nothing here treats CBR as a lesser format. <see cref="Capabilities"/> says a
-/// comic's fields are writable because <c>ComicInfo.xml</c> can hold them, which is
-/// true whatever the archive is; <see cref="Write"/> composes the new entry list the
-/// same way and hands it to <c>Rebuild</c>, and it is <c>RarContainer</c> that
-/// refuses. Special-casing the format here would put the same refusal in two places
-/// and make it the metadata document's business, which it is not.
-/// </para>
-/// </remarks>
 public sealed partial class CbzFormat : IBookFormat
 {
     /// <summary>The CoMet metadata document, read for cross-checking only.</summary>
@@ -55,10 +31,8 @@ public sealed partial class CbzFormat : IBookFormat
         {
             Format = id,
 
-            // ComicInfo has no sort forms, no identifiers and no rights statement,
-            // so those fields stay off. That is the point of declaring
-            // capabilities: a user must not type a sort title into a comic and
-            // have it silently discarded on save.
+            // ComicInfo has no sort forms, identifiers or rights statement, so those
+            // stay off rather than being typed in and discarded on save.
             ReadableFields =
                 MetadataField.Title | MetadataField.Creators | MetadataField.CreatorRoles |
                 MetadataField.Series | MetadataField.SeriesIndex | MetadataField.Description |
@@ -75,10 +49,8 @@ public sealed partial class CbzFormat : IBookFormat
                 MetadataField.Subjects,
         };
 
-        // Declared even for CBR, whose save is refused by its container. The list is
-        // what the Settings form builds its context-menu checkboxes from, and a user
-        // who right-clicks a comic to look at its metadata is served whether or not
-        // this build can write it back.
+        // Declared even for CBR, whose save its container may refuse: this list is what
+        // the context-menu checkboxes are built from, and reading one is ordinary.
         Extensions = id switch
         {
             FormatId.Cbt => [".cbt"],
@@ -99,34 +71,10 @@ public sealed partial class CbzFormat : IBookFormat
     /// <summary>
     /// The extensions this build treats as page images, lowercase and with the dot.
     /// </summary>
-    /// <remarks>
-    /// One list, used both to recognise an untagged comic and to count its pages
-    /// for CBZ-E020. Two would let a comic be recognised and then have its pages
-    /// miscounted.
-    /// </remarks>
     private static readonly string[] ImageExtensions =
         [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".avif", ".jxl", ".tif", ".tiff"];
 
     /// <inheritdoc />
-    /// <remarks>
-    /// The three registered instances answer for different containers and never for
-    /// each other's: a TAR is a CBT, a RAR is a CBR, a ZIP is a CBZ, and none has to
-    /// know the others exist. TAR and RAR need nothing further, because CBT and CBR
-    /// are the only formats this build reads out of either.
-    /// <para>
-    /// Confidence is what keeps a comic from outbidding an EPUB over the same ZIP.
-    /// A <c>ComicInfo.xml</c> or a <c>comet.xml</c> is a document only a comic
-    /// carries; "nothing but images" is the ComicRack convention for an untagged
-    /// comic and no more than a good guess, so it is claimed as weak.
-    /// </para>
-    /// <para>
-    /// The RAR arm claims on the container alone and never reaches for
-    /// <see cref="BookSource.Container"/>. Opening one can throw — a solid or
-    /// encrypted archive is refused as CBR-F001 — and <see cref="TryOpen"/> must
-    /// not, so the refusal is left to happen in <c>Book.Load</c> where it is a real
-    /// error rather than a reason to try the next format.
-    /// </para>
-    /// </remarks>
     public FormatClaim? TryOpen(BookSource source)
     {
         Throw.IfNull(source);
@@ -255,10 +203,8 @@ public sealed partial class CbzFormat : IBookFormat
         Throw.IfNull(metadata);
         Throw.IfNullOrEmpty(targetPath);
 
-        // Refused, not warned about and proceeded with. The comment is the only
-        // copy of whatever it holds, a rebuild cannot write one back, and losing
-        // a user's ComicBookLover metadata to a title edit is not a trade this
-        // tool gets to make on their behalf.
+        // Refused, not warned and proceeded with: the comment is the only copy of what
+        // it holds and a rebuild cannot write one back.
         if (!string.IsNullOrEmpty(container.ArchiveComment))
         {
             const string reason =
@@ -301,10 +247,8 @@ public sealed partial class CbzFormat : IBookFormat
                         + $"image{(images == 1 ? "" : "s")}; corrected on save.", entry.Name);
         }
 
-        // A nested ComicInfo.xml is one most readers never find, and the rebuild is
-        // already composing a fresh entry list, so moving it costs nothing. Only
-        // the metadata document moves: the images keep their order, which for a
-        // comic is the reading order.
+        // Most readers never find a nested ComicInfo.xml. Only it moves â€” the images
+        // keep their order, which for a comic is the reading order.
         bool relocate = entry is not null && entry.Name.IndexOf('/') >= 0;
 
         if (relocate)
@@ -336,10 +280,8 @@ public sealed partial class CbzFormat : IBookFormat
 
         if (!replaceInPlace)
         {
-            // Appended rather than inserted first. Every reader finds the entry by
-            // name, so its position buys nothing — while putting it anywhere but
-            // the end would move existing entries, and preserving their order is
-            // an invariant. For a comic the entry order is also the reading order.
+            // Appended, not inserted: readers find it by name, and anywhere else would
+            // move existing entries, whose order is an invariant.
             entries.Add(PendingEntry.FromBytes(
                 ComicInfoDocument.DefaultEntryName,
                 bytes,
@@ -359,9 +301,7 @@ public sealed partial class CbzFormat : IBookFormat
                         + $"'{ComicInfoDocument.DefaultEntryName}'.");
     }
 
-    /// <summary>
-    /// Parses the metadata document, reporting CBZ-F001 before giving up.
-    /// </summary>
+    /// <summary>Parses the metadata document, reporting CBZ-F001 before giving up.</summary>
     private static ComicInfoDocument Parse(
         IContainer container, ContainerEntry entry)
     {
@@ -376,9 +316,7 @@ public sealed partial class CbzFormat : IBookFormat
         }
     }
 
-    /// <summary>
-    /// Reads the cover: the first page, in reading order.
-    /// </summary>
+    /// <summary>Reads the cover: the first page, in reading order.</summary>
     private static void ReadCover(IContainer container, BookMetadata metadata)
     {
         ContainerEntry? first = Images(container)
@@ -465,9 +403,7 @@ public sealed class ComicInfoDocument
     /// <summary>The entry name the convention fixes, at the archive root.</summary>
     public const string DefaultEntryName = "ComicInfo.xml";
 
-    /// <summary>
-    /// The element order the ComicInfo schema requires.
-    /// </summary>
+    /// <summary>The element order the ComicInfo schema requires.</summary>
     private static readonly string[] SchemaOrder =
     [
         "Title", "Series", "Number", "Count", "Volume",
@@ -620,11 +556,8 @@ public sealed class ComicInfoDocument
             DeclaredName = "utf-8",
         };
 
-        // CRLF, because this file is created on Windows by a Windows utility and
-        // that is what every other tool in the neighbourhood writes. The indent
-        // stays LF: text nodes go through the tree, and the tree is where
-        // serialisation translates line endings, so putting CRLF in one here
-        // would come back out as CR CRLF.
+        // CRLF because a Windows utility writes this file. The indent stays LF: text
+        // nodes go through the tree, which translates endings, so CRLF becomes CR CRLF.
         return new ComicInfoDocument(
             new XDocument(root),
             [],
@@ -685,9 +618,7 @@ public sealed class ComicInfoDocument
             : new SeriesInfo { Name = name, RawIndex = number };
     }
 
-    /// <summary>
-    /// Reads the creator elements, keeping each one's native role.
-    /// </summary>
+    /// <summary>Reads the creator elements, keeping each one's native role.</summary>
     private void ReadCreators(BookMetadata metadata)
     {
         foreach ((string element, string relator) in CreatorElements)
@@ -710,9 +641,7 @@ public sealed class ComicInfoDocument
         }
     }
 
-    /// <summary>
-    /// Reads <c>Genre</c> as the subject list.
-    /// </summary>
+    /// <summary>Reads <c>Genre</c> as the subject list.</summary>
     private void ReadSubjects(BookMetadata metadata)
     {
         if (Value("Genre") is not { } genre)
@@ -737,10 +666,8 @@ public sealed class ComicInfoDocument
         string? month = Value("Month");
         string? day = Value("Day");
 
-        // Composed as ISO rather than kept as three fields: Raw is what the editor
-        // shows and what a later save writes back, so it has to be a date a person
-        // recognises. Precision records how much of it the file actually claimed,
-        // so a bare year is never promoted to a January date.
+        // Raw is what the editor shows and a later save writes back, so it must read as
+        // a date. Precision keeps a bare year from being promoted to 1 January.
         if (month is null)
         {
             return BookDate.Parse(year);
@@ -758,9 +685,7 @@ public sealed class ComicInfoDocument
             ? number.ToString(CultureInfo.InvariantCulture).PadLeft(width, '0')
             : value;
 
-    /// <summary>
-    /// Records elements that map onto no model field.
-    /// </summary>
+    /// <summary>Records elements that map onto no model field.</summary>
     private void ReadUnmapped(BookMetadata metadata)
     {
         foreach (XElement element in Root!.Elements())
@@ -786,17 +711,8 @@ public sealed class ComicInfoDocument
             or "Genre" or "LanguageISO" or "Year" or "Month" or "Day" ||
         CreatorElements.Any(c => c.Element == elementName);
 
-    /// <summary>
-    /// Applies metadata to the document, touching only what changed.
-    /// </summary>
+    /// <summary>Applies metadata to the document, touching only what changed.</summary>
     /// <param name="metadata">The metadata to write.</param>
-    /// <remarks>
-    /// Compared field by field against the document as it currently stands, so a
-    /// field the user did not edit contributes nothing to the diff and an unedited
-    /// save reproduces the file byte for byte. Anything this method does not
-    /// recognise is never touched, which is how <c>Notes</c>, <c>Volume</c> and the
-    /// <c>&lt;Pages&gt;</c> block survive intact.
-    /// </remarks>
     public void ApplyMetadata(BookMetadata metadata)
     {
         Throw.IfNull(metadata);
@@ -816,19 +732,15 @@ public sealed class ComicInfoDocument
         ApplySubjects(root, current, metadata);
         ApplyCreators(root, current, metadata);
 
-        // A document this build created has no trailing whitespace to inherit, so
-        // its closing tag would end up on the same line as the last field. Only
-        // for a created document: adding one to a parsed file would change bytes
-        // the user did not ask to change.
+        // A created document has no trailing whitespace to inherit. Only for a created
+        // one: adding it to a parsed file would change bytes the user did not touch.
         if (_created && root.HasElements && root.LastNode is not XText)
         {
             root.Add(new XText("\n"));
         }
     }
 
-    /// <summary>
-    /// Records the archive's real page count, replacing a wrong one.
-    /// </summary>
+    /// <summary>Records the archive's real page count, replacing a wrong one.</summary>
     /// <param name="pageCount">The number of images actually in the archive.</param>
     /// <returns>
     /// <see langword="true"/> when the document changed, so the caller can report
@@ -925,9 +837,7 @@ public sealed class ComicInfoDocument
             metadata.Subjects.Count == 0 ? null : string.Join(", ", metadata.Subjects));
     }
 
-    /// <summary>
-    /// Writes the creator elements, grouping names by the role they carry.
-    /// </summary>
+    /// <summary>Writes the creator elements, grouping names by the role they carry.</summary>
     private void ApplyCreators(XElement root, BookMetadata current, BookMetadata metadata)
     {
         if (SameCreators(current.Creators, metadata.Creators))
@@ -1053,9 +963,7 @@ public sealed class ComicInfoDocument
         }
     }
 
-    /// <summary>
-    /// Inserts a new element at the position the schema sequence gives it.
-    /// </summary>
+    /// <summary>Inserts a new element at the position the schema sequence gives it.</summary>
     private void InsertInSchemaOrder(XElement root, XElement element)
     {
         int position = SchemaPosition(element.Name.LocalName);

@@ -12,9 +12,7 @@ namespace EBookMeta.App;
 /// </summary>
 internal sealed class BatchForm : Form, IPathReceiver
 {
-    /// <summary>
-    /// The editable columns, in order.
-    /// </summary>
+    /// <summary>The editable columns, in order.</summary>
     private static readonly (MetadataField Field, string HeaderKey, int Width)[] FieldColumns =
     [
         (MetadataField.Title, "field.title", 200),
@@ -99,10 +97,8 @@ internal sealed class BatchForm : Form, IPathReceiver
         BuildLayout(BuildMenu());
         BuildColumns();
 
-        // CellValueChanged rather than CellEndEdit: it fires for a value that
-        // arrives any way at all, including from an accessibility tool driving the
-        // grid, where CellEndEdit never runs and the edit would be lost in silence.
-        // For someone typing, the two are the same moment.
+        // CellValueChanged, not CellEndEdit: it fires however the value arrived,
+        // including from an accessibility tool, where CellEndEdit never runs.
         _grid.CellValueChanged += OnCellValueChanged;
 
         // A tick box otherwise holds its new value until the cell loses focus, so
@@ -147,9 +143,7 @@ internal sealed class BatchForm : Form, IPathReceiver
         StartLoad();
     }
 
-    /// <summary>
-    /// Turns whatever the shell handed over into a list of files.
-    /// </summary>
+    /// <summary>Turns whatever the shell handed over into a list of files.</summary>
     private static IEnumerable<string> Expand(IEnumerable<string> paths)
     {
         foreach (string path in paths)
@@ -230,9 +224,7 @@ internal sealed class BatchForm : Form, IPathReceiver
         return menu;
     }
 
-    /// <summary>
-    /// Shows a shortcut beside a menu item without registering it.
-    /// </summary>
+    /// <summary>Shows a shortcut beside a menu item without registering it.</summary>
     private static ToolStripMenuItem WithShortcut(ToolStripMenuItem item, string shortcut)
     {
         item.ShortcutKeyDisplayString = shortcut;
@@ -290,10 +282,8 @@ internal sealed class BatchForm : Form, IPathReceiver
             {
                 HeaderText = Strings.Get(headerKey),
                 Width = width,
-                // Programmatic rather than Automatic: the grid would otherwise
-                // order the rows by the text in its own cells, which sorts 10
-                // before 2 and a bare year after a full date. The comparison lives
-                // in Core, where the values came from.
+                // Programmatic, not Automatic: sorting the cells' text puts 10 before
+                // 2 and a bare year after a full date. Core owns the comparison.
                 SortMode = DataGridViewColumnSortMode.Programmatic,
                 Tag = field,
                 MaxInputLength = 4000,
@@ -370,11 +360,8 @@ internal sealed class BatchForm : Form, IPathReceiver
 
             cell.Value = entry.Read(field);
 
-            // A cell the format cannot store is dead rather than merely ignored on
-            // save: the reason FormatCapabilities exists is that a user must never
-            // type into a box whose contents get discarded. A comic has nowhere to
-            // put a sort title, so that cell is grey on a comic's row and live on a
-            // book's, in the same column.
+            // Dead, not ignored on save: a user must never type into a cell whose
+            // contents get discarded. Per row, so one column can be both.
             bool writable = entry.Capabilities?.CanWriteAll(field) == true;
             cell.ReadOnly = !writable;
             cell.Style.BackColor = writable ? SystemColors.Window : SystemColors.Control;
@@ -387,11 +374,6 @@ internal sealed class BatchForm : Form, IPathReceiver
     }
 
     /// <summary>Shows whether a row will be written, and whether that is the user's to decide.</summary>
-    /// <remarks>
-    /// An edited row is ticked and locked: the box adds a file to the save and never
-    /// drops one, so an edit cannot be lost by clicking the wrong cell. A file the
-    /// build cannot write is locked the other way.
-    /// </remarks>
     private static void SetTick(DataGridViewRow row, BatchEntry entry)
     {
         DataGridViewCell tick = row.Cells[SaveColumn];
@@ -419,9 +401,7 @@ internal sealed class BatchForm : Form, IPathReceiver
         }
     }
 
-    /// <summary>
-    /// Marks the cells whose value differs from the file on disk.
-    /// </summary>
+    /// <summary>Marks the cells whose value differs from the file on disk.</summary>
     private void OnCellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
     {
         if (e.RowIndex < 0 || e.ColumnIndex < FirstFieldColumn ||
@@ -473,10 +453,8 @@ internal sealed class BatchForm : Form, IPathReceiver
 
         entry.Apply(field, typed);
 
-        // Read back rather than trusting what was typed: the model normalises — a
-        // list gets its separators tidied, an index its decimal point — and showing
-        // the stored value is the only way the grid tells the truth about what a
-        // save will write.
+        // Read back rather than trusting what was typed: the model normalises, and
+        // only the stored value tells the truth about what a save will write.
         _filling = true;
 
         try
@@ -517,9 +495,7 @@ internal sealed class BatchForm : Form, IPathReceiver
         editor.Show(this);
     }
 
-    /// <summary>
-    /// Handles the grid's own shortcuts before anything else sees them.
-    /// </summary>
+    /// <summary>Handles the grid's own shortcuts before anything else sees them.</summary>
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
         if (!_busy && _grid.Focused && !_grid.IsCurrentCellInEditMode)
@@ -600,15 +576,7 @@ internal sealed class BatchForm : Form, IPathReceiver
         ApplySort();
     }
 
-    /// <summary>
-    /// Puts the rows in the order the last header click asked for.
-    /// </summary>
-    /// <remarks>
-    /// Reapplied when a read finishes, because a row that arrives blank and fills in
-    /// later would otherwise sit wherever the sort left it when it had nothing to
-    /// say. Not on an edit: a row that jumped out from under the cursor as it was
-    /// typed into would be worse than one in the wrong place.
-    /// </remarks>
+    /// <summary>Puts the rows in the order the last header click asked for.</summary>
     private void ApplySort()
     {
         if (_sortedColumn is null || _grid.Rows.Count == 0)
@@ -646,15 +614,7 @@ internal sealed class BatchForm : Form, IPathReceiver
         _ => _ => string.Empty,
     };
 
-    /// <summary>
-    /// Orders grid rows by the entries behind them.
-    /// </summary>
-    /// <remarks>
-    /// The grid sorts rows and Core compares entries, so something has to look one
-    /// up from the other. Sorting reads the model rather than the cells, which is
-    /// what lets a date sort chronologically while still being shown as the
-    /// characters the file used.
-    /// </remarks>
+    /// <summary>Orders grid rows by the entries behind them.</summary>
     private sealed class RowComparer(IComparer<BatchEntry> entries) : IComparer
     {
         public int Compare(object? x, object? y)
@@ -679,11 +639,6 @@ internal sealed class BatchForm : Form, IPathReceiver
     /// <summary>
     /// Turns a set of rows all one way: on unless every one of them is already on.
     /// </summary>
-    /// <remarks>
-    /// Rows whose tick is not the user's to set are left out of the decision as well
-    /// as out of the change — an edited row is always on, and counting it would make
-    /// the header click look stuck.
-    /// </remarks>
     private void SetTicks(IReadOnlyList<DataGridViewRow> rows)
     {
         List<(DataGridViewRow Row, BatchEntry Entry)> targets = [.. rows
@@ -818,11 +773,6 @@ internal sealed class BatchForm : Form, IPathReceiver
     /// <summary>
     /// Numbers the selected rows' series index, counting up from a first value.
     /// </summary>
-    /// <remarks>
-    /// The one field a whole selection wants a *different* value in, which is why
-    /// paste cannot do it: numbering a shelf of twenty issues by hand is twenty
-    /// separate edits of one character each.
-    /// </remarks>
     private void NumberSelection()
     {
         if (_busy)
@@ -856,10 +806,8 @@ internal sealed class BatchForm : Form, IPathReceiver
         {
             var entry = (BatchEntry)row.Tag;
 
-            // An index belongs to a series: the model cannot hold one on its own,
-            // so a row with no series name is left alone rather than quietly
-            // swallowing the number. Set the series across the selection first —
-            // that is what paste is for — and then number it.
+            // The model cannot hold an index without a series, so a row with no series
+            // name is left alone rather than swallowing the number.
             if (entry.Capabilities?.CanWriteAll(MetadataField.SeriesIndex) != true ||
                 entry.Read(MetadataField.Series).Length == 0)
             {
@@ -893,11 +841,6 @@ internal sealed class BatchForm : Form, IPathReceiver
     /// <summary>
     /// The rows holding a selected cell, in the order the grid is showing them.
     /// </summary>
-    /// <remarks>
-    /// Display order, not the order the files arrived in: sorting by file name and
-    /// then numbering is the whole point, and a row's index is its position in the
-    /// grid once <see cref="ApplySort"/> has reordered them.
-    /// </remarks>
     private List<DataGridViewRow> SelectedRows()
     {
         List<DataGridViewRow> rows = [.. _grid.SelectedCells
@@ -998,9 +941,7 @@ internal sealed class BatchForm : Form, IPathReceiver
         return cells;
     }
 
-    /// <summary>
-    /// The cells a block covers, anchored at the top-left of the selection.
-    /// </summary>
+    /// <summary>The cells a block covers, anchored at the top-left of the selection.</summary>
     private List<DataGridViewCell> BlockTargets(string[][] block)
     {
         List<DataGridViewCell> selection = EditableSelection();
@@ -1027,9 +968,7 @@ internal sealed class BatchForm : Form, IPathReceiver
         return cells;
     }
 
-    /// <summary>
-    /// Reads the clipboard as a grid of values.
-    /// </summary>
+    /// <summary>Reads the clipboard as a grid of values.</summary>
     private static string[][] ClipboardBlock()
     {
         string text;
@@ -1153,10 +1092,8 @@ internal sealed class BatchForm : Form, IPathReceiver
 
     private void Finish(string what, string logVerb, Task<string?> task)
     {
-        // Marshalled by hand rather than continued on the UI scheduler: the window
-        // can be closing while a batch finishes, and BeginInvoke on a dead handle is
-        // the case that has to be survived rather than thrown from a task nobody
-        // awaits.
+        // Marshalled by hand: the window can be closing as a batch finishes, and
+        // BeginInvoke on a dead handle must be survived, not thrown from a stray task.
         if (IsDisposed || !IsHandleCreated)
         {
             return;
@@ -1368,14 +1305,7 @@ internal sealed class BatchForm : Form, IPathReceiver
         base.Dispose(disposing);
     }
 
-    /// <summary>
-    /// Asks what the first row's number is and how far apart the rest are.
-    /// </summary>
-    /// <remarks>
-    /// Nested rather than a window of its own: it is the batch grid's question, it
-    /// has no other caller, and a form that exists to return two numbers does not
-    /// earn a file.
-    /// </remarks>
+    /// <summary>Asks what the first row's number is and how far apart the rest are.</summary>
     private sealed class NumberDialog : Form
     {
         private readonly NumericUpDown _start = Spin(1);

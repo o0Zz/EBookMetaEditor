@@ -1,8 +1,6 @@
 namespace EBookMeta.Model;
 
-/// <summary>
-/// The series a book belongs to and its position within it.
-/// </summary>
+/// <summary>The series a book belongs to and its position within it.</summary>
 public sealed record SeriesInfo
 {
     /// <summary>The series name.</summary>

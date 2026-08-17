@@ -1,19 +1,6 @@
 namespace EBookMeta.App;
 
-/// <summary>
-/// The chrome every window in this application shares.
-/// </summary>
-/// <remarks>
-/// Four windows were each building the same fixed dialog, the same bottom button
-/// strip and the same auto-sizing button, with the sizes drifting apart by a
-/// pixel or two as they went. The drift is the reason this exists: a button that
-/// is 26 px tall in one dialog and 27 in the next is not a decision anyone made.
-/// <para>
-/// Every helper here is AutoSize with a floor rather than a fixed width, because
-/// German runs about a third longer than English and a fixed <c>Size</c> turns
-/// that into a clipped word.
-/// </para>
-/// </remarks>
+/// <summary>The chrome every window in this application shares.</summary>
 internal static class Dialogs
 {
     /// <summary>Applies the fixed-size, centred-on-parent modal dialog chrome.</summary>
@@ -36,10 +23,6 @@ internal static class Dialogs
     /// <summary>Builds the right-aligned strip that holds a window's buttons.</summary>
     /// <param name="controls">The buttons, in right-to-left order.</param>
     /// <returns>A panel docked to the bottom of its parent.</returns>
-    /// <remarks>
-    /// <see cref="FlowDirection.RightToLeft"/> means the first control added sits
-    /// rightmost, so callers list the affirmative button last.
-    /// </remarks>
     internal static FlowLayoutPanel ButtonStrip(params Control[] controls)
     {
         var strip = new FlowLayoutPanel

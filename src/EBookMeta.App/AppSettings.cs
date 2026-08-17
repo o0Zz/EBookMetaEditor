@@ -2,9 +2,7 @@
 
 namespace EBookMeta.App;
 
-/// <summary>
-/// User preferences, persisted beside the executable.
-/// </summary>
+/// <summary>User preferences, persisted beside the executable.</summary>
 internal sealed class AppSettings
 {
     private const string FileName = "settings.json";
@@ -17,9 +15,7 @@ internal sealed class AppSettings
     /// <summary>Whether a <c>.bak</c> is left beside a file after saving.</summary>
     internal bool KeepBackupOnSave { get; set; } = true;
 
-    /// <summary>
-    /// The extensions the context-menu button registers.
-    /// </summary>
+    /// <summary>The extensions the context-menu button registers.</summary>
     internal List<string> RegisteredExtensions { get; set; } =
         [".epub", ".cbz", ".cbt", ".fb2", ".mobi", ".prc", ".azw", ".azw3"];
 
@@ -136,9 +132,7 @@ internal sealed class AppSettings
         json.Append(",\n");
     }
 
-    /// <summary>
-    /// Reads a flat JSON object of string and boolean values.
-    /// </summary>
+    /// <summary>Reads a flat JSON object of string and boolean values.</summary>
     private static Dictionary<string, string> ParseFlatJson(string text)
     {
         var result = new Dictionary<string, string>(StringComparer.Ordinal);

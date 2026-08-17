@@ -75,9 +75,7 @@ internal sealed class XmlSourceFormat
             text.IndexOf("\r\n", StringComparison.Ordinal) >= 0 ? "\r\n" : "\n");
     }
 
-    /// <summary>
-    /// The formatting to use for a document being created from nothing.
-    /// </summary>
+    /// <summary>The formatting to use for a document being created from nothing.</summary>
     /// <param name="encoding">The encoding to write in.</param>
     /// <param name="declarationText">The declaration to emit.</param>
     /// <param name="newLine">The line ending to use.</param>
@@ -117,9 +115,7 @@ internal sealed class XmlSourceFormat
         return XmlEncodingDetector.Encode(text, Encoding);
     }
 
-    /// <summary>
-    /// Captures the XML declaration as literal text.
-    /// </summary>
+    /// <summary>Captures the XML declaration as literal text.</summary>
     private static string? ExtractDeclaration(string text)
     {
         int start = text.IndexOf("<?xml", StringComparison.Ordinal);

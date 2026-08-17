@@ -7,9 +7,7 @@ using Xunit;
 
 namespace EBookMeta.Tests;
 
-/// <summary>
-/// FictionBook: one XML file that is both the metadata and the book.
-/// </summary>
+/// <summary>FictionBook: one XML file that is both the metadata and the book.</summary>
 public sealed class Fb2Tests
 {
     private static void Write(
@@ -188,13 +186,6 @@ public sealed class Fb2Tests
     /// The documented limit of splitting a name on spaces: a compound surname
     /// lands in the wrong field.
     /// </summary>
-    /// <remarks>
-    /// Pinned rather than fixed. FB2 stores name parts and the editor stores one
-    /// string, so something has to guess at the boundary, and no rule gets every
-    /// name right. What matters is that the round trip through the model is
-    /// stable — the displayed name comes back unchanged — so a user who never
-    /// touches the author field cannot have it quietly rearranged.
-    /// </remarks>
     [Fact]
     public void A_compound_surname_is_split_wrongly_but_round_trips()
     {

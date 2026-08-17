@@ -6,23 +6,6 @@ namespace EBookMeta;
 /// Reads and writes the metadata of one format — the metadata-document axis of
 /// the design, and one of Core's two seams.
 /// </summary>
-/// <remarks>
-/// Two methods, not three. Reading reports what it noticed and writing reports
-/// what it corrected, so there is nowhere for a <c>Validate</c> to live.
-/// <para>
-/// Implementations are stateless singletons, held by <see cref="BookFormats"/>,
-/// which hands the same instance to every caller including parallel batch
-/// threads. Adding a format is one implementation plus one
-/// <see cref="BookFormats.Register"/> call; nothing in the UI or the open path
-/// changes, because both ask the registry rather than naming a format.
-/// </para>
-/// <para>
-/// No implementation touches the user's file. Both methods work against an open
-/// <see cref="IContainer"/>, and writing produces a complete new file at a path
-/// <c>AtomicFileWriter</c> supplies — which is what keeps a single sanctioned
-/// path for replacing a user's file.
-/// </para>
-/// </remarks>
 /// <seealso cref="IContainer" />
 public interface IBookFormat
 {
@@ -35,50 +18,14 @@ public interface IBookFormat
     /// <summary>
     /// The file extensions that claim this format, lowercase and with the dot.
     /// </summary>
-    /// <remarks>
-    /// A claim, never the answer — <see cref="TryOpen"/> decides by content. This
-    /// exists so a folder scan can skip files that promise nothing without opening
-    /// every one of them, and so the Settings form can build its shell-integration
-    /// list from the registry rather than from a second list that has to be kept in
-    /// step.
-    /// </remarks>
     IReadOnlyList<string> Extensions { get; }
 
     /// <summary>
     /// Says whether a file is one of this format's, having looked inside it.
+    /// <b>Claim; do not parse, and never throw</b> — returning <see langword="null"/> is
+    /// how a format declines, and an exception abandons the loop before the remaining
+    /// formats are asked. A damaged file is still its own format's.
     /// </summary>
-    /// <param name="source">The candidate file, open and shared between formats.</param>
-    /// <returns>
-    /// A claim on the file, or <see langword="null"/> when it is not this format's.
-    /// </returns>
-    /// <remarks>
-    /// This is how a file is opened: <see cref="BookFormats.TryOpen"/> offers it to
-    /// every registered format and the strongest claim wins. A format owns the
-    /// knowledge of what its own files look like — the EPUB <c>mimetype</c> entry,
-    /// the <c>ComicInfo.xml</c> name, the <c>&lt;FictionBook&gt;</c> root element —
-    /// so recognising a format is part of implementing it rather than a second edit
-    /// in a sniffer somewhere else.
-    /// <para>
-    /// <b>Claim; do not parse.</b> Check the marker that identifies the format and
-    /// nothing more. A damaged file is still this format's file: an EPUB whose OPF
-    /// will not parse is exactly the file the repair path exists for, and declining
-    /// it here would leave it to be claimed by nobody and reported as unsupported.
-    /// Parsing happens in <see cref="Read"/>, after a winner is picked, where a
-    /// failure is a real error rather than a reason to try the next format.
-    /// </para>
-    /// <para>
-    /// Never throw. Returning <see langword="null"/> is how a format declines, and
-    /// an exception here would abandon the whole loop — including the formats that
-    /// have not been asked yet.
-    /// </para>
-    /// <para>
-    /// Two answers are deliberately not available here, because a format can only
-    /// say "that is mine": which physical container the bytes are, which is
-    /// <see cref="BookContainers.Sniff"/>'s job and is already done by the time this
-    /// is called, and what a file is when this build recognises but cannot open it,
-    /// such as 7z — which <see cref="BookFormats"/> answers.
-    /// </para>
-    /// </remarks>
     FormatClaim? TryOpen(BookSource source);
 
     /// <summary>Reads metadata from an open container.</summary>
@@ -116,17 +63,7 @@ public interface IBookFormat
         string targetPath);
 }
 
-/// <summary>
-/// A file format EBookMetaEditor recognises.
-/// </summary>
-/// <remarks>
-/// The metadata-document half of the two axes. More ids than there are
-/// implementations: <see cref="Cb7"/> and <see cref="Pdf"/> are recognised and
-/// opened by nothing, which is what lets the app say what a file is rather than
-/// merely refusing it. Ids also outnumber implementations in the other direction —
-/// one <see cref="IBookFormat"/> is registered under several ids whenever the same
-/// metadata document arrives in a different wrapper, as CBZ, CBT and CBR do.
-/// </remarks>
+/// <summary>A file format EBookMetaEditor recognises.</summary>
 public enum FormatId
 {
     /// <summary>Not recognised.</summary>
@@ -258,15 +195,10 @@ public enum MetadataField
 }
 
 /// <summary>
-/// What a format can do with a file: which fields it can read, which it
-/// can write, and whether it can write at all.
+/// What a format can do with a file: which fields it can read, which it can write,
+/// and whether it can write at all. Both editors read this to disable fields, so a
+/// user never types into a box whose content would be discarded.
 /// </summary>
-/// <remarks>
-/// The UI reads this to disable the fields a file's format would discard, so a
-/// user never types into a box whose content is going to be thrown away. Adding a
-/// field to <see cref="BookMetadata"/> means revisiting every format's declaration,
-/// which is intentional friction.
-/// </remarks>
 public sealed record FormatCapabilities
 {
     /// <summary>The format these capabilities describe.</summary>
@@ -295,9 +227,7 @@ public sealed record FormatCapabilities
     public MetadataField UnsupportedIn(MetadataField fields) => fields & ~WritableFields;
 }
 
-/// <summary>
-/// How much of a file a read should bother with.
-/// </summary>
+/// <summary>How much of a file a read should bother with.</summary>
 public sealed record ReadOptions
 {
     /// <summary>Read everything — the default a single-file editor wants.</summary>
@@ -306,21 +236,11 @@ public sealed record ReadOptions
     /// <summary>Read the metadata only, leaving the cover image alone.</summary>
     public static ReadOptions WithoutCover { get; } = new() { IncludeCover = false };
 
-    /// <summary>
-    /// Whether to load the cover image bytes.
-    /// </summary>
+    /// <summary>Whether to load the cover image bytes.</summary>
     public bool IncludeCover { get; init; } = true;
 }
 
 /// <summary>How sure a format is that a file is one of its own.</summary>
-/// <remarks>
-/// Formats share containers, so more than one can claim the same ZIP and the
-/// strongest claim has to win. An EPUB's <c>mimetype</c> entry is conclusive; a
-/// <c>ComicInfo.xml</c> is strong evidence of a comic; an archive of nothing but
-/// images is the ComicRack convention for an untagged comic and no more than a
-/// guess. Ordering the registry instead would make the answer depend on
-/// registration order, which is not where this decision should live.
-/// </remarks>
 public enum MatchConfidence
 {
     /// <summary>A convention rather than a marker — an archive of only images.</summary>
@@ -350,18 +270,6 @@ public sealed record FormatClaim
 /// A candidate file, offered to each format in turn so it can say whether the file
 /// is one of its own.
 /// </summary>
-/// <remarks>
-/// This is what makes "ask every format" affordable. The file is opened once and
-/// the same <see cref="Container"/> is handed to every format that looks at it, so
-/// asking seven formats costs one header read and at most one container open — not
-/// one of each per format. A format whose <see cref="ContainerKind"/> does not
-/// match declines without touching the container at all.
-/// <para>
-/// The container is opened lazily and owned by this object, so a
-/// <see cref="BookFormats.TryOpen"/> that finds no claimant closes it again and a
-/// caller that gets one keeps reading through it without reopening the file.
-/// </para>
-/// </remarks>
 public sealed class BookSource : IDisposable
 {
     /// <summary>How many bytes the magic-number pass reads.</summary>
@@ -394,20 +302,9 @@ public sealed class BookSource : IDisposable
     public string? ContainerDetail { get; }
 
     /// <summary>The start of the file, for formats that have no magic number.</summary>
-    /// <remarks>
-    /// FB2 is the reason this exists: it is an ordinary XML file whose root element
-    /// is the only thing distinguishing it, so it is recognised from text rather
-    /// than from a container.
-    /// </remarks>
     public ReadOnlySpan<byte> Head => _head.AsSpan(0, _headLength);
 
     /// <summary>Whether this build has a container implementation for these bytes.</summary>
-    /// <remarks>
-    /// <see langword="false"/> for 7z, which is recognised and not opened.
-    /// <see cref="Container"/> throws for it, so a format must check its own
-    /// <see cref="ContainerKind"/> before reaching for it — which every format does
-    /// anyway, since the wrong container is the cheapest possible way to decline.
-    /// </remarks>
     public bool HasContainer => BookContainers.IsSupported(ContainerKind);
 
     /// <summary>The open container, opened on first use and shared from then on.</summary>
@@ -467,10 +364,6 @@ public sealed class BookSource : IDisposable
     /// <returns>
     /// The decoded text, or an empty string when the file does not begin like XML.
     /// </returns>
-    /// <remarks>
-    /// Gated on a leading angle bracket, after any UTF-8 BOM, so it costs nothing
-    /// for everything that is not XML.
-    /// </remarks>
     public string LeadingText(int maxBytes = 2048)
     {
         ReadOnlySpan<byte> head = Head;

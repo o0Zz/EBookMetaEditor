@@ -119,9 +119,7 @@ public static class MetadataFields
         return true;
     }
 
-    /// <summary>
-    /// Rebuilds the primary creators from a separated list of names.
-    /// </summary>
+    /// <summary>Rebuilds the primary creators from a separated list of names.</summary>
     private static bool ApplyCreators(BookMetadata metadata, string value)
     {
         string[] names = Split(value, ';');
@@ -225,9 +223,7 @@ public static class MetadataFields
         return true;
     }
 
-    /// <summary>
-    /// Reparses a date only when its text changed.
-    /// </summary>
+    /// <summary>Reparses a date only when its text changed.</summary>
     private static bool ApplyDate(BookMetadata metadata, string? raw)
     {
         if (string.Equals(metadata.PublicationDate?.Raw, raw, StringComparison.Ordinal))

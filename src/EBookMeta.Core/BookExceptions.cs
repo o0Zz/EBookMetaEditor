@@ -52,9 +52,7 @@ public class BookFormatException : Exception
     public string? Path { get; }
 }
 
-/// <summary>
-/// Thrown when a file is recognised but this build cannot edit it.
-/// </summary>
+/// <summary>Thrown when a file is recognised but this build cannot edit it.</summary>
 public class UnsupportedFormatException : BookFormatException
 {
     /// <summary>Initialises a new instance for a detected but unhandled format.</summary>
@@ -113,8 +111,6 @@ public class BookIoException : Exception
         Path = path;
     }
 
-    /// <summary>
-    /// The path the failed operation was attempted against, when known.
-    /// </summary>
+    /// <summary>The path the failed operation was attempted against, when known.</summary>
     public string? Path { get; }
 }

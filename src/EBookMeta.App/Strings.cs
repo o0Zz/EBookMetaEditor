@@ -1,11 +1,9 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Reflection;
 
 namespace EBookMeta.App;
 
-/// <summary>
-/// The interface language: every piece of text the windows show.
-/// </summary>
+/// <summary>The interface language: every piece of text the windows show.</summary>
 internal static class Strings
 {
     /// <summary>Matches the <c>LogicalName</c> the csproj target assigns.</summary>
@@ -13,9 +11,7 @@ internal static class Strings
 
     private const string Suffix = ".lang";
 
-    /// <summary>
-    /// The language every other one falls back to, key by key.
-    /// </summary>
+    /// <summary>The language every other one falls back to, key by key.</summary>
     private const string FallbackCode = "en";
 
     private static Dictionary<string, string> _english = Load(FallbackCode) ?? [];
@@ -24,9 +20,7 @@ internal static class Strings
     /// <summary>The language in use, as a two-letter code.</summary>
     internal static string Code { get; private set; } = FallbackCode;
 
-    /// <summary>
-    /// The languages this build carries, each named in itself.
-    /// </summary>
+    /// <summary>The languages this build carries, each named in itself.</summary>
     internal static IReadOnlyList<Language> Available
     {
         get
@@ -79,11 +73,8 @@ internal static class Strings
         Code = wanted;
         _current = table;
 
-        // UI culture only. CurrentCulture decides how numbers and dates parse and
-        // format, and this application parses metadata out of users' files — a
-        // series index or a publication date read back differently because the
-        // interface is in German would be a change to what gets written to disk.
-        // The language of the window must not reach the file.
+        // UI culture only. CurrentCulture governs how Core parses metadata, so a date
+        // read back differently because the window is in German would reach the file.
         Thread.CurrentThread.CurrentUICulture = ResolveCulture(wanted);
     }
 
@@ -131,9 +122,7 @@ internal static class Strings
     internal static string Plural(string key, int count, params object?[] args) =>
         Format(key + (count == 1 ? ".one" : ".many"), args);
 
-    /// <summary>
-    /// Reads one language file out of the exe.
-    /// </summary>
+    /// <summary>Reads one language file out of the exe.</summary>
     /// <returns>The table, or <see langword="null"/> if this build has no such language.</returns>
     private static Dictionary<string, string>? Load(string code)
     {

@@ -3,36 +3,13 @@ using Microsoft.CSharp;
 
 namespace EBookMeta.Tests.Builders;
 
-/// <summary>
-/// A stand-in for the external archiver a CBR save shells out to.
-/// </summary>
-/// <remarks>
-/// No build machine has a RAR archiver and none should need one, but the code that
-/// launches it is the riskiest part of the CBR write path — the working directory,
-/// the encoding of the list file, the exit code, the cleanup — and none of that is
-/// testable by reasoning about it.
-/// <para>
-/// So this compiles a tiny console program that parses the same command line and
-/// reads the same list file, and writes a manifest of what it was handed in place of
-/// an archive. What it proves is that <c>RarContainer</c> hands an archiver the right
-/// files under the right names in the right place, and reacts correctly to what it
-/// gets back. What it cannot prove is that a real <c>rar.exe</c> likes the switches;
-/// nothing without one can, and that is the one part of this build verified by hand.
-/// </para>
-/// <para>
-/// The compiler is the one in the framework this test targets, reached through
-/// <see cref="CSharpCodeProvider"/> rather than by path, so there is no guess about
-/// where it lives. A machine that can run these tests has it by definition.
-/// </para>
-/// </remarks>
+/// <summary>A stand-in for the external archiver a CBR save shells out to.</summary>
 internal static class StandInArchiver
 {
     private static readonly object Gate = new();
     private static string? _path;
 
-    /// <summary>
-    /// The stand-in, compiled on first use and reused after.
-    /// </summary>
+    /// <summary>The stand-in, compiled on first use and reused after.</summary>
     /// <param name="exitCode">
     /// What it should return. Non-zero also means it writes nothing, which is how a
     /// real archiver behaves when it gives up.

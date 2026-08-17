@@ -4,25 +4,9 @@ namespace EBookMeta.Tests.Builders;
 
 /// <summary>
 /// Assembles RAR 4 archives byte by byte, storing every file uncompressed.
+/// <b>Not a RAR writer, and must not become one</b> — only the header layout is
+/// implemented; compression is the part nothing in this build touches.
 /// </summary>
-/// <remarks>
-/// The corpus needs a real RAR to prove <c>RarContainer</c> reads one, and this
-/// build has no RAR writer to make it with — which is the whole reason CBR is
-/// read-only. So the fixtures are assembled here from the published RAR 4 block
-/// layout, the same way <see cref="RawTarBuilder"/> and <c>MobiBuilder</c> are
-/// assembled from theirs, and for the same reason: a fixture produced by the code
-/// under test cannot prove that code reads real files.
-/// <para>
-/// <b>This is not a RAR writer and must not become one.</b> Every file is stored
-/// with method <c>0x30</c>, which means the data is copied in verbatim and no
-/// compression happens at all — the part of RAR that is proprietary is never
-/// touched. What is implemented here is the header layout: a marker block, a main
-/// header, one header per file and an end block, with the CRCs each of them
-/// carries. Storing is fine for a fixture of three one-pixel PNGs and useless for
-/// a real comic, so there is nothing here to be tempted to promote into
-/// <c>EBookMeta.Core</c>.
-/// </para>
-/// </remarks>
 internal sealed class RarBuilder
 {
     private readonly List<Entry> _entries = [];
@@ -51,10 +35,8 @@ internal sealed class RarBuilder
     /// </summary>
     private const ushort FileIsDirectory = 0x00E0;
 
-    /// <summary>DOS attributes: the archive bit every file written on Windows carries.</summary>
+    /// <summary>DOS attributes: the archive bit, and the directory bit.</summary>
     private const uint ArchiveAttribute = 0x20;
-
-    /// <summary>DOS attributes: the directory bit.</summary>
     private const uint DirectoryAttribute = 0x10;
 
     /// <summary>Main header flag: the archive is solid.</summary>
@@ -85,16 +67,10 @@ internal sealed class RarBuilder
         WithFile(name, Encoding.UTF8.GetBytes(content));
 
     /// <summary>
-    /// Adds a directory entry — the folder marker every comic packed from an
-    /// extracted directory carries.
+    /// Adds a directory entry — the folder marker a comic packed from an extracted
+    /// directory carries. Marked in the header flags and DOS attributes, not by a
+    /// trailing separator, so nothing about the name distinguishes it from a page.
     /// </summary>
-    /// <remarks>
-    /// Not simply a file of no bytes. RAR marks a directory in the header flags and
-    /// the DOS attributes and, unlike ZIP, records no trailing separator, so nothing
-    /// about the name distinguishes it from a page. That is what makes it worth a
-    /// fixture: staging has nothing but <c>ContainerEntry.IsDirectory</c> to go on,
-    /// and a directory opened as a file is a save that fails on a real comic.
-    /// </remarks>
     internal RarBuilder WithDirectory(string name)
     {
         _entries.Add(new Entry(name, [], IsDirectory: true));
@@ -153,9 +129,7 @@ internal sealed class RarBuilder
         return output.ToArray();
     }
 
-    /// <summary>
-    /// The main header: thirteen bytes, two of them reserved and never used.
-    /// </summary>
+    /// <summary>The main header: thirteen bytes, two of them reserved and never used.</summary>
     private void WriteMainHeader(Stream output)
     {
         byte[] header = new byte[13];
@@ -231,15 +205,7 @@ internal sealed class RarBuilder
         output.Write(header, 0, header.Length);
     }
 
-    /// <summary>
-    /// Writes the block's own checksum, which covers everything after it.
-    /// </summary>
-    /// <remarks>
-    /// The low sixteen bits of a CRC-32 over the header from the type byte onwards,
-    /// so it is computed last and stored first. A header whose CRC is wrong is one
-    /// SharpCompress rejects, which makes this the part of the layout a fixture
-    /// cannot fudge.
-    /// </remarks>
+    /// <summary>Writes the block's own checksum, which covers everything after it.</summary>
     private static void StampHeaderCrc(byte[] header)
     {
         uint crc = Crc32(header, 2, header.Length - 2);
@@ -274,10 +240,6 @@ internal sealed class RarBuilder
     /// <summary>
     /// The ordinary CRC-32, which RAR uses for both its headers and its file data.
     /// </summary>
-    /// <remarks>
-    /// Written out here because <c>net48</c> has no CRC-32 in the box and the tests
-    /// are the only thing in this repository that needs one.
-    /// </remarks>
     private static uint Crc32(byte[] data, int offset, int length)
     {
         uint crc = 0xFFFFFFFF;

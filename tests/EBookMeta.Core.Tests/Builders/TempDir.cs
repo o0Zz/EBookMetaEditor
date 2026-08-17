@@ -1,8 +1,6 @@
 namespace EBookMeta.Tests.Builders;
 
-/// <summary>
-/// A scratch directory for one test, deleted afterwards.
-/// </summary>
+/// <summary>A scratch directory for one test, deleted afterwards.</summary>
 internal sealed class TempDir : IDisposable
 {
     internal TempDir()

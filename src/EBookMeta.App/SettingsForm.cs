@@ -1,8 +1,6 @@
 ﻿namespace EBookMeta.App;
 
-/// <summary>
-/// The settings dialog, reached from <b>File ▸ Settings</b>.
-/// </summary>
+/// <summary>The settings dialog, reached from <b>File ▸ Settings</b>.</summary>
 internal sealed class SettingsForm : Form
 {
     private readonly AppSettings _settings;
@@ -78,9 +76,7 @@ internal sealed class SettingsForm : Form
         Controls.Add(BuildButtons());
     }
 
-    /// <summary>
-    /// One column of controls, each sized to whatever its translation needs.
-    /// </summary>
+    /// <summary>One column of controls, each sized to whatever its translation needs.</summary>
     private TableLayoutPanel BuildLayout(Label extensionsLabel, Label registrationNote)
     {
         var layout = new TableLayoutPanel
@@ -143,9 +139,7 @@ internal sealed class SettingsForm : Form
         return buttons;
     }
 
-    /// <summary>
-    /// Offers every language embedded in the exe, plus following Windows.
-    /// </summary>
+    /// <summary>Offers every language embedded in the exe, plus following Windows.</summary>
     private void FillLanguages()
     {
         // Deliberately first and deliberately the default: the right answer for
@@ -217,10 +211,8 @@ internal sealed class SettingsForm : Form
         _settings.KeepBackupOnSave = _keepBackup.Checked;
         _settings.RegisteredExtensions = CheckedExtensions();
 
-        // Keep the registry in step with the tick boxes, but only where the verb
-        // is already in use — pressing OK should not silently register anything
-        // the user did not ask for with the button. This is also what re-labels
-        // the Explorer entry when the language changed.
+        // Only where the verb is already in use: OK must not silently register
+        // anything. Also what re-labels the Explorer entry after a language change.
         if (ShellRegistration.IsRegisteredForAny())
         {
             ShellRegistration.Apply(_settings.RegisteredExtensions);

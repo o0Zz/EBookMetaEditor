@@ -7,15 +7,7 @@ using System.Xml;
 
 namespace EBookMeta.Formats;
 
-/// <summary>
-/// Reads and writes EPUB 2 and EPUB 3 metadata.
-/// </summary>
-/// <remarks>
-/// One file, as the layout rule requires: detection, the OPF document, the
-/// corrections a write can prove, and the namespace repair an open performs. The
-/// second half of the class — <see cref="RepairNamespaces"/> and its scanner —
-/// is below <see cref="NamespaceRepairResult"/>.
-/// </remarks>
+/// <summary>Reads and writes EPUB 2 and EPUB 3 metadata.</summary>
 public sealed partial class EpubFormat : IBookFormat
 {
     /// <summary>The entry every EPUB must store first, uncompressed.</summary>
@@ -44,20 +36,6 @@ public sealed partial class EpubFormat : IBookFormat
     public IReadOnlyList<string> Extensions { get; } = [".epub"];
 
     /// <inheritdoc />
-    /// <remarks>
-    /// The <c>mimetype</c> entry is what identifies an EPUB, and its content is
-    /// checked rather than its name alone because a CBZ may contain a file called
-    /// <c>mimetype</c> too. Twenty stored bytes, from the container that is already
-    /// open.
-    /// <para>
-    /// An entry whose content is wrong, or which is compressed or not first, still
-    /// claims the file — at <see cref="MatchConfidence.Strong"/> rather than
-    /// certain. That is deliberate: those are exactly the defects EPUB-E040
-    /// describes and a save corrects, so declining here would refuse to open the
-    /// one kind of broken EPUB this tool repairs outright. Recognising a format is
-    /// not endorsing the file.
-    /// </para>
-    /// </remarks>
     public FormatClaim? TryOpen(BookSource source)
     {
         Throw.IfNull(source);
@@ -110,16 +88,9 @@ public sealed partial class EpubFormat : IBookFormat
         }
         catch (BookFormatException ex)
         {
-            // Recoverable damage is corrected here, on the way in, so every
-            // caller downstream gets a document that parses. Read shows the user
-            // correct metadata, Write serialises a correct tree, and the
-            // correction reaches the disk only when they save — there is no
-            // repair-specific write path, and therefore no way for a repair to
-            // rewrite a file on its own.
-            //
-            // Only a repair that fully succeeds is used. A partial fix would
-            // hand back a document that still does not parse, so the original
-            // error is the more useful answer.
+            // Corrected on the way in, so every caller downstream gets a document that
+            // parses; it reaches disk only on save. Only a complete repair is used — a
+            // partial fix still would not parse, so the original error is more useful.
             NamespaceRepairResult? repair = RepairNamespaces(bytes);
 
             if (repair is not { IsComplete: true, HasChanges: true })
@@ -153,13 +124,6 @@ public sealed partial class EpubFormat : IBookFormat
     /// <summary>
     /// Locates the package document and returns its bytes without parsing them.
     /// </summary>
-    /// <remarks>
-    /// The repair path needs this. <see cref="OpenPackageDocument"/> parses, and
-    /// therefore throws on exactly the documents a repair exists to fix — so the
-    /// bytes of a package document that will not parse are unreachable through
-    /// it. Resolving the rootfile only requires <c>container.xml</c>, which is a
-    /// separate document and usually intact.
-    /// </remarks>
     internal static (string EntryName, byte[] Bytes) ReadRawPackageDocument(IContainer container)
     {
         ContainerEntry entry = LocatePackageDocument(container);
@@ -209,10 +173,8 @@ public sealed partial class EpubFormat : IBookFormat
                 $"'{ContainerEntryName}' is not well-formed XML: {ex.Message}", ContainerEntryName, ex);
         }
 
-        // Matched namespace-agnostically. The container namespace is fixed by
-        // spec, but files that omit or misspell it are still readable and
-        // refusing them would help nobody. Only the first rootfile is ever
-        // edited — a multiple-rendition EPUB is opened through its default.
+        // Namespace-agnostic: the container namespace is fixed by spec, but files that
+        // omit it are still readable. Only the first rootfile is ever edited.
         string? opfPath = document
             .Descendants()
             .Where(e => e.Name.LocalName == "rootfile")
@@ -276,10 +238,8 @@ public sealed partial class EpubFormat : IBookFormat
         byte[]? coverBytes = ApplyCover(opf, metadata, out string? coverEntryName);
         byte[] opfBytes = opf.Serialize();
 
-        // Every entry is copied through byte for byte except the ones we mean to
-        // change. Content files, stylesheets and page images never go near a
-        // parser, and order and per-entry compression method are carried over,
-        // so an unedited save reproduces the original exactly.
+        // Hard invariant 3: every other entry is copied byte for byte, order and
+        // per-entry compression method carried over, so an unedited save is identical.
         var entries = new List<PendingEntry>(container.Entries.Count);
 
         foreach (ContainerEntry entry in container.Entries)
@@ -317,12 +277,6 @@ public sealed partial class EpubFormat : IBookFormat
     /// The new image bytes to substitute, or <see langword="null"/> when the
     /// cover image itself is unchanged.
     /// </returns>
-    /// <remarks>
-    /// Replacing the bytes of the existing entry rather than adding a new one
-    /// keeps the manifest, the spine and every href pointing where they already
-    /// pointed. Adding an entry would mean rewriting references, which is a much
-    /// larger change to a file the user only wanted a new cover on.
-    /// </remarks>
     private static byte[]? ApplyCover(OpfDocument opf, BookMetadata metadata, out string? coverEntryName)
     {
         coverEntryName = null;
@@ -335,10 +289,8 @@ public sealed partial class EpubFormat : IBookFormat
         string? manifestId = cover.SourceManifestId
             ?? opf.Manifest.FirstOrDefault(i => i.IsCoverImage)?.Id;
 
-        // Only rewrite the declarations if they do not already say what we are
-        // about to say. Otherwise opening an EPUB 3 and saving it unchanged
-        // would add the EPUB 2 <meta name="cover"> form, altering a file the
-        // user never edited.
+        // Only rewrite if they do not already say this: otherwise saving an unchanged
+        // EPUB 3 would add the EPUB 2 <meta name="cover"> form.
         if (manifestId is not null && !opf.CoverIsAlreadyDeclaredAs(manifestId))
         {
             opf.ApplyCoverDeclaration(manifestId);
@@ -349,7 +301,9 @@ public sealed partial class EpubFormat : IBookFormat
     }
 
     /// <summary>
-    /// Puts <c>mimetype</c> back where the specification requires it.
+    /// Puts <c>mimetype</c> back where the specification requires it: hard invariant 6
+    /// — first entry, stored, exactly <c>application/epub+zip</c> with no BOM or
+    /// trailing newline. Readers reject files that get this wrong.
     /// </summary>
     private static void RepairMimetype(List<PendingEntry> entries)
     {
@@ -389,32 +343,6 @@ public sealed partial class EpubFormat : IBookFormat
     /// Points <c>package/@unique-identifier</c> back at a <c>dc:identifier</c> that
     /// exists, when it names one that does not.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The attribute is a reference: it carries the <c>id</c> of the
-    /// <c>dc:identifier</c> that is the book's identity. Converters drop the target
-    /// or rename it and leave the reference behind, and the result reads as a book
-    /// with no identity at all. It is a silent failure with a long tail —
-    /// <see cref="RepairNcxIdentifier"/> resolves through this attribute and does
-    /// nothing when it dangles, so EPUB-W062 is disabled on exactly the files that
-    /// are already broken, and <see cref="BookMetadata.UniqueIdentifier"/> is null.
-    /// </para>
-    /// <para>
-    /// Provable only when the document holds exactly one <c>dc:identifier</c>: there
-    /// is then one candidate and no choice to make. With two or more, nothing in the
-    /// file says which one the package meant, so this returns and the file is left
-    /// as it is — the "provable, or merely likely?" line.
-    /// </para>
-    /// <para>
-    /// The reference is moved to the identifier, never the identifier's <c>id</c> to
-    /// the reference, because <c>unique-identifier</c> is pointed at by nothing while
-    /// an identifier's <c>id</c> may be the target of a <c>meta refines="#…"</c>.
-    /// Retargeting the attribute cannot break another reference; renaming the element
-    /// can. The one exception is an identifier carrying no <c>id</c>, where there is
-    /// no reference to break and the name the package already declares is the only
-    /// one available.
-    /// </para>
-    /// </remarks>
     private static void RepairUniqueIdentifier(OpfDocument opf)
     {
         if (opf.Package is not { } package || opf.Metadata is not { } metadata)
@@ -476,30 +404,6 @@ public sealed partial class EpubFormat : IBookFormat
     /// Puts the NCX's <c>dtb:uid</c> back in step with the package's unique
     /// identifier, which EPUB 2 requires to be the same string.
     /// </summary>
-    /// <remarks>
-    /// An EPUB 2 stores the book's identity twice — as the <c>dc:identifier</c> the
-    /// package points at, and again as <c>&lt;meta name="dtb:uid"&gt;</c> in the
-    /// NCX — and OPF 2.0.1 requires them to match. Converters leave them
-    /// disagreeing constantly; epubcheck 3.0.1 reported it and KDP still rejects it.
-    /// <para>
-    /// Which one is right is not a judgement call, which is what makes this a
-    /// correction rather than a report: the package document is authoritative on the
-    /// book's identity by specification, and <c>dtb:uid</c> is required to be a copy
-    /// of it. So the OPF value wins and the NCX is brought into line.
-    /// </para>
-    /// <para>
-    /// The edit is a splice at the offsets of the existing <c>content="…"</c>, not a
-    /// parse and re-emit. Every other byte of the NCX — every <c>navPoint</c>, every
-    /// line ending — is the original. That is hard invariant 16 applied to a
-    /// document this build does not otherwise model, and it is why the NCX is never
-    /// handed to <c>XDocument</c>.
-    /// </para>
-    /// <para>
-    /// EPUB 3 is skipped: the nav document supersedes the NCX and nothing requires
-    /// the two to agree, so rewriting a legacy NCX there would be changing a file
-    /// for no reason.
-    /// </para>
-    /// </remarks>
     private static void RepairNcxIdentifier(
         IContainer container, OpfDocument opf, List<PendingEntry> entries)
     {
@@ -609,9 +513,7 @@ public sealed partial class EpubFormat : IBookFormat
             ?.Value.Trim();
     }
 
-    /// <summary>
-    /// Resolves the cover image through both declaration conventions.
-    /// </summary>
+    /// <summary>Resolves the cover image through both declaration conventions.</summary>
     private static void ReadCover(IContainer container, OpfDocument opf, BookMetadata metadata)
     {
         ManifestItem? item = opf.Manifest.FirstOrDefault(i => i.IsCoverImage);
@@ -658,13 +560,6 @@ public sealed partial class EpubFormat : IBookFormat
     /// <summary>
     /// Resolves a manifest href against the package document's own directory.
     /// </summary>
-    /// <remarks>
-    /// Hrefs are URL-encoded, so a file called <c>my cover.jpg</c> appears as
-    /// <c>my%20cover.jpg</c> and will not match any entry name until decoded.
-    /// Traversal is not resolved here: an href containing <c>..</c> is left as
-    /// found, so it simply matches no entry rather than the reader silently
-    /// following it out of the archive. GEN-E003 reports entry names that do it.
-    /// </remarks>
     internal static string ResolveHref(string opfEntryName, string href)
     {
         string decoded = Uri.UnescapeDataString(href);
@@ -695,10 +590,8 @@ public sealed partial class EpubFormat : IBookFormat
             }
         }
 
-        // ZIP entry names are case-sensitive, but Windows-authored archives are
-        // frequently inconsistent about it. Accept a case-insensitive match on
-        // the second pass so a book still opens; the mismatch is reported
-        // separately rather than being made fatal here.
+        // ZIP names are case-sensitive but Windows-authored archives are inconsistent,
+        // so a second pass matches case-insensitively and reports rather than refuses.
         foreach (ContainerEntry entry in container.Entries)
         {
             if (entry.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
@@ -725,9 +618,7 @@ public sealed partial class EpubFormat : IBookFormat
     }
 }
 
-/// <summary>
-/// What repairing a package document's namespace declarations would produce.
-/// </summary>
+/// <summary>What repairing a package document's namespace declarations would produce.</summary>
 internal sealed record NamespaceRepairResult
 {
     /// <summary>The document's bytes with the missing declarations added.</summary>
@@ -741,9 +632,7 @@ internal sealed record NamespaceRepairResult
     /// <summary>Prefixes that were declared, in first-use order.</summary>
     public required IReadOnlyList<string> Added { get; init; }
 
-    /// <summary>
-    /// Prefixes left alone because no specification says what they mean.
-    /// </summary>
+    /// <summary>Prefixes left alone because no specification says what they mean.</summary>
     public IReadOnlyList<string> Skipped { get; init; } = [];
 
     /// <summary>
@@ -760,28 +649,13 @@ internal sealed record NamespaceRepairResult
 /// The one repair an EPUB read performs: supplying namespace declarations the
 /// package document uses but never declares (EPUB-W070).
 /// </summary>
-/// <remarks>
-/// It lives in this file rather than at the Core root because every prefix it
-/// knows how to bind is an EPUB prefix and the rule it answers is an
-/// <c>EPUB-</c> rule — a general-purpose XML repair is what it looks like, not
-/// what it is.
-/// <para>
-/// The repair is an insertion into the original text, never a reserialisation.
-/// Parsing permissively and re-emitting through a strict writer would fix the
-/// document and rewrite every line of it doing so, which is invariant 16.
-/// </para>
-/// </remarks>
 public sealed partial class EpubFormat
 {
     /// <summary>
-    /// Namespace URIs a missing declaration can be recovered from, by prefix.
+    /// Namespace URIs a missing declaration can be recovered from, by prefix. Hard
+    /// invariant 16: a prefix absent from this list is reported, <b>never bound</b> —
+    /// inventing a URI would fabricate metadata that was never in the file.
     /// </summary>
-    /// <remarks>
-    /// Every entry is fixed by a published specification. A prefix absent from
-    /// here is reported and never bound: inventing a plausible URI would fabricate
-    /// metadata that was never in the file, and the user would have no reason to
-    /// doubt it.
-    /// </remarks>
     private static readonly Dictionary<string, string> KnownNamespaces = new(StringComparer.Ordinal)
     {
         ["opf"] = "http://www.idpf.org/2007/opf",
@@ -803,9 +677,7 @@ public sealed partial class EpubFormat
     internal static bool IsKnownNamespacePrefix(string prefix) =>
         prefix is not null && KnownNamespaces.ContainsKey(prefix);
 
-    /// <summary>
-    /// Repairs a package document's missing namespace declarations.
-    /// </summary>
+    /// <summary>Repairs a package document's missing namespace declarations.</summary>
     /// <param name="bytes">The document's bytes.</param>
     /// <returns>
     /// The result, or <see langword="null"/> when every prefix the document uses
@@ -925,12 +797,10 @@ public sealed partial class EpubFormat
 
                 if (rootNameEnd < 0)
                 {
-                    // Immediately after the root element's name is always a
-                    // legal place for an attribute, and the reader has already
-                    // walked past the declaration, any comments and a doctype
-                    // internal subset to get here — so asking it where the root
-                    // is costs nothing and replaces a prolog scanner that had
-                    // to know about all three.
+                    // Just after the root element's name is always a legal place for an
+                    // attribute, and the reader has already walked past the declaration,
+                    // comments and any doctype subset — so this replaces a prolog
+                    // scanner that would have to know about all three.
                     rootNameEnd = XmlLineIndex.Offset(lineStarts, reader) + reader.Name.Length;
                 }
 
@@ -1127,10 +997,8 @@ internal sealed partial class OpfDocument
                 $"'{entryName}' is not well-formed XML: {ex.Message}", entryName, ex);
         }
 
-        // The declaration, the whitespace around the root, the empty-element
-        // style and the line ending are all captured here rather than left to
-        // the serialiser, because none of them survives in the parsed tree and
-        // each would otherwise turn a one-field edit into a whole-file diff.
+        // None of these survive in the parsed tree, and each would otherwise turn a
+        // one-field edit into a whole-file diff.
         return new OpfDocument(document, XmlSourceFormat.Detect(text, encoding), entryName);
     }
 
@@ -1159,14 +1027,7 @@ internal sealed partial class OpfDocument
             })];
     }
 
-    /// <summary>
-    /// The EPUB 3 refinements, keyed by the id of what they refine.
-    /// </summary>
-    /// <remarks>
-    /// Built on demand rather than cached: it is wanted twice per document at
-    /// most, once by a read and once by the read a write does to decide what
-    /// changed.
-    /// </remarks>
+    /// <summary>The EPUB 3 refinements, keyed by the id of what they refine.</summary>
     private ILookup<string, MetaRefinement> ReadRefinements()
     {
         if (Metadata is null)
@@ -1189,9 +1050,7 @@ internal sealed partial class OpfDocument
             .ToLookup(r => r.Refines, StringComparer.Ordinal);
     }
 
-    /// <summary>
-    /// Reads the metadata, honouring both EPUB 2 and EPUB 3 conventions.
-    /// </summary>
+    /// <summary>Reads the metadata, honouring both EPUB 2 and EPUB 3 conventions.</summary>
     /// <returns>The metadata found.</returns>
     public BookMetadata ReadMetadata()
     {
@@ -1394,9 +1253,7 @@ internal sealed partial class OpfDocument
             : new SeriesInfo { Name = name, RawIndex = index };
     }
 
-    /// <summary>
-    /// Records <c>&lt;meta&gt;</c> elements that map onto no model field.
-    /// </summary>
+    /// <summary>Records <c>&lt;meta&gt;</c> elements that map onto no model field.</summary>
     private void ReadUnmappedMeta(BookMetadata metadata)
     {
         if (Metadata is null)
@@ -1460,9 +1317,7 @@ internal sealed partial class OpfDocument
 /// </summary>
 internal sealed partial class OpfDocument
 {
-    /// <summary>
-    /// Serialises the document back to bytes.
-    /// </summary>
+    /// <summary>Serialises the document back to bytes.</summary>
     /// <returns>The complete package document.</returns>
     public byte[] Serialize() => Format.Compose(Document.Root);
 
@@ -1478,17 +1333,10 @@ internal sealed partial class OpfDocument
         XElement metadataElement = Metadata
             ?? throw new BookFormatException("The package has no metadata element.", EntryName);
 
-        // Compare against the document as it currently stands and touch only
-        // what actually differs.
-        //
-        // This is what reconciles two invariants that would otherwise conflict:
-        // "always write both EPUB 2 and EPUB 3 conventions" and "saving without
-        // editing yields identical bytes". A file carrying only the EPUB 3 form
-        // would otherwise gain EPUB 2 attributes merely by being opened and
-        // saved, which is a change the user did not ask for. So dual-convention
-        // output applies to fields the user changed; a field left alone is left
-        // alone, single-convention or not. Rewriting one into both forms is not
-        // a correction — nothing in the file says the user wanted it.
+        // Touch only what differs. This reconciles "write both EPUB 2 and 3
+        // conventions" (invariant 7) with "an unedited save is byte-identical"
+        // (invariant 5): dual output applies to fields the user changed, and a field
+        // left alone stays single-convention.
         BookMetadata current = ReadMetadata();
 
         ApplyTitle(metadataElement, current, metadata);
@@ -1517,11 +1365,8 @@ internal sealed partial class OpfDocument
                 return;
             }
 
-            // Removed rather than ignored. A cleared field that quietly keeps its
-            // old value is the worst of the three options: the user is told nothing
-            // and the editor then disagrees with the file. The warning is the whole
-            // response — inventing a replacement title is exactly what this build
-            // does not do.
+            // Removed, not ignored: a cleared field that keeps its old value leaves the
+            // editor disagreeing with the file. Inventing a replacement is not done.
             Log.Warning(
                 $"The title was cleared, so '{EntryName}' no longer has a dc:title. "
                 + "EPUB requires one, and readers will show the file name instead.");
@@ -1571,10 +1416,6 @@ internal sealed partial class OpfDocument
     /// <returns>
     /// <see langword="true"/> when writing the declaration would change nothing.
     /// </returns>
-    /// <remarks>
-    /// Lets a save skip touching the cover declarations entirely when they are
-    /// already correct, which is what keeps an unedited save byte-identical.
-    /// </remarks>
     public bool CoverIsAlreadyDeclaredAs(string manifestItemId)
     {
         Throw.IfNullOrEmpty(manifestItemId);
@@ -1594,9 +1435,7 @@ internal sealed partial class OpfDocument
         return epub3 || epub2;
     }
 
-    /// <summary>
-    /// Declares a manifest item as the cover in both conventions.
-    /// </summary>
+    /// <summary>Declares a manifest item as the cover in both conventions.</summary>
     /// <param name="manifestItemId">The manifest <c>id</c> of the cover image.</param>
     public void ApplyCoverDeclaration(string manifestItemId)
     {

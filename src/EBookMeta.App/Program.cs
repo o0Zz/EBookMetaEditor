@@ -67,9 +67,7 @@ internal static class Program
         Log.Info("Closing.");
     }
 
-    /// <summary>
-    /// Chooses the window this launch wants.
-    /// </summary>
+    /// <summary>Chooses the window this launch wants.</summary>
     /// <param name="settings">The loaded user settings.</param>
     /// <param name="paths">The paths from the command line.</param>
     /// <returns>The window to run.</returns>

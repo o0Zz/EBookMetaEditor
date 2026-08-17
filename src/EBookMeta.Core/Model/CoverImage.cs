@@ -1,16 +1,12 @@
 namespace EBookMeta.Model;
 
-/// <summary>
-/// The cover image, as raw bytes plus its media type.
-/// </summary>
+/// <summary>The cover image, as raw bytes plus its media type.</summary>
 public sealed record CoverImage
 {
     /// <summary>The image bytes, exactly as stored in the source.</summary>
     public required byte[] Data { get; init; }
 
-    /// <summary>
-    /// The IANA media type, such as <c>image/jpeg</c> or <c>image/png</c>.
-    /// </summary>
+    /// <summary>The IANA media type, such as <c>image/jpeg</c> or <c>image/png</c>.</summary>
     public required string MediaType { get; init; }
 
     /// <summary>

@@ -3,9 +3,7 @@ using EBookMeta.Containers;
 
 namespace EBookMeta.Tests.Builders;
 
-/// <summary>
-/// Generates synthetic EPUB files for the corpus.
-/// </summary>
+/// <summary>Generates synthetic EPUB files for the corpus.</summary>
 internal sealed class EpubBuilder
 {
     private readonly List<Entry> _extraEntries = [];

@@ -2,9 +2,7 @@ using System.Reflection;
 
 namespace EBookMeta.App;
 
-/// <summary>
-/// The About box: what this is, what version, and what it can open.
-/// </summary>
+/// <summary>The About box: what this is, what version, and what it can open.</summary>
 internal sealed class AboutForm : Form
 {
     /// <summary>Creates the About box.</summary>

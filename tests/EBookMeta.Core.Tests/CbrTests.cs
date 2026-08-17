@@ -10,13 +10,6 @@ namespace EBookMeta.Tests;
 /// <summary>
 /// CBR: the comic metadata document this build already understands, in a RAR.
 /// </summary>
-/// <remarks>
-/// The one format that reads and does not write, so these tests come in two halves.
-/// The reading half is the same suite CBZ and CBT get, because the metadata document
-/// does not care what it arrived in. The writing half asserts the refusal — that a
-/// save is attempted the ordinary way, is turned down by the container rather than
-/// by the format, and leaves the user's file exactly as it found it.
-/// </remarks>
 public sealed class CbrTests : IDisposable
 {
     /// <summary>Cleared per test so a rule assertion sees only this test's entries.</summary>
@@ -27,11 +20,6 @@ public sealed class CbrTests : IDisposable
     }
 
     /// <inheritdoc />
-    /// <remarks>
-    /// <see cref="RarContainer.Locator"/> is process-wide, so a test that points it at
-    /// an archiver has to put it back or the next one inherits it. Reset at both ends
-    /// rather than only at the start, so a test that throws does not leave it set.
-    /// </remarks>
     public void Dispose()
     {
         Log.Clear();
@@ -39,12 +27,9 @@ public sealed class CbrTests : IDisposable
     }
 
     /// <summary>
-    /// Says "this machine has no archiver" and means it.
+    /// Says "this machine has no archiver" and means it — otherwise every refusal test
+    /// would fail on a machine that has WinRAR installed.
     /// </summary>
-    /// <remarks>
-    /// Without this every refusal test would pass on a build machine and fail on a
-    /// developer's, purely because one of them has WinRAR installed.
-    /// </remarks>
     private static void NoArchiver() => RarContainer.Locator = () => null;
 
     /// <summary>Points the container at the stand-in archiver.</summary>
@@ -122,12 +107,6 @@ public sealed class CbrTests : IDisposable
     /// RAR records a Windows path with backslashes, and everything above the
     /// container is written against forward slashes.
     /// </summary>
-    /// <remarks>
-    /// Not cosmetic: <c>CbzFormat</c> decides whether the metadata document is
-    /// nested by looking for a slash in the name, so a name left as
-    /// <c>sub\ComicInfo.xml</c> would read as a root entry and CBZ-E011 would never
-    /// notice it.
-    /// </remarks>
     [Fact]
     public void A_windows_path_is_normalised_to_forward_slashes()
     {
@@ -190,11 +169,6 @@ public sealed class CbrTests : IDisposable
     /// <summary>
     /// The case that used to be a refusal: a RAR wearing a <c>.cbz</c> extension.
     /// </summary>
-    /// <remarks>
-    /// It is still reported as GEN-W002, because the extension still disagrees with
-    /// the content and that is worth saying. What changed is that saying so is no
-    /// longer all this build can do — the file opens and its metadata is readable.
-    /// </remarks>
     [Fact]
     public void A_rar_named_cbz_opens_and_is_still_reported()
     {
@@ -224,16 +198,7 @@ public sealed class CbrTests : IDisposable
 
     // ---- writing -----------------------------------------------------------
 
-    /// <summary>
-    /// The container says what it cannot do; the format does not.
-    /// </summary>
-    /// <remarks>
-    /// <c>ComicInfo.xml</c> can hold a title whatever archive it sits in, so the
-    /// capabilities of a CBR are the capabilities of a CBZ and the editor lets the
-    /// user type. Only the last step differs. Declaring a CBR unwritable instead
-    /// would grey out every field in both editors and turn a refusal that happens
-    /// once, at save, into a permanent read-only mode.
-    /// </remarks>
+    /// <summary>The container says what it cannot do; the format does not.</summary>
     [Fact]
     public void The_format_can_write_even_though_the_container_may_not()
     {
@@ -250,11 +215,6 @@ public sealed class CbrTests : IDisposable
     /// The container is writable exactly when the host has given it an archiver,
     /// and no further than that.
     /// </summary>
-    /// <remarks>
-    /// Nothing here checks that the path exists or that what is there works. That
-    /// question is answered by trying it, once, when a save happens — which is why
-    /// a nonsense path still reports writable.
-    /// </remarks>
     [Fact]
     public void Writability_follows_whether_an_archiver_was_found()
     {
@@ -315,14 +275,6 @@ public sealed class CbrTests : IDisposable
     /// Everything that can go wrong with running someone else's program comes out
     /// as one answer: the save failed.
     /// </summary>
-    /// <remarks>
-    /// The path is not there in the first case and is not a program in the second,
-    /// and neither is diagnosed. There is no probe for the file, no version check
-    /// and no message per cause, because the user can do exactly one thing about
-    /// any of them. What matters is what these assert instead: the same exception
-    /// every other format throws when a write fails, the original untouched, and no
-    /// staging directory left behind.
-    /// </remarks>
     [Theory]
     [InlineData("missing")]
     [InlineData("not-a-program")]
@@ -357,12 +309,6 @@ public sealed class CbrTests : IDisposable
     /// An archiver that runs and returns a failure is the same answer as one that
     /// never ran.
     /// </summary>
-    /// <remarks>
-    /// <c>where.exe</c> stands in because it is on every Windows machine, exits
-    /// immediately and cannot possibly succeed at the arguments it is handed. If a
-    /// machine somehow lacks it the test still holds — it becomes the
-    /// could-not-start case, which is the same generic failure by design.
-    /// </remarks>
     [Fact]
     public void An_archiver_that_reports_failure_fails_the_save()
     {
@@ -381,9 +327,7 @@ public sealed class CbrTests : IDisposable
         Assert.False(Directory.Exists(target + ".stage"));
     }
 
-    /// <summary>
-    /// The switches handed to the archiver, asserted without one installed.
-    /// </summary>
+    /// <summary>The switches handed to the archiver, asserted without one installed.</summary>
     [Theory]
     [InlineData(true, "-m0")]
     [InlineData(false, "-m3")]
@@ -401,16 +345,9 @@ public sealed class CbrTests : IDisposable
     }
 
     /// <summary>
-    /// The whole save, through an archiver, with the user's file swapped in at the
-    /// end.
+    /// The whole save. The stand-in writes a manifest of what it was handed instead of
+    /// compressing, so that manifest is the assertion.
     /// </summary>
-    /// <remarks>
-    /// The stand-in records what it was handed instead of compressing it, so the
-    /// manifest it leaves behind is the assertion: every entry present, under its
-    /// own relative name, in reading order, in the directory the archiver was
-    /// started in. That is the contract between <c>RarContainer</c> and whatever
-    /// the user configured — the compression itself is the archiver's business.
-    /// </remarks>
     [Fact]
     public void A_save_hands_every_entry_to_the_archiver_and_replaces_the_file()
     {
@@ -448,23 +385,14 @@ public sealed class CbrTests : IDisposable
     }
 
     /// <summary>
-    /// The same save on a comic whose pages sit in a folder, which is how comics in
-    /// the wild are packed.
+    /// A comic whose pages sit in a folder, which is how they are packed in the wild.
+    /// The folder marker must not reach the archiver as a file.
     /// </summary>
-    /// <remarks>
-    /// The end-to-end form of the regression: the folder marker must not reach the
-    /// archiver as a file, and the pages must still arrive under their own nested
-    /// names. Worth having beside the staging unit test because this is the path a
-    /// real save takes — <c>Book.Load</c>, <c>CbzFormat.Write</c> composing a pending
-    /// list that includes the marker, then <c>Rebuild</c>.
-    /// </remarks>
     [Fact]
     public void A_save_of_a_comic_whose_pages_sit_in_a_folder_skips_the_folder_marker()
     {
         using var temp = new TempDir();
 
-        // No ComicInfo.xml, so the save also adds one — CBZ-W010, which is what the
-        // failing file did.
         string path = new RarBuilder()
             .WithFile(@"My Comic T06\01.png", PngBuilder.OnePixel)
             .WithFile(@"My Comic T06\02.png", PngBuilder.OnePixel)
@@ -485,8 +413,7 @@ public sealed class CbrTests : IDisposable
 
         Assert.Contains(manifest, line => line.StartsWith("ComicInfo.xml=", StringComparison.Ordinal));
 
-        // Two pages and the document. The folder marker was staged as a directory and
-        // never listed, so the archiver was handed no fourth entry.
+        // Two pages and the document; no fourth entry for the folder marker.
         Assert.Equal(3, manifest.Length);
         Assert.DoesNotContain(manifest, line => line.Contains("MISSING"));
 
@@ -494,10 +421,7 @@ public sealed class CbrTests : IDisposable
         Assert.False(File.Exists(path + ".tmp"));
     }
 
-    /// <summary>
-    /// The container reports the folder marker, so the fixture is the shape the fix
-    /// is about rather than an archive SharpCompress silently flattened.
-    /// </summary>
+    /// <summary>The container reports the folder marker rather than flattening it.</summary>
     [Fact]
     public void A_directory_entry_is_reported_as_one()
     {
@@ -512,8 +436,7 @@ public sealed class CbrTests : IDisposable
 
         ContainerEntry folder = container.Entries.Single(e => e.IsDirectory);
 
-        // Normalised like any other name, and carrying no trailing separator — which
-        // is precisely why staging cannot recognise it from the name alone.
+        // No trailing separator, which is why staging cannot spot it from the name.
         Assert.Equal("My Comic T06", folder.Name);
         Assert.Equal(2, container.Entries.Count);
     }
@@ -551,14 +474,9 @@ public sealed class CbrTests : IDisposable
     // ---- finding an archiver ------------------------------------------------
 
     /// <summary>
-    /// The per-directory probe both halves of the search are built on.
+    /// The per-directory probe both halves of the search are built on. The registry and
+    /// <c>PATH</c> themselves are not testable — they answer from the machine.
     /// </summary>
-    /// <remarks>
-    /// This is the testable part. Neither the registry nor <c>PATH</c> can be, because
-    /// both answer from whatever the machine happens to have — and what they would prove
-    /// beyond this is that <c>Rar.exe</c> in a directory is the answer and nothing else
-    /// is.
-    /// </remarks>
     [Fact]
     public void A_directory_holding_the_archiver_is_the_answer()
     {
@@ -576,10 +494,7 @@ public sealed class CbrTests : IDisposable
         Assert.Equal(archiver, RarContainer.ArchiverIn($"\"{holding}\""));
     }
 
-    /// <summary>
-    /// A search path is a list a machine has collected over years, and walking it must
-    /// not be the thing that throws.
-    /// </summary>
+    /// <summary>Walking a junk-filled search path must not be the thing that throws.</summary>
     [Theory]
     [InlineData(null)]
     [InlineData("")]
@@ -592,13 +507,9 @@ public sealed class CbrTests : IDisposable
     }
 
     /// <summary>
-    /// The real search reaches the registry and <c>PATH</c> without throwing, whatever
-    /// this machine has.
+    /// The real search does not throw, whatever this machine has. Asserts nothing about
+    /// the answer: a locked-down registry must yield null, not an exception.
     /// </summary>
-    /// <remarks>
-    /// Asserts nothing about the answer — it is whatever is installed. What is under test
-    /// is that a locked-down or redirected registry yields null rather than an exception.
-    /// </remarks>
     [Fact]
     public void The_real_search_does_not_throw()
     {
@@ -634,15 +545,7 @@ public sealed class CbrTests : IDisposable
         Assert.Equal("<ComicInfo />", File.ReadAllText(Path.Combine(staging, "ComicInfo.xml")));
     }
 
-    /// <summary>
-    /// Hard invariant 4, at the one point where it stops being advisory.
-    /// </summary>
-    /// <remarks>
-    /// <c>Book.Load</c> only reports an escaping name, as <c>GEN-E003</c>, because
-    /// reading resolves nothing against the file system. Staging does, so here the
-    /// same name is refused — and refused before a single byte is written, so a
-    /// malicious archive cannot drop half its payload before being stopped.
-    /// </remarks>
+    /// <summary>Hard invariant 4, at the one point where it stops being advisory.</summary>
     [Theory]
     [InlineData("../escaped.png")]
     [InlineData(@"..\escaped.png")]
@@ -668,14 +571,8 @@ public sealed class CbrTests : IDisposable
 
     /// <summary>
     /// A directory entry is staged as a directory and never handed to the archiver.
+    /// The shape that broke a real save: pages nested under a marker for their folder.
     /// </summary>
-    /// <remarks>
-    /// The shape that broke a real save: a 196-entry comic packed from an extracted
-    /// folder, 195 pages nested under a marker for the folder itself. RAR records that
-    /// marker with no trailing separator, so it reaches staging looking exactly like a
-    /// page, and writing it as a file failed on the directory its own pages had already
-    /// created — reported as nothing more than "could not write".
-    /// </remarks>
     [Fact]
     public void Staging_makes_a_directory_of_a_directory_entry_and_does_not_list_it()
     {
@@ -694,12 +591,10 @@ public sealed class CbrTests : IDisposable
             [
                 PendingEntry.FromBytes("comic/01.png", PngBuilder.OnePixel),
 
-                // After its own pages, which is where RAR puts it, so the directory
-                // already exists by the time the marker is reached.
+                // After its own pages, which is where RAR puts it.
                 PendingEntry.Replacing(folder, []),
 
-                // The ZIP spelling of the same thing, which carries a trailing
-                // separator and no source entry to ask.
+                // The ZIP spelling: a trailing separator and no source entry to ask.
                 PendingEntry.FromBytes("extra/", []),
             ],
             staging);
@@ -710,13 +605,7 @@ public sealed class CbrTests : IDisposable
         Assert.True(File.Exists(Path.Combine(staging, "comic", "01.png")));
     }
 
-    /// <summary>
-    /// An archive may legally repeat a name; a directory may not.
-    /// </summary>
-    /// <remarks>
-    /// On disk the second copy would overwrite the first and a page would quietly
-    /// vanish from the saved comic. Refused rather than reproduced approximately.
-    /// </remarks>
+    /// <summary>An archive may legally repeat a name; a directory may not.</summary>
     [Fact]
     public void Staging_refuses_a_name_that_appears_twice()
     {

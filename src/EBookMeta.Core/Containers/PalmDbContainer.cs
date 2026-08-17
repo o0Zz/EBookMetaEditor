@@ -3,24 +3,7 @@ using System.Text;
 
 namespace EBookMeta.Containers;
 
-/// <summary>
-/// A PalmDB database — the record container behind MOBI, PRC, AZW and AZW3.
-/// </summary>
-/// <remarks>
-/// PalmDB is a list of numbered records, not named entries, so the names here are
-/// synthesised as <c>record0</c>, <c>record1</c> and so on. That is a small lie in
-/// service of a real gain: the format layer, <c>Book</c>, <c>AtomicFileWriter</c>
-/// and the batch grid all keep working unchanged, and the alternative was a second
-/// way to replace a user's file.
-/// <para>
-/// The file header and the record table are retained and re-emitted, so everything
-/// this build has no opinion about — the database name, the creation dates, the
-/// unique-ID seed, each record's attribute byte and unique id — survives a save.
-/// What a rebuild recomputes is the record offsets, and only because it has to:
-/// resizing record 0 moves every record after it, and the table is the only place
-/// that says where they are.
-/// </para>
-/// </remarks>
+/// <summary>A PalmDB database — the record container behind MOBI, PRC, AZW and AZW3.</summary>
 public sealed class PalmDbContainer : IContainer
 {
     /// <summary>Bytes of fixed header before the record table.</summary>
@@ -40,9 +23,7 @@ public sealed class PalmDbContainer : IContainer
     private readonly RecordInfo[] _records;
     private bool _disposed;
 
-    /// <summary>
-    /// What the record table says about a record, other than where it is.
-    /// </summary>
+    /// <summary>What the record table says about a record, other than where it is.</summary>
     /// <param name="Attributes">The attribute byte, meaningless here but the user's.</param>
     /// <param name="UniqueId">The record's 24-bit unique id.</param>
     private readonly record struct RecordInfo(byte Attributes, int UniqueId);
@@ -75,7 +56,6 @@ public sealed class PalmDbContainer : IContainer
     public string? Path { get; }
 
     /// <inheritdoc />
-    /// <remarks>Always <see langword="null"/>: PalmDB has no archive-level comment.</remarks>
     public string? ArchiveComment => null;
 
     /// <summary>Opens a PalmDB file.</summary>

@@ -6,17 +6,9 @@ namespace EBookMeta.Xml;
 /// Turns the line and column an XML reader reports into an index into the text
 /// it was reading.
 /// </summary>
-/// <remarks>
-/// Both formats that splice edits into original text need this: FB2 to find
-/// where <c>&lt;description&gt;</c> starts and ends, EPUB to find where the root
-/// element's name ends. A reader gives positions and an edit needs offsets, and
-/// nothing in the framework converts between them.
-/// </remarks>
 internal static class XmlLineIndex
 {
-    /// <summary>
-    /// Indexes where each line of <paramref name="text"/> begins.
-    /// </summary>
+    /// <summary>Indexes where each line of <paramref name="text"/> begins.</summary>
     /// <param name="text">The text a reader is about to be run over.</param>
     /// <returns>The offset of the first character of each line, in order.</returns>
     public static int[] Starts(string text)
@@ -44,9 +36,7 @@ internal static class XmlLineIndex
         return [.. starts];
     }
 
-    /// <summary>
-    /// Converts a reader's current position into an offset into the text.
-    /// </summary>
+    /// <summary>Converts a reader's current position into an offset into the text.</summary>
     /// <param name="lineStarts">The index from <see cref="Starts"/>.</param>
     /// <param name="info">The reader, positioned on the node of interest.</param>
     /// <returns>The offset of that node's first character.</returns>

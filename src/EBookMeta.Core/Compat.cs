@@ -1,18 +1,7 @@
-// Everything .NET Framework 4.8 is missing, in one file.
-//
-// This is not architecture; it is a shim layer, and it is deliberately the only
-// place that has to exist because of the target framework. Nothing else in Core
-// should ever need to know that net48 is older than the language it is written
-// in.
-//
-// It is mandatory, not decorative. Delete the attribute polyfills below and the
-// project stops compiling with 344 errors, because `record`, `init` and
-// `required` are compiler features that look their support types up by name and
-// net48 does not ship them.
-//
-// A future retarget to modern .NET deletes this whole file: the BCL gains real
-// implementations of every member here, instance methods beat extension methods
-// in overload resolution, and no call site changes.
+// Everything .NET Framework 4.8 is missing, in one file. Mandatory, not decorative:
+// delete the attribute polyfills below and the project stops compiling, because
+// `record`, `init` and `required` look their support types up by name. A retarget to
+// modern .NET deletes this whole file with no call site changing.
 
 using System.Text;
 
@@ -71,21 +60,13 @@ namespace EBookMeta.Compat
         }
     }
 
-    /// <summary>
-    /// Stand-ins for BCL methods added after .NET Framework 4.8.
-    /// </summary>
+    /// <summary>Stand-ins for BCL methods added after .NET Framework 4.8.</summary>
     internal static class BclShims
     {
         /// <summary>Reads exactly <paramref name="buffer"/>.Length bytes, or throws.</summary>
         /// <param name="stream">The stream to read.</param>
         /// <param name="buffer">The buffer to fill.</param>
         /// <exception cref="EndOfStreamException">The stream ended early.</exception>
-        /// <remarks>
-        /// A plain <c>Read</c> is permitted to return fewer bytes than asked for
-        /// and routinely does on a compressed or buffered stream. Every structural
-        /// parse here depends on getting the whole record, so the loop is not
-        /// optional.
-        /// </remarks>
         internal static void ReadExactly(this Stream stream, byte[] buffer)
         {
             int total = 0;
@@ -135,12 +116,6 @@ namespace EBookMeta.Compat
         /// <param name="encoding">The encoding to decode with.</param>
         /// <param name="bytes">The bytes to decode.</param>
         /// <returns>The decoded string.</returns>
-        /// <remarks>
-        /// <c>Encoding.GetString(ReadOnlySpan&lt;byte&gt;)</c> arrived in .NET Core
-        /// 2.1 and is not in the <c>System.Memory</c> package, so the span is
-        /// copied to an array first. The inputs are metadata documents and ZIP
-        /// directories, not book content, so the copy does not matter.
-        /// </remarks>
         internal static string GetString(this Encoding encoding, ReadOnlySpan<byte> bytes) =>
             bytes.IsEmpty ? string.Empty : encoding.GetString(bytes.ToArray());
 
@@ -175,15 +150,7 @@ namespace EBookMeta.Compat
             value.Split(new[] { separator }, options);
     }
 
-    /// <summary>
-    /// Encodings that modern .NET exposes as static properties.
-    /// </summary>
-    /// <remarks>
-    /// Unlike .NET Core, .NET Framework has every legacy code page available
-    /// without registering an encoding provider — which is why
-    /// <c>System.Text.Encoding.CodePages</c> is not a dependency and why a
-    /// Windows-1252 EPUB can actually be decoded rather than merely reported.
-    /// </remarks>
+    /// <summary>Encodings that modern .NET exposes as static properties.</summary>
     internal static class Encodings
     {
         /// <summary>ISO-8859-1. Maps every byte to a character, so it never throws.</summary>
@@ -191,12 +158,8 @@ namespace EBookMeta.Compat
     }
 }
 
-// ---------------------------------------------------------------------------
-// Compiler-recognised types net48 does not ship. The compiler looks these up by
-// full name only and does not care which assembly they come from, so declaring
-// them here enables `init`, `record` and `required` with no runtime dependency
-// and no NuGet package. Internal, so they cannot leak into Core's public API.
-// ---------------------------------------------------------------------------
+// Compiler-recognised types net48 does not ship. Looked up by full name only, so
+// declaring them here enables `init`, `record` and `required` with no dependency.
 
 #pragma warning disable CS9113 // Parameter is unread — these are marker attributes.
 

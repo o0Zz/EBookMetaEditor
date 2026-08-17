@@ -1,4 +1,4 @@
-using EBookMeta.Xml;
+﻿using EBookMeta.Xml;
 using EBookMeta.Model;
 using System.Buffers.Binary;
 using System.Globalization;
@@ -10,18 +10,6 @@ namespace EBookMeta.Formats;
 /// Reads and writes MOBI-family metadata: a PalmDB database whose header record
 /// carries an EXTH block.
 /// </summary>
-/// <remarks>
-/// One implementation serves MOBI, PRC, AZW and AZW3, because they are the same
-/// container and the same header — the differences are in the text format, which
-/// this build never reads.
-/// <para>
-/// An AZW3 from kindlegen is often a joint file: an old MOBI 6 book and a KF8 one
-/// in the same database, each with its own header record and its own EXTH. Readers
-/// prefer the KF8 part, so that is where metadata is read from, and <em>both</em>
-/// are written — a file whose two halves disagree about its title is a file that
-/// shows the old one on half the devices that open it.
-/// </para>
-/// </remarks>
 public sealed partial class MobiFormat : IBookFormat
 {
     /// <summary>Creates the format for one flavour of the MOBI family.</summary>
@@ -37,24 +25,17 @@ public sealed partial class MobiFormat : IBookFormat
         {
             Format = id,
 
-            // No series. MOBI has no EXTH record for one that this build can
-            // verify against the published description of the format, and writing
-            // a guessed record number would put a user's series into a field that
-            // means something else. Better to grey the box out than to be wrong
-            // in a file the user cannot inspect.
-            //
-            // No sort forms either: EXTH has no field for them.
+            // No series: EXTH has no record for one this build can verify against the
+            // published format, and a guessed record number would put the user's series
+            // into a field meaning something else. No sort forms either.
             ReadableFields =
                 MetadataField.Title | MetadataField.Creators | MetadataField.Description |
                 MetadataField.Publisher | MetadataField.PublicationDate |
                 MetadataField.Language | MetadataField.Subjects |
                 MetadataField.Identifiers | MetadataField.Rights | MetadataField.Cover,
 
-            // Everything readable except the cover and the identifiers. The cover
-            // is a whole PalmDB record; replacing it would resize the record list,
-            // and page-image processing is out of scope. Identifiers are read but
-            // not written because an ASIN is Amazon's, not the user's, and an
-            // edited one breaks a book's link to its store entry.
+            // Everything readable but the cover (a whole PalmDB record) and the
+            // identifiers (an edited ASIN breaks the book's link to its store entry).
             WritableFields =
                 MetadataField.Title | MetadataField.Creators | MetadataField.Description |
                 MetadataField.Publisher | MetadataField.PublicationDate |
@@ -68,19 +49,6 @@ public sealed partial class MobiFormat : IBookFormat
     public IReadOnlyList<string> Extensions { get; }
 
     /// <inheritdoc />
-    /// <remarks>
-    /// Only the MOBI instance answers, and it answers for the whole family. The
-    /// PalmDB header says <c>BOOKMOBI</c> for every one of them and nothing in it
-    /// distinguishes an AZW3 from a MOBI — that difference is in the text format,
-    /// which this build never reads. Guessing between them would be inventing
-    /// information, so the extension is left to make the finer claim and
-    /// <see cref="BookFormats.IsAcceptableSubstitute"/> keeps the pairing from
-    /// being reported as a mismatch.
-    /// <para>
-    /// The container sniff settles it, so the database is never opened to decline
-    /// a file that is not one.
-    /// </para>
-    /// </remarks>
     public FormatClaim? TryOpen(BookSource source)
     {
         Throw.IfNull(source);
@@ -155,11 +123,9 @@ public sealed partial class MobiFormat : IBookFormat
 
         foreach (MobiDocument header in headers)
         {
-            // Only the edited fields are propagated, never the whole record. The
-            // two halves of a joint file often carry different metadata, and
-            // writing one over the other would delete whatever the other had and
-            // this one does not — on a save the user may have made without
-            // editing anything at all.
+            // Only edited fields, never the whole record: the halves of a joint file
+            // carry different metadata, and writing one over the other would delete
+            // what only the other had — on a save that may have edited nothing.
             header.ApplyMetadata(Merge(baseline, metadata, header.ReadMetadata()));
 
             rewritten[IndexOf(header)] = header.Serialize();
@@ -198,13 +164,6 @@ public sealed partial class MobiFormat : IBookFormat
     /// <param name="edited">What came back, possibly changed.</param>
     /// <param name="current">What this particular header holds now.</param>
     /// <returns>The metadata to apply to this header.</returns>
-    /// <remarks>
-    /// For the header the read came from, <paramref name="current"/> and
-    /// <paramref name="baseline"/> are the same and this is just
-    /// <paramref name="edited"/>. It matters for the other half of a joint file,
-    /// where applying <paramref name="edited"/> wholesale would overwrite fields
-    /// the user never saw with values from a header they were not editing.
-    /// </remarks>
     private static BookMetadata Merge(
         BookMetadata baseline, BookMetadata edited, BookMetadata current)
     {
@@ -320,9 +279,7 @@ public sealed partial class MobiFormat : IBookFormat
         }
     }
 
-    /// <summary>
-    /// Which record a header came from, worked out from its location.
-    /// </summary>
+    /// <summary>Which record a header came from, worked out from its location.</summary>
     private static int IndexOf(MobiDocument header) =>
         int.TryParse(
             header.Location.Replace("record", string.Empty),
@@ -332,13 +289,7 @@ public sealed partial class MobiFormat : IBookFormat
             ? index
             : 0;
 
-    /// <summary>
-    /// Reads the cover out of the image record EXTH 201 points at.
-    /// </summary>
-    /// <remarks>
-    /// The offset is relative to the first image record rather than absolute,
-    /// which is the one place MOBI's metadata refers to its own record numbering.
-    /// </remarks>
+    /// <summary>Reads the cover out of the image record EXTH 201 points at.</summary>
     private static void ReadCover(
         IContainer container,
         MobiDocument header,
@@ -404,23 +355,6 @@ public sealed partial class MobiFormat : IBookFormat
 /// The header record of a MOBI database: the PalmDOC and MOBI headers, and the
 /// EXTH block where the metadata lives.
 /// </summary>
-/// <remarks>
-/// Implemented from the published description of the format. Nothing here is
-/// derived from calibre, whose <c>MetadataUpdater</c> is GPL-3.0 and incompatible
-/// with this project's licence.
-/// <para>
-/// A rebuild copies the PalmDOC header, the MOBI header and everything between the
-/// EXTH block and the title byte for byte, patching only the one MOBI header field
-/// that has to move — <c>fullNameOffset</c> — and re-emitting the EXTH records.
-/// EXTH records this build has no field for are carried through in their original
-/// order and bytes, which is what stops a title edit from discarding an ASIN, a
-/// watermark or a page-map.
-/// </para>
-/// <para>
-/// An unedited save returns the original bytes rather than a reconstruction, so
-/// byte-identity does not depend on reproducing another tool's padding decisions.
-/// </para>
-/// </remarks>
 public sealed class MobiDocument
 {
     private const int PalmDocHeaderLength = 16;
@@ -491,11 +425,6 @@ public sealed class MobiDocument
         BinaryPrimitives.ReadUInt16BigEndian(_palmDoc.AsSpan(EncryptionTypeOffset)) != 0;
 
     /// <summary>The record index the book's images start at, or -1 if unstated.</summary>
-    /// <remarks>
-    /// Record 0 is this header, so a zero here means the field was never filled in
-    /// rather than that the images start at the beginning. kindlegen writes
-    /// <c>0xFFFFFFFF</c> for the same thing.
-    /// </remarks>
     public int FirstImageIndex
     {
         get
@@ -517,12 +446,6 @@ public sealed class MobiDocument
     /// The record index where the KF8 part of a joint MOBI/KF8 file begins, from
     /// EXTH 121, or <see langword="null"/> for a plain MOBI.
     /// </summary>
-    /// <remarks>
-    /// An AZW3 produced by kindlegen often carries both an old MOBI 6 book and a
-    /// KF8 one in the same database. Readers prefer the KF8 part, so its metadata
-    /// is the metadata that matters — and both have to be written, or the file
-    /// says two different things about itself.
-    /// </remarks>
     public int? Kf8BoundaryRecord
     {
         get
@@ -634,9 +557,7 @@ public sealed class MobiDocument
             record, palmDoc, mobiHeader, gap, trailer, records, encoding, fullName, location);
     }
 
-    /// <summary>
-    /// Reads the EXTH records, returning where the block ends.
-    /// </summary>
+    /// <summary>Reads the EXTH records, returning where the block ends.</summary>
     private static int ParseExth(
         byte[] record, int start, List<ExthRecord> into, string location)
     {
@@ -774,14 +695,7 @@ public sealed class MobiDocument
         return metadata;
     }
 
-    /// <summary>
-    /// Records every EXTH type this build does not map, with its bytes.
-    /// </summary>
-    /// <remarks>
-    /// The bytes matter, not just the text: these are the only copy, and a rebuild
-    /// writes them back exactly. Keeping them on the model as well is what lets the
-    /// UI show a user what else is in their file.
-    /// </remarks>
+    /// <summary>Records every EXTH type this build does not map, with its bytes.</summary>
     private void ReadUnmapped(BookMetadata metadata)
     {
         foreach (ExthRecord record in _records)
@@ -806,9 +720,7 @@ public sealed class MobiDocument
             or ExthPublishingDate or ExthContributor or ExthRights or ExthAsin
             or ExthUpdatedTitle or ExthLanguage;
 
-    /// <summary>
-    /// Renders a record's payload as text when it plausibly is text.
-    /// </summary>
+    /// <summary>Renders a record's payload as text when it plausibly is text.</summary>
     private string? Printable(byte[] data)
     {
         if (data.Length == 0)
@@ -870,9 +782,7 @@ public sealed class MobiDocument
         return string.IsNullOrEmpty(trimmed) ? null : trimmed;
     }
 
-    /// <summary>
-    /// Applies metadata to the header, touching only what changed.
-    /// </summary>
+    /// <summary>Applies metadata to the header, touching only what changed.</summary>
     /// <param name="metadata">The metadata to write.</param>
     public void ApplyMetadata(BookMetadata metadata)
     {
@@ -902,15 +812,7 @@ public sealed class MobiDocument
         SetTitle(current.Title, metadata.Title);
     }
 
-    /// <summary>
-    /// Writes the title to both places a MOBI can keep one.
-    /// </summary>
-    /// <remarks>
-    /// The header's own name field is always updated. EXTH 503 is updated only when
-    /// the file already had one: adding it to a file that did not would change what
-    /// the file claims about itself beyond what was asked, and the header field is
-    /// the one every reader falls back to.
-    /// </remarks>
+    /// <summary>Writes the title to both places a MOBI can keep one.</summary>
     private void SetTitle(string? current, string? wanted)
     {
         if (Same(current, wanted))
@@ -953,12 +855,6 @@ public sealed class MobiDocument
     /// Replaces every record of a type with new ones, in the place the first of
     /// them held.
     /// </summary>
-    /// <remarks>
-    /// Position is preserved rather than appending, so a rewritten author stays
-    /// where it was among the records this build does not understand. Order within
-    /// EXTH carries no meaning the specification defines, but reproducing it keeps
-    /// the diff to what actually changed.
-    /// </remarks>
     private void ReplaceAll(int type, IReadOnlyList<string> values)
     {
         int at = _records.FindIndex(r => r.Type == type);
@@ -985,12 +881,6 @@ public sealed class MobiDocument
 
     /// <summary>Serialises the header record back to bytes.</summary>
     /// <returns>The complete record 0.</returns>
-    /// <remarks>
-    /// Returns the original bytes untouched when nothing was changed, so an
-    /// unedited save cannot differ by so much as a padding byte — this build does
-    /// not have to reproduce another tool's choices about how to round out an EXTH
-    /// block, only its own.
-    /// </remarks>
     public byte[] Serialize()
     {
         if (!_dirty)

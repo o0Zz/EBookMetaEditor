@@ -7,15 +7,7 @@ using Xunit;
 
 namespace EBookMeta.Tests;
 
-/// <summary>
-/// Tests that EPUB 2 and EPUB 3 metadata conventions are both read.
-/// </summary>
-/// <remarks>
-/// Files in the wild mix them freely: an EPUB 3 produced by a converter often
-/// carries only <c>calibre:series</c>, and an EPUB 2 may carry EPUB 3 refinements a
-/// later tool added. Reading only the version a file declares would silently lose
-/// fields.
-/// </remarks>
+/// <summary>Tests that EPUB 2 and EPUB 3 metadata conventions are both read.</summary>
 public sealed class EpubReadTests
 {
     private static BookMetadata Read(string path)

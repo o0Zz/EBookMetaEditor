@@ -1,8 +1,6 @@
 namespace EBookMeta;
 
-/// <summary>
-/// The only sanctioned way EBookMetaEditor writes over a user's file.
-/// </summary>
+/// <summary>The only sanctioned way EBookMetaEditor writes over a user's file.</summary>
 public static class AtomicFileWriter
 {
     /// <summary>

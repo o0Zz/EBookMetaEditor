@@ -10,13 +10,6 @@ namespace EBookMeta.Formats;
 /// <summary>
 /// Reads and writes FictionBook metadata: a single XML file, or one inside a ZIP.
 /// </summary>
-/// <remarks>
-/// The two flavours are the same document in different containers, so one
-/// implementation is registered twice — <see cref="FormatId.Fb2"/> over a
-/// <c>RawContainer</c> and <see cref="FormatId.Fb2Zip"/> over a
-/// <c>ZipContainer</c>. Which one a file gets is <c>BookContainers</c>'s decision;
-/// nothing here names a container.
-/// </remarks>
 public sealed partial class Fb2Format : IBookFormat
 {
     /// <summary>Creates the format for one flavour of FictionBook.</summary>
@@ -32,21 +25,16 @@ public sealed partial class Fb2Format : IBookFormat
         {
             Format = id,
 
-            // No sort title and no rights statement: FictionBook has neither, and
-            // a box the user can type into whose content is discarded on save is
-            // exactly what declaring capabilities exists to prevent. Per-creator
-            // sort names are absent for the same reason — FB2 splits a name into
-            // parts but has no separate sort form.
+            // FictionBook has no sort title, rights statement or per-creator sort form,
+            // so those stay off rather than being typed in and discarded.
             ReadableFields =
                 MetadataField.Title | MetadataField.Creators | MetadataField.CreatorRoles |
                 MetadataField.Series | MetadataField.SeriesIndex | MetadataField.Description |
                 MetadataField.Publisher | MetadataField.PublicationDate | MetadataField.Language |
                 MetadataField.Subjects | MetadataField.Identifiers | MetadataField.Cover,
 
-            // Everything readable except the cover and the identifiers. A cover
-            // lives in a base64 <binary> at the far end of the file, and replacing
-            // it would mean rewriting the part of the document this format
-            // deliberately never parses.
+            // Everything readable but the cover and identifiers: a cover is a base64
+            // <binary> in the part of the document this format never parses.
             WritableFields =
                 MetadataField.Title | MetadataField.Creators | MetadataField.CreatorRoles |
                 MetadataField.Series | MetadataField.SeriesIndex | MetadataField.Description |
@@ -64,16 +52,6 @@ public sealed partial class Fb2Format : IBookFormat
     public IReadOnlyList<string> Extensions { get; }
 
     /// <inheritdoc />
-    /// <remarks>
-    /// The two instances split by container: a bare document is sniffed from its
-    /// root element, a zipped one from an entry name.
-    /// <para>
-    /// FB2 is the one supported format with no magic number — it is an ordinary XML
-    /// file, and <c>&lt;FictionBook&gt;</c> is the only thing that distinguishes it.
-    /// The search is bounded and gated on the file starting with an angle bracket,
-    /// so it costs nothing for everything that is not XML.
-    /// </para>
-    /// </remarks>
     public FormatClaim? TryOpen(BookSource source)
     {
         Throw.IfNull(source);
@@ -215,9 +193,7 @@ public sealed partial class Fb2Format : IBookFormat
         return candidates[0];
     }
 
-    /// <summary>
-    /// Parses the document, reporting FB2-F001 or FB2-F002 before giving up.
-    /// </summary>
+    /// <summary>Parses the document, reporting FB2-F001 or FB2-F002 before giving up.</summary>
     private static Fb2Document Parse(
         IContainer container, ContainerEntry entry)
     {
@@ -241,12 +217,6 @@ public sealed partial class Fb2Format : IBookFormat
     /// <summary>
     /// Pulls the cover out of the <c>&lt;binary&gt;</c> the cover page points at.
     /// </summary>
-    /// <remarks>
-    /// A streaming pass over the document, because the binaries sit past the body
-    /// and the parsed part of the file stops at <c>&lt;/description&gt;</c>. Only
-    /// done when a cover was asked for: the batch grid reads three hundred books
-    /// with <c>ReadOptions.WithoutCover</c> and never walks a single one of them.
-    /// </remarks>
     private static void ReadCover(
         IContainer container,
         ContainerEntry entry,
@@ -308,20 +278,6 @@ public sealed partial class Fb2Format : IBookFormat
 /// <summary>
 /// A FictionBook document, of which only <c>&lt;description&gt;</c> is parsed.
 /// </summary>
-/// <remarks>
-/// FB2 puts the metadata and the whole book in one XML file, often with every
-/// illustration base64-encoded into it, so a ten-megabyte file is ordinary. Parsing
-/// all of that to change a title would cost the startup budget several times over,
-/// and re-serialising it would rewrite every line of a book the user never touched.
-/// <para>
-/// So this is hard invariant 16 applied to a whole document: the
-/// <c>&lt;description&gt;</c> element is located, parsed and edited, and on save its
-/// serialised form is spliced back into the original text at the offsets it came
-/// from. Everything outside that span — the body, the binaries, the trailing
-/// newline — is the original characters, copied through. Byte-identity for an
-/// unedited save is a property of the design rather than of careful serialisation.
-/// </para>
-/// </remarks>
 public sealed class Fb2Document
 {
     private readonly string _text;
@@ -493,13 +449,6 @@ public sealed class Fb2Document
     /// Wraps the description text in an element carrying the root's namespace
     /// declarations, so prefixes resolve as they did in the file.
     /// </summary>
-    /// <remarks>
-    /// The wrapper is never serialised. Its only job is to hold the declarations
-    /// in scope above the description, which is what stops
-    /// <see cref="XmlExactWriter"/> re-declaring them on the way out — an
-    /// <c>xmlns</c> added to an element that never had one is a change the user did
-    /// not ask for.
-    /// </remarks>
     private static string Wrap(List<(string Prefix, string Uri)> declarations, string description)
     {
         var builder = new StringBuilder("<scope");
@@ -598,11 +547,6 @@ public sealed class Fb2Document
 
     /// <summary>Serialises the document back to bytes.</summary>
     /// <returns>The complete FictionBook file.</returns>
-    /// <remarks>
-    /// Only the description span is regenerated; the prefix and suffix are the
-    /// original characters. Line endings inside the regenerated span are restored
-    /// to the source's, because XML parsing normalised them to LF on the way in.
-    /// </remarks>
     public byte[] Serialize()
     {
         string body = XmlExactWriter.Write(_description, _selfClosingHasSpace);
@@ -648,10 +592,6 @@ public sealed class Fb2Document
     /// The id of the image the cover page points at, without its leading hash.
     /// </summary>
     /// <returns>The binary id, or <see langword="null"/> when none is declared.</returns>
-    /// <remarks>
-    /// Only the reference is resolved here. Pulling the image itself means walking
-    /// the whole file, which <c>Fb2Format</c> does only when a cover was asked for.
-    /// </remarks>
     public string? CoverImageId()
     {
         XElement? image = Child(Child(Child(_description, "title-info"), "coverpage"), "image");
@@ -799,9 +739,7 @@ public sealed class Fb2Document
         }
     }
 
-    /// <summary>
-    /// Assembles a display name from the parts FB2 stores separately.
-    /// </summary>
+    /// <summary>Assembles a display name from the parts FB2 stores separately.</summary>
     private static string? PersonName(XElement person)
     {
         string?[] parts =
@@ -904,9 +842,7 @@ public sealed class Fb2Document
         return string.IsNullOrEmpty(value) ? null : value;
     }
 
-    /// <summary>
-    /// Works out the indentation a new element should be written with.
-    /// </summary>
+    /// <summary>Works out the indentation a new element should be written with.</summary>
     private static string DetectIndent(XElement description)
     {
         foreach (XNode node in description.Nodes())
@@ -922,10 +858,6 @@ public sealed class Fb2Document
     }
 
     /// <summary>Where each element belongs inside <c>title-info</c>.</summary>
-    /// <remarks>
-    /// FB2's schema is a sequence, not a set, so an element inserted in the wrong
-    /// place makes the document invalid even though every value in it is right.
-    /// </remarks>
     private static readonly string[] TitleInfoOrder =
     [
         "genre", "author", "book-title", "annotation", "keywords", "date",
@@ -937,15 +869,8 @@ public sealed class Fb2Document
         "book-name", "publisher", "city", "year", "isbn", "sequence",
     ];
 
-    /// <summary>
-    /// Applies metadata to the document, touching only what changed.
-    /// </summary>
+    /// <summary>Applies metadata to the document, touching only what changed.</summary>
     /// <param name="metadata">The metadata to write.</param>
-    /// <remarks>
-    /// Compared field by field against the document as it stands, so a field the
-    /// user did not edit contributes nothing and an unedited save reproduces the
-    /// file byte for byte.
-    /// </remarks>
     public void ApplyMetadata(BookMetadata metadata)
     {
         Throw.IfNull(metadata);
@@ -1113,16 +1038,7 @@ public sealed class Fb2Document
         }
     }
 
-    /// <summary>
-    /// Splits a display name into the parts FB2 stores it as.
-    /// </summary>
-    /// <remarks>
-    /// The last whitespace-separated word is the family name and the rest is
-    /// given names, which is right for the Western order FB2's own examples use
-    /// and wrong for some names. A single word goes in <c>nickname</c>, because
-    /// guessing whether "Voltaire" is a first or last name is worse than saying
-    /// neither.
-    /// </remarks>
+    /// <summary>Splits a display name into the parts FB2 stores it as.</summary>
     private static void AddNameParts(XElement author, string name)
     {
         XNamespace ns = author.Name.Namespace;
@@ -1203,9 +1119,7 @@ public sealed class Fb2Document
         element.SetValue(wanted!);
     }
 
-    /// <summary>
-    /// Returns a child, creating it in schema order if it is missing.
-    /// </summary>
+    /// <summary>Returns a child, creating it in schema order if it is missing.</summary>
     private XElement Ensure(XElement parent, string localName, string[] order)
     {
         XElement? element = Child(parent, localName);
@@ -1221,9 +1135,7 @@ public sealed class Fb2Document
         return element;
     }
 
-    /// <summary>
-    /// Inserts an element where the schema's sequence says it belongs.
-    /// </summary>
+    /// <summary>Inserts an element where the schema's sequence says it belongs.</summary>
     private void Insert(XElement parent, XElement element, string[] order)
     {
         int position = Array.IndexOf(order, element.Name.LocalName);
@@ -1284,9 +1196,7 @@ public sealed class Fb2Document
     private string IndentAt(int depth) =>
         depth <= -1 ? "\n" : _indent + new string(' ', 2 * depth);
 
-    /// <summary>
-    /// Removes an element and the whitespace that indented it.
-    /// </summary>
+    /// <summary>Removes an element and the whitespace that indented it.</summary>
     private static void Remove(XElement? element)
     {
         if (element is null)

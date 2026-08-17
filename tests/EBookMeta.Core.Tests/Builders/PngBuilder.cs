@@ -1,13 +1,9 @@
 namespace EBookMeta.Tests.Builders;
 
-/// <summary>
-/// Produces the tiny images the corpus uses for covers and comic pages.
-/// </summary>
+/// <summary>Produces the tiny images the corpus uses for covers and comic pages.</summary>
 internal static class PngBuilder
 {
-    /// <summary>
-    /// A valid 1×1 transparent PNG, 67 bytes.
-    /// </summary>
+    /// <summary>A valid 1×1 transparent PNG, 67 bytes.</summary>
     internal static byte[] OnePixel { get; } =
     [
         0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,

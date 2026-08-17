@@ -60,12 +60,6 @@ public sealed class CbzWriteTests
     /// The page count is recomputed from the images present, whether it was missing
     /// or simply wrong.
     /// </summary>
-    /// <remarks>
-    /// The one place saving an unedited file deliberately changes it. Byte-identity
-    /// is a property of saving a <em>correct</em> archive; supplying a field whose
-    /// value is sitting in the archive waiting to be counted is the whole point of
-    /// correcting on save.
-    /// </remarks>
     [Fact]
     public void Saving_recomputes_the_page_count()
     {

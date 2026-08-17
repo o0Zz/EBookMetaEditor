@@ -6,23 +6,6 @@ namespace EBookMeta;
 /// The registry of <see cref="IBookFormat"/> implementations: what this build
 /// can read and write.
 /// </summary>
-/// <remarks>
-/// Adding a format is one implementation plus one <see cref="Register"/> call.
-/// Nothing in the UI or the open path changes, because both ask the registry which
-/// format to use and never name one.
-/// <para>
-/// Opening a file is <see cref="TryOpen"/>: every registered format is offered the
-/// file and the strongest <see cref="FormatClaim"/> wins. That is why detection is
-/// not a separate sniffer — a format is the authority on what its own files look
-/// like, and the file it is asked about is the real one, already open.
-/// </para>
-/// <para>
-/// What the registry adds on top is the one answer no format can give. A format
-/// only ever says "that is mine", so nothing registered can identify a 7z or a PDF —
-/// this build recognises both and opens neither, and saying so (<c>GEN-W002</c>,
-/// <c>GEN-W004</c>) is one of the more useful things it does.
-/// </para>
-/// </remarks>
 /// <seealso cref="BookContainers" />
 public static class BookFormats
 {
@@ -33,11 +16,8 @@ public static class BookFormats
         Register(new EpubFormat());
         Register(new CbzFormat(FormatId.Cbz));
 
-        // The same implementation twice more: a CBT is a CBZ in a TAR and a CBR is
-        // a CBZ in a RAR, with the same ComicInfo.xml and the same rules. All that
-        // differs is the container, which BookContainers picks. CBR is registered
-        // like any other because reading and editing one is ordinary; only the save
-        // is different, and that difference belongs to RarContainer.Rebuild.
+        // The same implementation twice more: a CBT is a CBZ in a TAR and a CBR a CBZ
+        // in a RAR. Only the container differs, and only CBR's save.
         Register(new CbzFormat(FormatId.Cbt));
         Register(new CbzFormat(FormatId.Cbr));
 
@@ -90,13 +70,6 @@ public static class BookFormats
     /// the caller can say what the file actually is rather than merely refusing it.
     /// </returns>
     /// <exception cref="BookIoException">The file could not be read.</exception>
-    /// <remarks>
-    /// The container is opened at most once and shared between the formats that
-    /// look at it, so this costs one header read and one open however many formats
-    /// are registered. On success the container stays open and the caller reads
-    /// straight through it — which is one file open fewer than sniffing and then
-    /// opening separately.
-    /// </remarks>
     public static BookSource? TryOpen(string path, out DetectedFormat detected)
     {
         Throw.IfNullOrEmpty(path);
@@ -106,12 +79,9 @@ public static class BookFormats
 
         try
         {
-            // The answers no registered format is there to give, taken first
-            // because none of them has a container this build can open. Nothing is
-            // registered for either, so there is nobody to ask: recognising one
-            // costs a few magic-number comparisons and lets the app tell a user
-            // their .cbz is really a 7z, while supporting one would cost a
-            // container and a metadata document.
+            // The answers no registered format is there to give: recognised but not
+            // openable. Naming one costs a magic-number comparison; supporting it
+            // would cost a container and a metadata document.
             FormatId? unsupported = source.ContainerKind switch
             {
                 ContainerKind.SevenZip => FormatId.Cb7,
@@ -160,42 +130,22 @@ public static class BookFormats
         return null;
     }
 
-    /// <summary>
-    /// Works out what a file is without keeping it open.
-    /// </summary>
+    /// <summary>Works out what a file is without keeping it open.</summary>
     /// <param name="path">The file to inspect.</param>
     /// <returns>What the content turned out to be, and whether the extension agreed.</returns>
     /// <exception cref="BookIoException">The file could not be read.</exception>
-    /// <remarks>
-    /// The same claim loop as <see cref="TryOpen"/>, for callers that want the
-    /// answer rather than the file. A caller that is about to read the file should
-    /// use <see cref="TryOpen"/> instead and save an open.
-    /// </remarks>
     public static DetectedFormat Identify(string path)
     {
         using BookSource? source = TryOpen(path, out DetectedFormat detected);
         return detected;
     }
 
-    /// <summary>
-    /// Maps a file extension to the format it claims to be.
-    /// </summary>
+    /// <summary>Maps a file extension to the format it claims to be.</summary>
     /// <param name="path">A file name or path.</param>
     /// <returns>
     /// The claimed format, or <see cref="FormatId.Unknown"/> for an extension
     /// EBookMetaEditor does not handle.
     /// </returns>
-    /// <remarks>
-    /// Built from the registry: each format declares its own
-    /// <see cref="IBookFormat.Extensions"/>, so a new format brings its extensions
-    /// with it. Only the recognised-but-unsupported ones are named here, because no
-    /// registered format claims them.
-    /// <para>
-    /// The extension is a claim, never the answer. This exists so a folder scan can
-    /// skip files that promise nothing without opening every one of them, and so a
-    /// disagreement with the content can be reported as <c>GEN-W002</c>.
-    /// </para>
-    /// </remarks>
     public static FormatId FromExtension(string path)
     {
         Throw.IfNull(path);
@@ -274,9 +224,7 @@ public sealed record DetectedFormat
     /// </summary>
     public string? Detail { get; init; }
 
-    /// <summary>
-    /// Whether the extension is consistent with the content.
-    /// </summary>
+    /// <summary>Whether the extension is consistent with the content.</summary>
     public bool ExtensionAgrees =>
         ClaimedByExtension == FormatId.Unknown ||
         BookFormats.IsAcceptableSubstitute(ClaimedByExtension, Format);

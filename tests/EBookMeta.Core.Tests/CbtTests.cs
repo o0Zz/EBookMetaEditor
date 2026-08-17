@@ -72,12 +72,6 @@ public sealed class CbtTests
     /// The reason this build writes TAR itself rather than through SharpCompress,
     /// whose writer takes a name, a size and a timestamp and nothing else.
     /// </summary>
-    /// <remarks>
-    /// A real archive records a mode, a uid, a gid, a user name and a group name,
-    /// and pads its tail to ten kilobytes. None of that is anything this build
-    /// models, and all of it has to survive a save — a user who edits a comic's
-    /// title has not asked for its permissions to change.
-    /// </remarks>
     [Fact]
     public void Saving_preserves_what_a_real_archive_carries()
     {
@@ -223,9 +217,7 @@ public sealed class CbtTests
         Assert.Equal(LongName, container.Entries.Single().Name);
     }
 
-    /// <summary>
-    /// The same, as GNU tar spells it: an <c>L</c> block carrying the name.
-    /// </summary>
+    /// <summary>The same, as GNU tar spells it: an <c>L</c> block carrying the name.</summary>
     [Fact]
     public void Reads_and_reproduces_a_gnu_long_name()
     {

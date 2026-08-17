@@ -13,9 +13,7 @@ internal interface IPathReceiver
     void AcceptPaths(string[] paths);
 }
 
-/// <summary>
-/// Keeps one process per user and forwards later launches into it.
-/// </summary>
+/// <summary>Keeps one process per user and forwards later launches into it.</summary>
 internal static class SingleInstance
 {
     /// <summary>How long a later launch waits to hand its paths over.</summary>
@@ -24,9 +22,7 @@ internal static class SingleInstance
     private static Mutex? _mutex;
     private static bool _listening;
 
-    /// <summary>
-    /// Claims the role of the one running instance.
-    /// </summary>
+    /// <summary>Claims the role of the one running instance.</summary>
     /// <returns>
     /// <see langword="true"/> if this process is the first; <see langword="false"/>
     /// if another already holds the role.
@@ -143,10 +139,8 @@ internal static class SingleInstance
 
     private static void Deliver(Form receiver, string[] paths)
     {
-        // The receiver is a window, so this has to happen on the thread that owns
-        // its handle. A window in the middle of being created or destroyed is the
-        // ordinary race here, and dropping the paths beats throwing on a thread
-        // nobody is watching.
+        // The receiver is a window, so this must run on the thread owning its handle.
+        // Mid-create or mid-destroy is the ordinary race; dropping the paths beats it.
         try
         {
             if (receiver.IsDisposed || !receiver.IsHandleCreated)

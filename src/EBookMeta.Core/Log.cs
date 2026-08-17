@@ -36,9 +36,7 @@ public sealed record LogEntry(DateTime Time, LogLevel Level, string Message)
             Message);
 }
 
-/// <summary>
-/// The session log: what the application did, in order.
-/// </summary>
+/// <summary>The session log: what the application did, in order.</summary>
 public static class Log
 {
     /// <summary>
@@ -136,11 +134,6 @@ public static class Log
     /// The container entry it is attributable to, or <see langword="null"/> when it
     /// belongs to the file as a whole.
     /// </param>
-    /// <remarks>
-    /// Rules log straight here rather than being collected and published later.
-    /// There is no findings type and no sink to thread through <c>Read</c> and
-    /// <c>Write</c>: a rule that fires says so, once, where it fired.
-    /// </remarks>
     public static void Rule(LogLevel level, string ruleId, string message, string? location = null)
     {
         Throw.IfNullOrEmpty(ruleId);
@@ -153,12 +146,6 @@ public static class Log
     /// <summary>Renders an optional field's value for a log line.</summary>
     /// <param name="value">The value, which may be absent.</param>
     /// <returns>The value in quotes, or <c>(none)</c>.</returns>
-    /// <remarks>
-    /// Quoted rather than bare so an empty string and a missing one read
-    /// differently in the log, which is the distinction most metadata bug reports
-    /// turn on. Shared by all four formats so their "Read ..." lines stay
-    /// comparable to each other.
-    /// </remarks>
     public static string Describe(string? value) =>
         value is null ? "(none)" : $"\"{value}\"";
 
@@ -217,9 +204,7 @@ public static class Log
         Written?.Invoke(entry);
     }
 
-    /// <summary>
-    /// Appends everything not yet written. Caller holds <see cref="Gate"/>.
-    /// </summary>
+    /// <summary>Appends everything not yet written. Caller holds <see cref="Gate"/>.</summary>
     private static string? AppendPending()
     {
         if (_filePath is null || _fileFailed || _flushed >= Lines.Count)

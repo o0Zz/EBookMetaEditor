@@ -3,16 +3,6 @@ namespace EBookMeta.Containers;
 /// <summary>
 /// A file that is not an archive, presented as a container of exactly one entry.
 /// </summary>
-/// <remarks>
-/// The storage behind a bare <c>.fb2</c>, where the metadata document and the book
-/// are the same file. Nothing about <see cref="IBookFormat"/> needs to know that:
-/// a format asks its container for entries either way, so FB2 inside a ZIP and FB2
-/// on its own differ by which container was opened and nothing else.
-/// <para>
-/// The single entry is named after the file, so a finding that quotes a location
-/// reads the same as it would for an archive member.
-/// </para>
-/// </remarks>
 public sealed class RawContainer : IContainer
 {
     private readonly Stream _stream;
@@ -38,7 +28,6 @@ public sealed class RawContainer : IContainer
     public string? Path { get; }
 
     /// <inheritdoc />
-    /// <remarks>Always <see langword="null"/>: a bare file has nothing outside its bytes.</remarks>
     public string? ArchiveComment => null;
 
     /// <summary>Opens a file as a one-entry container.</summary>

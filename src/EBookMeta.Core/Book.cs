@@ -147,9 +147,7 @@ public sealed class Book
     public override string ToString() =>
         $"{System.IO.Path.GetFileName(Path)} ({Detected.Format.DisplayName()})";
 
-    /// <summary>
-    /// Reports entry names that point outside the archive.
-    /// </summary>
+    /// <summary>Reports entry names that point outside the archive.</summary>
     private static void CheckEntryNames(IContainer container)
     {
         foreach (ContainerEntry entry in container.Entries)

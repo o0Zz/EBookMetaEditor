@@ -4,13 +4,7 @@ using Xunit;
 
 namespace EBookMeta.Tests;
 
-/// <summary>
-/// Tests for the field projection both editors share.
-/// </summary>
-/// <remarks>
-/// These rules are what makes "open a file, save it, get identical bytes" true, so
-/// every <c>Apply</c> that changes nothing must report that it changed nothing.
-/// </remarks>
+/// <summary>Tests for the field projection both editors share.</summary>
 public sealed class MetadataFieldsTests
 {
     private static BookMetadata Sample()

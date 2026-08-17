@@ -2,9 +2,7 @@ using System.Globalization;
 
 namespace EBookMeta.Model;
 
-/// <summary>
-/// How much of a date the source actually stated.
-/// </summary>
+/// <summary>How much of a date the source actually stated.</summary>
 public enum DatePrecision
 {
     /// <summary>The text could not be parsed as a date at all.</summary>
@@ -56,13 +54,6 @@ public sealed record BookDate
     /// <see cref="Precision"/> says how much of it was real, so a bare year is
     /// never silently promoted to a full calendar date.
     /// </returns>
-    /// <remarks>
-    /// On the model rather than on a format, because it is the one piece of
-    /// parsing more than one format needs: EPUB reads an ISO 8601 <c>dc:date</c>,
-    /// ComicInfo composes one from its Year/Month/Day fields, and the editors
-    /// parse whatever the user typed. The precision is what makes that sharing
-    /// safe — a comic that stated only a year must not round-trip as 1 January.
-    /// </remarks>
     public static BookDate Parse(string raw)
     {
         if (string.IsNullOrWhiteSpace(raw))

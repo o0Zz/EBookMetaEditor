@@ -6,24 +6,6 @@ namespace EBookMeta;
 /// Opens the container behind a file — the physical half of what
 /// <see cref="BookFormats"/> does for the metadata half.
 /// </summary>
-/// <remarks>
-/// One place decides which <see cref="IContainer"/> implementation a file gets,
-/// so <see cref="Book"/> depends on the interface rather than naming a concrete
-/// container. ZIP carries EPUB and CBZ; TAR carries CBT and shares the comic
-/// metadata document with CBZ, so it cost a container and nothing else. A kind
-/// arriving here that has no implementation is a programming error rather than a
-/// bad file — <see cref="Sniff"/> has already named the container and
-/// <see cref="BookFormats.TryOpen"/> has already refused the ones no format can
-/// edit.
-/// <para>
-/// 7z is deliberately absent: readable, not writable, and nothing has asked for it.
-/// RAR is here despite the same being true of it, because a comic library is full of
-/// CBRs and reading one is worth having on its own. <see cref="ContainerKind.Rar"/>
-/// is the one kind whose container refuses the rebuild rather than the open, so
-/// every caller of <see cref="Open"/> must be prepared for
-/// <see cref="IContainer.Rebuild"/> to fail on a file it read happily.
-/// </para>
-/// </remarks>
 /// <seealso cref="BookFormats" />
 public static class BookContainers
 {
@@ -58,10 +40,6 @@ public static class BookContainers
     /// <summary>Whether this build has an implementation for a container.</summary>
     /// <param name="kind">The container to test.</param>
     /// <returns><see langword="true"/> when the container can be opened.</returns>
-    /// <remarks>
-    /// Opened, not necessarily rebuilt — <see cref="ContainerKind.Rar"/> is
-    /// supported here and still refuses <see cref="IContainer.Rebuild"/>.
-    /// </remarks>
     public static bool IsSupported(ContainerKind kind) =>
         kind is ContainerKind.Zip or ContainerKind.Tar or ContainerKind.Rar
             or ContainerKind.Raw or ContainerKind.PalmDb;
@@ -77,27 +55,12 @@ public static class BookContainers
     private const uint ZipEmptyArchiveSignature = 0x06054B50;
     private const uint ZipSpannedSignature = 0x08074B50;
 
-    /// <summary>
-    /// Names the physical container a file's leading bytes indicate.
-    /// </summary>
+    /// <summary>Names the physical container a file's leading bytes indicate.</summary>
     /// <param name="head">The first several kilobytes of the file.</param>
     /// <returns>
     /// The container kind and a short note on how it was recognised, or
     /// <see cref="ContainerKind.Raw"/> when nothing archive-shaped was found.
     /// </returns>
-    /// <remarks>
-    /// The physical half of detection, here rather than in <see cref="BookFormats"/>
-    /// for the same reason <see cref="Open"/> is: one place decides what container
-    /// a file has. It answers only that question — several formats share a
-    /// container, so which of them this is stays a question for the formats,
-    /// asked through <see cref="IBookFormat.TryOpen"/>.
-    /// <para>
-    /// 7z is named here even though nothing can open it. Recognising a format costs
-    /// a few magic-number comparisons and lets the app tell a user what their
-    /// <c>.cbz</c> really is, which is worth far more than the comparison costs;
-    /// supporting one costs a container implementation.
-    /// </para>
-    /// </remarks>
     public static (ContainerKind Kind, string? Detail) Sniff(ReadOnlySpan<byte> head)
     {
         if (head.Length >= 4)
@@ -160,15 +123,6 @@ public static class BookContainers
     /// <param name="open">Builds the container over the open stream.</param>
     /// <returns>Whatever <paramref name="open"/> returned.</returns>
     /// <exception cref="BookIoException">The file could not be opened.</exception>
-    /// <remarks>
-    /// <see cref="FileShare.ReadWrite"/> plus <see cref="FileShare.Delete"/> is
-    /// what lets a user open a book that another program is holding, and
-    /// <see cref="FileOptions.RandomAccess"/> is right for all three: a ZIP's
-    /// central directory is at the end, a TAR's headers are interleaved with its
-    /// data, and a PalmDB's record table is at the front. The dispose-on-throw is
-    /// the part that is easy to omit and leaks a handle onto the user's file when
-    /// it is.
-    /// </remarks>
     internal static T OpenFile<T>(string path, Func<FileStream, T> open)
     {
         FileStream stream;
@@ -207,11 +161,6 @@ public static class BookContainers
     /// <param name="what">How to name the entry in that message — "Entry 'x'".</param>
     /// <returns>A stream positioned at the start of the file; the caller owns it.</returns>
     /// <exception cref="BookFormatException">The file could not be reopened.</exception>
-    /// <remarks>
-    /// Nothing in <see cref="IContainer.OpenRead"/> promises entries are read one
-    /// at a time, so the containers that slice a single file cannot hand out views
-    /// over one shared handle.
-    /// </remarks>
     internal static FileStream ReopenForEntry(string path, string entryName, string what)
     {
         try

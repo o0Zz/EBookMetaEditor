@@ -3,24 +3,12 @@ using System.Text;
 namespace EBookMeta.Containers;
 
 /// <summary>
-/// A TAR container — the storage behind CBT.
+/// A TAR container — the storage behind CBT. Retains each entry's raw 512-byte header
+/// and re-emits it byte for byte, patching only the length and checksum of what
+/// changed, which preserves the mode, uid, gid, uname and gname this build has no
+/// field for. <b>Do not replace with SharpCompress's <c>TarWriter</c></b>: it takes
+/// only a name, size and timestamp, so every save would rewrite every header.
 /// </summary>
-/// <remarks>
-/// Read and written here rather than through SharpCompress, which reads a TAR
-/// entry's mode, uid and gid but gives a writer no way to put them back, and
-/// finalises with two zero blocks where <c>tar</c> pads to ten kilobytes. Saving
-/// through it would rewrite every header in the archive to edit one title, which
-/// hard invariant 6 exists to prevent.
-/// <para>
-/// So this is the container-level form of "a repair is an edit, not a
-/// reserialisation": each entry's header blocks are retained exactly as read and
-/// re-emitted byte for byte, and only the metadata document's header is touched —
-/// its size field and the checksum over it. TAR has no offset table and no central
-/// directory, so a resized entry shifts the bytes after it and nothing else needs
-/// fixing up. That is what makes exact rebuilding practical here and impractical
-/// for ZIP.
-/// </para>
-/// </remarks>
 public sealed class TarContainer : IContainer
 {
     private readonly Stream _stream;
@@ -71,11 +59,6 @@ public sealed class TarContainer : IContainer
     public string? Path { get; }
 
     /// <inheritdoc />
-    /// <remarks>
-    /// Always <see langword="null"/>: TAR has no archive-level metadata, so there
-    /// is nothing a rebuild could fail to reproduce. A comic in a TAR therefore
-    /// cannot carry the ComicBookLover blob that blocks saving a CBZ.
-    /// </remarks>
     public string? ArchiveComment => null;
 
     /// <summary>Opens a TAR container from a file path.</summary>
@@ -99,12 +82,6 @@ public sealed class TarContainer : IContainer
     /// </param>
     /// <returns>An open container; the caller disposes it.</returns>
     /// <exception cref="BookFormatException">The stream is not a readable TAR.</exception>
-    /// <remarks>
-    /// Entries opened from a container built this way share
-    /// <paramref name="stream"/> and seek within it, so reads must not overlap.
-    /// <see cref="Open(string)"/> has no such restriction: it gives every read its
-    /// own handle.
-    /// </remarks>
     public static TarContainer Open(Stream stream, string? path = null, bool leaveOpen = false)
     {
         Throw.IfNull(stream);
@@ -156,10 +133,8 @@ public sealed class TarContainer : IContainer
             bool declaresPaxSize = false;
             char type = TarHeader.ReadTypeFlag(block);
 
-            // GNU long-name and PAX blocks describe the entry that follows rather
-            // than being entries themselves. Their blocks stay in the retained
-            // header so a rebuild reproduces them, and their content is read for
-            // the name it may override.
+            // GNU long-name and PAX blocks describe the entry that follows. Retained
+            // so a rebuild reproduces them, and read for the name they may override.
             while (TarHeader.IsPrefixBlock(type))
             {
                 long prefixSize = TarHeader.ReadSize(block);
@@ -252,16 +227,7 @@ public sealed class TarContainer : IContainer
             ReadTrailer(stream, position));
     }
 
-    /// <summary>
-    /// Reads everything past the last entry, so a rebuild can put it back.
-    /// </summary>
-    /// <remarks>
-    /// The end of a TAR is two zero blocks followed by padding to the blocking
-    /// factor, which is ten kilobytes by default — so reproducing it is most of
-    /// what byte-identity means for a file <c>tar</c> produced. Retained verbatim
-    /// rather than regenerated, because the blocking factor is a choice the
-    /// producer made and this build has no way to infer it.
-    /// </remarks>
+    /// <summary>Reads everything past the last entry, so a rebuild can put it back.</summary>
     private static byte[] ReadTrailer(Stream stream, long position)
     {
         long available = stream.Length - position;
@@ -321,17 +287,11 @@ public sealed class TarContainer : IContainer
         Write(entries, targetPath, this);
     }
 
-    /// <summary>
-    /// Writes a TAR containing the given entries, in the order given.
-    /// </summary>
+    /// <summary>Writes a TAR containing the given entries, in the order given.</summary>
     /// <param name="entries">The entries to write, in order.</param>
     /// <param name="targetPath">The file to create.</param>
     /// <exception cref="BookIoException">The target could not be written.</exception>
     /// <exception cref="BookFormatException">An entry name cannot be expressed.</exception>
-    /// <remarks>
-    /// Every header is synthesized, because there is no source archive to take one
-    /// from. <see cref="Rebuild"/> is the path that preserves them.
-    /// </remarks>
     public static void Create(IEnumerable<PendingEntry> entries, string targetPath)
     {
         Throw.IfNull(entries);
@@ -428,10 +388,8 @@ public sealed class TarContainer : IContainer
             return layout.Header;
         }
 
-        // A PAX block that states the size would contradict a patched header, and
-        // rewriting PAX records is not something this build does. Starting over
-        // with a clean header loses the original's mode and owner for this one
-        // entry, which is the lesser harm.
+        // A PAX size record would contradict a patched header, and this build does not
+        // rewrite PAX. A clean header loses this entry's mode and owner: lesser harm.
         if (layout.DeclaresPaxSize)
         {
             return TarHeader.Synthesize(pending.Name, size, pending.LastModified);
@@ -446,14 +404,7 @@ public sealed class TarContainer : IContainer
         return header;
     }
 
-    /// <summary>
-    /// Returns the retained layout for an entry, if it is one of ours.
-    /// </summary>
-    /// <remarks>
-    /// Reference equality, not the record's value equality: this asks whether the
-    /// entry came out of <see cref="Entries"/> on this instance, and two distinct
-    /// archives can hold entries that compare equal.
-    /// </remarks>
+    /// <summary>Returns the retained layout for an entry, if it is one of ours.</summary>
     private EntryLayout? LayoutOf(ContainerEntry? entry)
     {
         if (entry is null || (uint)entry.Index >= (uint)_entries.Length)
@@ -464,9 +415,7 @@ public sealed class TarContainer : IContainer
         return ReferenceEquals(_entries[entry.Index], entry) ? _layout[entry.Index] : null;
     }
 
-    /// <summary>
-    /// Fills a buffer, returning false if the stream ended first.
-    /// </summary>
+    /// <summary>Fills a buffer, returning false if the stream ended first.</summary>
     private static bool ReadExactly(Stream stream, byte[] buffer, int count)
     {
         int total = 0;
@@ -506,20 +455,6 @@ public sealed class TarContainer : IContainer
 /// The 512-byte TAR header block: reading the fields this build understands, and
 /// producing one for an entry it has to write.
 /// </summary>
-/// <remarks>
-/// Separated from <see cref="TarContainer"/> for the same reason
-/// <see cref="ZipCentralDirectory"/> is separated from <see cref="ZipContainer"/>:
-/// the byte-level format is a subject of its own, and the fiddly parts are worth
-/// keeping in one place.
-/// <para>
-/// A header is fixed-width ASCII. Numbers are octal, terminated by a NUL or a
-/// space, and the layout has not changed since V7 UNIX — later formats (ustar,
-/// GNU, PAX) only add meaning to bytes the original left as padding. That is why
-/// this build can be faithful to headers it does not fully understand: the fields
-/// it cares about sit at fixed offsets, and everything else can be copied
-/// through.
-/// </para>
-/// </remarks>
 internal static class TarHeader
 {
     /// <summary>The size of every block in a TAR archive, header or data.</summary>
@@ -589,23 +524,9 @@ internal static class TarHeader
         return true;
     }
 
-    /// <summary>
-    /// Whether the block's stored checksum matches the bytes around it.
-    /// </summary>
+    /// <summary>Whether the block's stored checksum matches the bytes around it.</summary>
     /// <param name="block">A 512-byte block.</param>
     /// <returns><see langword="true"/> when the block is a plausible header.</returns>
-    /// <remarks>
-    /// This is the only structural check TAR offers — there is no magic number at
-    /// offset 0 and no central directory to cross-check against — so it is what
-    /// stands between us and reading a truncated or mis-sniffed file as if it
-    /// held entries.
-    /// <para>
-    /// Both signed and unsigned sums are accepted. The field was historically
-    /// computed with a <c>char</c> that was signed on some platforms, so archives
-    /// written by old tools on those platforms carry the signed sum, and readers
-    /// are expected to tolerate both.
-    /// </para>
-    /// </remarks>
     internal static bool ChecksumMatches(ReadOnlySpan<byte> block)
     {
         long stored = ReadOctal(block.Slice(ChecksumOffset, ChecksumLength));
@@ -764,11 +685,6 @@ internal static class TarHeader
     /// <param name="type">The type flag of the block the data belongs to.</param>
     /// <param name="data">The data blocks' content, trimmed to the declared size.</param>
     /// <returns><see langword="true"/> when a <c>size</c> record is present.</returns>
-    /// <remarks>
-    /// Only produced for entries of 8 GiB or more, which the metadata document
-    /// never is — but a header patched into disagreement with its own PAX record
-    /// is a corrupt archive, so it is worth the few bytes to notice.
-    /// </remarks>
     internal static bool DeclaresPaxSize(char type, ReadOnlySpan<byte> data)
     {
         if (type is not (TypePaxExtended or TypePaxExtendedUpper))
@@ -786,17 +702,6 @@ internal static class TarHeader
     /// <param name="header">The original block.</param>
     /// <param name="size">The new content length.</param>
     /// <returns>A new 512-byte block.</returns>
-    /// <remarks>
-    /// This is what keeps a save faithful. Mode, uid, gid, uname, gname, the type
-    /// flag and the ustar prefix are carried through untouched — this build has no
-    /// opinion about any of them, and a user who edits a comic's title has not
-    /// asked for its permissions to change.
-    /// <para>
-    /// The terminator byte of the size field is preserved rather than normalised:
-    /// producers disagree about whether it is a NUL or a space, both are legal, and
-    /// keeping the original is what makes an unchanged entry byte-identical.
-    /// </para>
-    /// </remarks>
     internal static byte[] WithSize(ReadOnlySpan<byte> header, long size)
     {
         byte[] patched = header.ToArray();
@@ -807,9 +712,7 @@ internal static class TarHeader
         return patched;
     }
 
-    /// <summary>
-    /// Builds a header for an entry that was not in the source archive.
-    /// </summary>
+    /// <summary>Builds a header for an entry that was not in the source archive.</summary>
     /// <param name="name">The entry name, with forward slashes.</param>
     /// <param name="size">The content length in bytes.</param>
     /// <param name="lastModified">
@@ -819,11 +722,6 @@ internal static class TarHeader
     /// <exception cref="BookFormatException">
     /// The name does not fit the ustar name and prefix fields.
     /// </exception>
-    /// <remarks>
-    /// Deliberately deterministic — a fixed mode, no owner, and no timestamp of its
-    /// own — so that building the same archive twice produces the same bytes, which
-    /// the golden-file tests depend on.
-    /// </remarks>
     internal static byte[] Synthesize(string name, long size, DateTimeOffset lastModified)
     {
         byte[] block = new byte[BlockSize];
@@ -852,9 +750,7 @@ internal static class TarHeader
         return block;
     }
 
-    /// <summary>
-    /// Writes a name across the ustar name and prefix fields.
-    /// </summary>
+    /// <summary>Writes a name across the ustar name and prefix fields.</summary>
     private static void WriteName(byte[] block, string name)
     {
         byte[] bytes = NameEncoding.GetBytes(name);
@@ -891,9 +787,7 @@ internal static class TarHeader
         Array.Copy(bytes, 0, block, PrefixOffset, split);
     }
 
-    /// <summary>
-    /// Computes and stores the block's checksum, which must be done last.
-    /// </summary>
+    /// <summary>Computes and stores the block's checksum, which must be done last.</summary>
     private static void WriteChecksum(byte[] block)
     {
         int sum = 0;

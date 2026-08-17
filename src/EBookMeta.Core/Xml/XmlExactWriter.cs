@@ -92,9 +92,7 @@ internal static class XmlExactWriter
         builder.Append("</").Append(name).Append('>');
     }
 
-    /// <summary>
-    /// Chooses the prefix an element should be written with.
-    /// </summary>
+    /// <summary>Chooses the prefix an element should be written with.</summary>
     private static string QualifiedName(XElement element)
     {
         XNamespace ns = element.Name.Namespace;

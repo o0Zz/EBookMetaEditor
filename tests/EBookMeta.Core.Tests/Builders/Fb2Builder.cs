@@ -3,9 +3,7 @@ using EBookMeta.Containers;
 
 namespace EBookMeta.Tests.Builders;
 
-/// <summary>
-/// Generates synthetic FictionBook documents for the corpus.
-/// </summary>
+/// <summary>Generates synthetic FictionBook documents for the corpus.</summary>
 internal sealed class Fb2Builder
 {
     private string _description = DefaultDescription;

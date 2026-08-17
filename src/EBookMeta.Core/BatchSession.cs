@@ -92,19 +92,9 @@ public sealed class BatchEntry
     /// Whether the user asked for this file to be written even though its metadata
     /// is unchanged.
     /// </summary>
-    /// <remarks>
-    /// The way a repair found on open reaches the disk. Recovery happens in memory
-    /// and leaves the metadata identical to what was read, so such a file is not
-    /// dirty and nothing would otherwise put it through a save — the single-file
-    /// window has the same effect by simply always offering Save.
-    /// </remarks>
     public bool SaveRequested { get; set; }
 
     /// <summary>Whether the next save will write this file.</summary>
-    /// <remarks>
-    /// An edit always counts, so asking for a file *not* to be saved is not
-    /// something this models: the flag adds files to a save and never drops one.
-    /// </remarks>
     public bool WillSave => IsWritable && (IsDirty || SaveRequested);
 
     /// <summary>Returns the text an editor should show for a field.</summary>
@@ -186,25 +176,7 @@ public sealed record BatchSaveReport(int Saved, int Skipped, int Failed)
     }
 }
 
-/// <summary>
-/// Orders batch rows by one column, the way a grid header click asks for.
-/// </summary>
-/// <remarks>
-/// The two rules a plain text comparison does not give:
-/// <list type="bullet">
-/// <item><description>
-/// A blank sorts last whichever way the column is pointing. A row that has not
-/// been read yet reads blank in every field, and the grid fills in as reads
-/// complete, so a descending sort that stacked the unread rows on top would hide
-/// the answer the click asked for.
-/// </description></item>
-/// <item><description>
-/// Equal values keep reading order — file name, ascending, in both directions —
-/// so sorting by a column that repeats groups the rows without shuffling them
-/// inside a group.
-/// </description></item>
-/// </list>
-/// </remarks>
+/// <summary>Orders batch rows by one column, the way a grid header click asks for.</summary>
 public sealed class BatchEntryComparer : IComparer<BatchEntry>
 {
     private readonly Func<BatchEntry, string> _key;
@@ -222,11 +194,6 @@ public sealed class BatchEntryComparer : IComparer<BatchEntry>
     /// <param name="field">The field to order by. Exactly one flag.</param>
     /// <param name="descending">Whether to reverse the order.</param>
     /// <returns>The comparer.</returns>
-    /// <remarks>
-    /// A series index is compared as a number and a date chronologically, because
-    /// both are stored as the characters the file used: <c>10</c> before <c>2</c>
-    /// and <c>2011</c> after <c>2011-05</c> are what comparing their text gives.
-    /// </remarks>
     public static BatchEntryComparer ByField(MetadataField field, bool descending) =>
         new(entry => entry.Read(field), field, descending);
 
@@ -302,9 +269,7 @@ public sealed class BatchEntryComparer : IComparer<BatchEntry>
         NaturalNameComparer.Instance.Compare(x.FileName, y.FileName);
 }
 
-/// <summary>
-/// Many files, read together, edited together and saved together.
-/// </summary>
+/// <summary>Many files, read together, edited together and saved together.</summary>
 public sealed class BatchSession
 {
     private readonly List<BatchEntry> _entries;

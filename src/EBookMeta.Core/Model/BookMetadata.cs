@@ -41,9 +41,7 @@ public sealed class BookMetadata
     /// </summary>
     public BookDate? CreationDate { get; set; }
 
-    /// <summary>
-    /// The last-modified date — EPUB 3's <c>dcterms:modified</c>.
-    /// </summary>
+    /// <summary>The last-modified date — EPUB 3's <c>dcterms:modified</c>.</summary>
     public BookDate? ModificationDate { get; set; }
 
     /// <summary>
@@ -65,9 +63,7 @@ public sealed class BookMetadata
     /// <summary>The cover image, as bytes plus a media type.</summary>
     public CoverImage? Cover { get; set; }
 
-    /// <summary>
-    /// Metadata found in the source that does not map onto any field above.
-    /// </summary>
+    /// <summary>Metadata found in the source that does not map onto any field above.</summary>
     public IList<UnmappedField> UnmappedFields { get; } = [];
 
     /// <summary>
@@ -77,9 +73,7 @@ public sealed class BookMetadata
     public IEnumerable<Creator> PrimaryCreators =>
         Creators.Where(c => c.Kind == CreatorKind.Creator);
 
-    /// <summary>
-    /// The unique identifier, when the source designated one.
-    /// </summary>
+    /// <summary>The unique identifier, when the source designated one.</summary>
     public Identifier? UniqueIdentifier =>
         Identifiers.FirstOrDefault(i => i.IsUnique);
 

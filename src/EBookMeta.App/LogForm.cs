@@ -2,9 +2,7 @@ using System.Text;
 
 namespace EBookMeta.App;
 
-/// <summary>
-/// Shows what the application has done this session.
-/// </summary>
+/// <summary>Shows what the application has done this session.</summary>
 internal sealed class LogForm : Form
 {
     private readonly TextBox _text = new()

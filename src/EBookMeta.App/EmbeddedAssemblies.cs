@@ -11,9 +11,7 @@ internal static class EmbeddedAssemblies
     /// <summary>Matches the <c>LogicalName</c> assigned by the csproj target.</summary>
     private const string Prefix = "EBookMetaEditor.Embedded.";
 
-    /// <summary>
-    /// Assemblies already materialised, keyed by simple name.
-    /// </summary>
+    /// <summary>Assemblies already materialised, keyed by simple name.</summary>
     private static readonly Dictionary<string, Assembly?> Resolved =
         new Dictionary<string, Assembly?>(StringComparer.OrdinalIgnoreCase);
 

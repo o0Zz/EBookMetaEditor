@@ -21,15 +21,7 @@ public sealed record XmlEncodingInfo
     /// <summary>Whether the document begins with a byte order mark.</summary>
     public bool HasByteOrderMark => ByteOrderMarkLength > 0;
 
-    /// <summary>
-    /// Whether the bytes actually decode cleanly as the declared encoding.
-    /// </summary>
-    /// <remarks>
-    /// <see langword="false"/> drives rule EPUB-E050, and the case it catches is
-    /// common: a file that declares <c>UTF-8</c> but contains Windows-1252
-    /// bytes, so an accented character renders as a replacement glyph in some
-    /// readers and throws in stricter ones.
-    /// </remarks>
+    /// <summary>Whether the bytes actually decode cleanly as the declared encoding.</summary>
     public bool DeclarationMatchesBytes { get; init; } = true;
 
     /// <summary>
@@ -39,16 +31,7 @@ public sealed record XmlEncodingInfo
     public string? Mismatch { get; init; }
 }
 
-/// <summary>
-/// Determines an XML document's encoding from its bytes.
-/// </summary>
-/// <remarks>
-/// BOM, then declaration, then UTF-8 — the order the XML spec requires.
-/// Deliberately not delegated to <c>XDocument</c>, which hides the distinction
-/// between "declared UTF-8 and is UTF-8" and "declared UTF-8, is really
-/// Windows-1252, and the parser substituted replacement characters". Telling the
-/// user which one they have is the point of rule EPUB-E050.
-/// </remarks>
+/// <summary>Determines an XML document's encoding from its bytes.</summary>
 public static class XmlEncodingDetector
 {
     private static ReadOnlySpan<byte> Utf8Bom => [0xEF, 0xBB, 0xBF];
@@ -144,13 +127,6 @@ public static class XmlEncodingDetector
     /// <param name="text">The document text, without a byte order mark.</param>
     /// <param name="info">The result of <see cref="Detect"/>.</param>
     /// <returns>The document's bytes.</returns>
-    /// <remarks>
-    /// The exact inverse of <see cref="Decode"/>, and here beside it so the pair
-    /// cannot drift. A BOM is restored when the original had one and not added
-    /// when it did not: removing one is a change to the file that no edit asked
-    /// for and that some readers depend on, and adding one to a file that lacked
-    /// it is the same mistake in reverse.
-    /// </remarks>
     public static byte[] Encode(string text, XmlEncodingInfo info)
     {
         Throw.IfNull(text);
@@ -205,13 +181,6 @@ public static class XmlEncodingDetector
     /// <summary>
     /// Extracts the <c>encoding</c> pseudo-attribute from the XML declaration.
     /// </summary>
-    /// <remarks>
-    /// The declaration is guaranteed to be ASCII-compatible in its own
-    /// character repertoire, so it can be read without knowing the encoding
-    /// yet — which is the whole point, since the declaration is how you find
-    /// out. For BOM-less UTF-16 the bytes interleave with nulls, detected here
-    /// by looking at the shape of the opening angle bracket.
-    /// </remarks>
     private static string? ReadDeclaredEncoding(ReadOnlySpan<byte> bytes, Encoding? bomEncoding)
     {
         if (bytes.Length < 6)

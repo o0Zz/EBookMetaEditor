@@ -1,4 +1,4 @@
-using Microsoft.Win32;
+﻿using Microsoft.Win32;
 
 namespace EBookMeta.App;
 
@@ -9,21 +9,7 @@ internal static class ShellRegistration
 {
     private const string VerbKeyName = "EBookMetaEditorEdit";
 
-    /// <summary>
-    /// The extensions EBookMetaEditor can actually open.
-    /// </summary>
-    /// <remarks>
-    /// Built from the registry rather than listed here, so a new format brings its
-    /// extensions to the context menu with it and this cannot fall out of step with
-    /// what the app can open.
-    /// <para>
-    /// <c>.fb2.zip</c> is absent because <c>Fb2Format</c> declares no extension for
-    /// its zipped instance: a compound extension is not something
-    /// <c>SystemFileAssociations</c> can key on, and registering <c>.zip</c> would
-    /// put this app's verb on every archive on the machine. Those files open by
-    /// drag-and-drop or through the Open dialog instead.
-    /// </para>
-    /// </remarks>
+    /// <summary>The extensions EBookMetaEditor can actually open.</summary>
     internal static IReadOnlyList<string> SupportedExtensions { get; } =
     [
         .. BookFormats.All
@@ -94,19 +80,14 @@ internal static class ShellRegistration
         using RegistryKey verb = Registry.CurrentUser.CreateSubKey(VerbPath(extension))
             ?? throw new IOException($"Could not create the registry key for {extension}.");
 
-        // Written in the interface language, because Explorer shows this text and
-        // has no way to ask what it should say. It is a stored string rather than
-        // a live lookup, so changing language re-registers rather than repainting:
-        // that happens in SettingsForm.Commit, and only while the entry exists.
+        // Explorer shows this text and cannot ask what it should say, so it is stored,
+        // not looked up live — changing language re-registers in SettingsForm.Commit.
         verb.SetValue(null, Strings.Get("shell.verb"));
         verb.SetValue("Icon", exe + ",0");
 
-        // Asks Explorer to invoke the verb once with the whole selection rather
-        // than once per file, which is what makes right-clicking thirty comics open
-        // one window with thirty rows. "Player" is the value media players use for
-        // exactly this. It is a request, not a guarantee — Explorer still falls back
-        // to one process per file beyond its own item limit, and on those the
-        // single-instance forwarding in SingleInstance does the same job.
+        // Asks Explorer to invoke the verb once with the whole selection instead of
+        // once per file. A request, not a guarantee — past Explorer's own item limit
+        // it forks per file, and SingleInstance forwarding covers that.
         verb.SetValue("MultiSelectModel", "Player");
 
         using RegistryKey command = verb.CreateSubKey("command")

@@ -3,9 +3,7 @@ using EBookMeta.Containers;
 
 namespace EBookMeta.Tests.Builders;
 
-/// <summary>
-/// Generates synthetic comic archives for the corpus.
-/// </summary>
+/// <summary>Generates synthetic comic archives for the corpus.</summary>
 internal sealed class CbzBuilder
 {
     private readonly List<Entry> _extraEntries = [];
@@ -86,12 +84,6 @@ internal sealed class CbzBuilder
     /// Builds the archive into the given container, so one set of fixtures serves
     /// both comic formats.
     /// </summary>
-    /// <remarks>
-    /// A CBT differs from a CBZ only in the container, so every <c>With*</c>
-    /// method here means the same thing for both. Splitting this into a second
-    /// builder would have duplicated the fixture documents and left the two free
-    /// to drift.
-    /// </remarks>
     internal string WriteTo(string path, ContainerKind kind)
     {
         List<PendingEntry> entries = BuildEntries();

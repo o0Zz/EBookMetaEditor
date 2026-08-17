@@ -261,16 +261,7 @@ public sealed class MobiTests
         Assert.Equal(File.ReadAllBytes(source), File.ReadAllBytes(target));
     }
 
-    /// <summary>
-    /// A save propagates the fields the user edited, and only those.
-    /// </summary>
-    /// <remarks>
-    /// The two halves of a joint file often disagree about more than the title:
-    /// kindlegen fills the KF8 header sparsely and leaves the MOBI 6 one rich.
-    /// Writing the metadata the user was shown into both would delete every field
-    /// the older half has and the newer one lacks — on a save that may not have
-    /// edited anything at all.
-    /// </remarks>
+    /// <summary>A save propagates the fields the user edited, and only those.</summary>
     [Fact]
     public void Saving_a_joint_file_does_not_overwrite_one_half_with_the_other()
     {

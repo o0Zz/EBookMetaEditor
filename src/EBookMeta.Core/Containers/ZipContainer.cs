@@ -7,9 +7,7 @@ using System.Text;
 
 namespace EBookMeta.Containers;
 
-/// <summary>
-/// A ZIP container — the storage behind EPUB, CBZ and FB2.ZIP.
-/// </summary>
+/// <summary>A ZIP container — the storage behind EPUB, CBZ and FB2.ZIP.</summary>
 public sealed class ZipContainer : IContainer
 {
     private readonly ZipArchive _archive;
@@ -46,25 +44,12 @@ public sealed class ZipContainer : IContainer
     public string? Path { get; }
 
     /// <inheritdoc />
-    /// <remarks>
-    /// Comic archives sometimes store a ComicBookLover JSON blob here.
-    /// <c>System.IO.Compression</c> cannot write archive comments, so
-    /// <see cref="Rebuild"/> does not reproduce this — which is why
-    /// <c>CbzFormat</c> refuses to write a file that has one rather than
-    /// dropping it.
-    /// </remarks>
     public string? ArchiveComment { get; }
 
     /// <summary>
     /// Whether every entry uses a compression method this build can reproduce
     /// exactly, meaning stored or deflate.
     /// </summary>
-    /// <remarks>
-    /// <see langword="false"/> means a rebuild cannot be byte-faithful: an
-    /// entry compressed with bzip2, LZMA or Zstandard would be re-emitted as
-    /// deflate, because <c>System.IO.Compression</c> writes nothing else.
-    /// Callers warn rather than silently re-encoding.
-    /// </remarks>
     public bool AllEntriesUseReproducibleCompression { get; }
 
     /// <summary>Opens a ZIP container from a file path.</summary>
@@ -107,10 +92,8 @@ public sealed class ZipContainer : IContainer
 
         try
         {
-            // A disagreement between our structural read and ZipArchive's means
-            // we do not understand this file's layout. Rebuilding it would risk
-            // pairing the wrong compression method onto the wrong entry, so
-            // refuse rather than guess — reported to the user as GEN-F001.
+            // Disagreeing with ZipArchive on entry count means we do not understand the
+            // layout, and a rebuild could pair the wrong method onto the wrong entry.
             if (directory.Records.Count != archive.Entries.Count)
             {
                 throw new BookFormatException(
@@ -190,20 +173,10 @@ public sealed class ZipContainer : IContainer
         Create(entries, targetPath);
     }
 
-    /// <summary>
-    /// Writes a ZIP containing the given entries, in the order given.
-    /// </summary>
+    /// <summary>Writes a ZIP containing the given entries, in the order given.</summary>
     /// <param name="entries">The entries to write, in order.</param>
     /// <param name="targetPath">The file to create.</param>
     /// <exception cref="BookIoException">The target could not be written.</exception>
-    /// <remarks>
-    /// SharpCompress rather than <c>System.IO.Compression</c> for one specific
-    /// reason: on .NET Framework, <c>CompressionLevel.NoCompression</c> produces
-    /// deflate at level 0 (method 8), not a <em>stored</em> entry. An EPUB whose
-    /// <c>mimetype</c> is method 8 is rejected by readers, and there is no way to
-    /// express the difference through the framework's ZIP writer. Reading stays on
-    /// <c>ZipArchive</c>, which has no equivalent gap.
-    /// </remarks>
     public static void Create(IEnumerable<PendingEntry> entries, string targetPath)
     {
         Throw.IfNull(entries);
@@ -289,15 +262,6 @@ internal sealed record ZipCentralDirectoryRecord
 /// A minimal, read-only parser for a ZIP's end-of-central-directory and central
 /// directory records.
 /// </summary>
-/// <remarks>
-/// This exists because <c>ZipArchiveEntry</c> does not expose the compression
-/// method, and preserving it per entry is a hard invariant. Comparing that type's
-/// <c>CompressedLength</c> to its <c>Length</c> is not a sound substitute — a deflate
-/// stream can equal or exceed its input, so that heuristic misreports exactly the
-/// case rule EPUB-E040 cares most about. Structure only, never content: the two
-/// views are paired by index rather than by name, because ZIP does not guarantee
-/// unique names and malformed archives in the wild do repeat them.
-/// </remarks>
 internal sealed class ZipCentralDirectory
 {
     private const uint EocdSignature = 0x06054B50;
@@ -328,9 +292,7 @@ internal sealed class ZipCentralDirectory
     /// </summary>
     internal string? ArchiveComment { get; }
 
-    /// <summary>
-    /// Parses the central directory of an open, seekable ZIP stream.
-    /// </summary>
+    /// <summary>Parses the central directory of an open, seekable ZIP stream.</summary>
     /// <param name="stream">A readable, seekable stream positioned anywhere.</param>
     /// <param name="path">The file path, for error messages only.</param>
     /// <returns>The parsed directory.</returns>
@@ -464,15 +426,7 @@ internal sealed class ZipCentralDirectory
         return (cdOffset, cdSize, entryCount);
     }
 
-    /// <summary>
-    /// Finds the end-of-central-directory record, scanning backwards.
-    /// </summary>
-    /// <remarks>
-    /// Backwards because the signature can legitimately occur inside the
-    /// archive comment that follows it, and the real record is the last one.
-    /// The comment length is then cross-checked against the remaining bytes,
-    /// which rejects a coincidental match inside a comment.
-    /// </remarks>
+    /// <summary>Finds the end-of-central-directory record, scanning backwards.</summary>
     private static int FindEocd(ReadOnlySpan<byte> tail)
     {
         for (int i = tail.Length - EocdFixedSize; i >= 0; i--)
@@ -526,11 +480,8 @@ internal sealed class ZipCentralDirectory
                 header.Slice(CentralFileHeaderFixedSize, nameLength),
                 utf8: (flags & 0x0800) != 0);
 
-            // Sizes are deliberately not read. A ZIP64 record saturates them and
-            // puts the real values in an extra field, so taking them at face value
-            // would be wrong — and nothing here needs them: the entry's authoritative
-            // length comes from ZipArchive, and this parser exists only to recover the
-            // compression method that ZipArchiveEntry does not expose.
+            // Sizes deliberately not read: ZIP64 saturates them and puts the real values
+            // in an extra field. Only the compression method is wanted here.
             records.Add(new ZipCentralDirectoryRecord
             {
                 Name = name,
@@ -550,11 +501,6 @@ internal sealed class ZipCentralDirectory
     /// covers effectively every ebook and comic entry name, and never throws on
     /// the bytes that differ.
     /// </summary>
-    /// <remarks>
-    /// Names parsed here are used for diagnostics and cross-checking only. The
-    /// authoritative name for each entry comes from <c>ZipArchive</c>, so a
-    /// disagreement in this fallback cannot corrupt a rebuild.
-    /// </remarks>
     private static string DecodeName(ReadOnlySpan<byte> bytes, bool utf8) =>
         utf8 ? Encoding.UTF8.GetString(bytes) : Encodings.Latin1.GetString(bytes);
 }

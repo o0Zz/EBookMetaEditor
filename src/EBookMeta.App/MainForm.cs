@@ -3,9 +3,7 @@ using EBookMeta.Model;
 
 namespace EBookMeta.App;
 
-/// <summary>
-/// The editor window: open a file, fix its metadata, save, close.
-/// </summary>
+/// <summary>The editor window: open a file, fix its metadata, save, close.</summary>
 internal sealed class MainForm : Form, IPathReceiver
 {
     private readonly AppSettings _settings;
@@ -26,17 +24,13 @@ internal sealed class MainForm : Form, IPathReceiver
         BackColor = SystemColors.ControlLight,
     };
 
-    /// <summary>
-    /// Every text field paired with the model field it edits.
-    /// </summary>
+    /// <summary>Every text field paired with the model field it edits.</summary>
     private readonly (MetadataField Field, TextBox Box)[] _fields;
 
     private readonly StatusStrip _status = new();
     private readonly ToolStripStatusLabel _statusText = new() { Spring = true, TextAlign = ContentAlignment.MiddleLeft };
 
-    /// <summary>
-    /// How to re-label every piece of fixed prose in the window.
-    /// </summary>
+    /// <summary>How to re-label every piece of fixed prose in the window.</summary>
     private readonly List<Action> _relabel = [];
 
     private readonly ToolStripMenuItem _saveItem;
@@ -96,10 +90,8 @@ internal sealed class MainForm : Form, IPathReceiver
             }
         };
 
-        // Only forwarded paths are debounced, never the one from the command line:
-        // delaying the ordinary right-click by half a second to see whether more
-        // files are coming would spend the entire startup budget waiting for
-        // something that usually never arrives.
+        // Only forwarded paths are debounced, never argv: delaying the ordinary
+        // right-click would spend the whole startup budget on a maybe.
         _handover.Interval = 600;
         _handover.Tick += (_, _) => HandOverToBatch();
 
@@ -130,11 +122,8 @@ internal sealed class MainForm : Form, IPathReceiver
 
         BuildLayout(menu);
 
-        // Opened from OnShown rather than here. The window must exist before a
-        // message box or the repair dialog can be parented to it, and a
-        // constructor cannot BeginInvoke: the handle is not created yet, so it
-        // throws rather than deferring. Since argv[0] is how the Explorer verb
-        // launches the app, that path is the normal one, not the exceptional one.
+        // Opened from OnShown: a dialog needs a window to parent to, and a constructor
+        // cannot BeginInvoke because the handle does not exist yet.
         _initialPath = initialPath;
     }
 
@@ -153,9 +142,7 @@ internal sealed class MainForm : Form, IPathReceiver
         Open(path);
     }
 
-    /// <summary>
-    /// A menu item whose label follows the interface language.
-    /// </summary>
+    /// <summary>A menu item whose label follows the interface language.</summary>
     private ToolStripMenuItem Item(string key, Action? action = null, Keys shortcut = Keys.None)
     {
         var item = new ToolStripMenuItem();
@@ -221,9 +208,7 @@ internal sealed class MainForm : Form, IPathReceiver
         Localize();
     }
 
-    /// <summary>
-    /// Puts every fixed label into the current language.
-    /// </summary>
+    /// <summary>Puts every fixed label into the current language.</summary>
     private void Localize()
     {
         foreach (Action relabel in _relabel)
@@ -282,9 +267,7 @@ internal sealed class MainForm : Form, IPathReceiver
         OpenBatch(dialog.FileNames);
     }
 
-    /// <summary>
-    /// The file-dialog filter, assembled rather than translated whole.
-    /// </summary>
+    /// <summary>The file-dialog filter, assembled rather than translated whole.</summary>
     internal static string BookFilter() =>
         $"{Strings.Get("filter.supported")}|{AllPatterns}"
         + $"|{Strings.Get("filter.epub")}|*.epub"
@@ -326,9 +309,7 @@ internal sealed class MainForm : Form, IPathReceiver
         _handover.Start();
     }
 
-    /// <summary>
-    /// Deals with everything that arrived while the timer was running.
-    /// </summary>
+    /// <summary>Deals with everything that arrived while the timer was running.</summary>
     private void HandOverToBatch()
     {
         _handover.Stop();
@@ -353,11 +334,8 @@ internal sealed class MainForm : Form, IPathReceiver
 
         string[] all = _book is null ? arrived : [_book.Path, .. arrived];
 
-        // Ownership moves to the grid rather than being copied. A window still
-        // holding a Book for a file the grid now owns would hand that same file to
-        // the *next* selection as well — which is how the first selection's first
-        // book turned up at the top of the second selection's window, edited in two
-        // places, last save winning.
+        // Ownership moves to the grid, not copied: a window still holding a Book the
+        // grid owns would hand the same file to the next selection too.
         Release();
 
         // The grid *is* what the user right-clicked for, so this window has nothing
@@ -384,9 +362,7 @@ internal sealed class MainForm : Form, IPathReceiver
         SetStatus(Strings.Get("main.status.begin"));
     }
 
-    /// <summary>
-    /// Opens the batch grid over the given paths and steps out of its way.
-    /// </summary>
+    /// <summary>Opens the batch grid over the given paths and steps out of its way.</summary>
     /// <param name="paths">The files to edit.</param>
     /// <param name="thenClose">
     /// Whether closing the grid ends the session. True when the grid is the whole
@@ -401,11 +377,8 @@ internal sealed class MainForm : Form, IPathReceiver
 
         batch.FormClosed += (closed, _) =>
         {
-            // Never while another grid is still open: this window is what
-            // Application.Run was handed, so both coming back and closing would be
-            // wrong — one puts a window under the user's mouse whose closing ends
-            // the process, the other ends it outright, and either way that grid's
-            // unsaved edits go with it.
+            // Never while another grid is open: Application.Run was handed this
+            // window, so either answer takes that grid's unsaved edits with it.
             if (IsDisposed || AnyBatchOpen(closed))
             {
                 return;
@@ -445,13 +418,10 @@ internal sealed class MainForm : Form, IPathReceiver
     /// <inheritdoc />
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
-        // This window is what Application.Run was handed, so it is the process's
-        // lifetime: closing it while a grid is open ends the message loop and
-        // disposes that grid without ever asking about its unsaved edits. Step
-        // aside instead — it comes back when the last grid closes.
-        //
-        // Only when it is on screen. Hidden means a grid is closing and asked this
-        // window to end the session, which is the one close that must go through.
+        // Application.Run was handed this window, so closing it while a grid is open
+        // would end the message loop and discard that grid's unsaved edits. Hidden
+        // means a grid asked to end the session, which is the one close that goes
+        // through.
         if (e.CloseReason == CloseReason.UserClosing && Visible && AnyBatchOpen(null))
         {
             e.Cancel = true;
@@ -488,10 +458,8 @@ internal sealed class MainForm : Form, IPathReceiver
         {
             Log.Warning(ex.Message);
 
-            // Naming the format precisely is the point: "this .cbz is really
-            // a 7z archive" is more useful than "unsupported file". The
-            // format's own name is not translated — it is what the format is
-            // called everywhere.
+            // Naming the format is the point: "this .cbz is really a 7z" beats
+            // "unsupported file". The format name itself is never translated.
             string name = ex.Detected.Format.DisplayName();
 
             MessageBox.Show(
@@ -526,14 +494,7 @@ internal sealed class MainForm : Form, IPathReceiver
         ShowCover(m.Cover);
     }
 
-    /// <summary>
-    /// Decodes and shows the cover off the UI thread.
-    /// </summary>
-    /// <remarks>
-    /// Decoding a multi-megabyte JPEG on the UI thread is exactly the kind of
-    /// thing that turns a 400 ms launch into a visible stall, and it is avoidable
-    /// because the cover is not needed for the window to be usable.
-    /// </remarks>
+    /// <summary>Decodes and shows the cover off the UI thread.</summary>
     private void ShowCover(CoverImage? cover)
     {
         Image? previous = _cover.Image;
@@ -569,9 +530,7 @@ internal sealed class MainForm : Form, IPathReceiver
         });
     }
 
-    /// <summary>
-    /// Disables inputs the format cannot store.
-    /// </summary>
+    /// <summary>Disables inputs the format cannot store.</summary>
     private void ApplyCapabilities(FormatCapabilities capabilities)
     {
         foreach ((MetadataField field, TextBox box) in _fields)

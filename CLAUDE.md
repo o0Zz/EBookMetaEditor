@@ -808,10 +808,22 @@ a product requirement — the whole point is right-click, fix, close.
 - Nullable enabled, `TreatWarningsAsErrors=true` in Core.
 - No `async void` outside event handlers.
 - Core throws typed exceptions and never writes to the console.
-- Comments explain *why*, especially around ZIP and encoding — they look like
-  mistakes to anyone who has not been bitten.
-- Public Core API documented. `GenerateDocumentationFile` plus
-  `TreatWarningsAsErrors` means a missing doc comment fails the build.
+### Comments are sparse. This is a hard rule.
+
+- **Comment only what would otherwise read as a mistake** — a ZIP quirk, an encoding
+  trap, a deliberate choice that looks wrong. Everything else has no comment. Never
+  explain *what* the code does; the code says that.
+- **One or two lines.** If a comment needs a paragraph, the reasoning belongs in this
+  file, once, not repeated at the call site. Do not write `<remarks>` essays
+  recounting why a decision was made, what was considered instead, or what a reader
+  should not do. There is no prize for prose.
+- **A change to code must not arrive with a bigger change to comments.** If a diff is
+  mostly comment churn, delete the comments and resubmit.
+- Public Core API needs a doc comment or the build fails
+  (`GenerateDocumentationFile` + `TreatWarningsAsErrors`). Satisfy it with a single
+  `<summary>` line. Add `<param>` / `<returns>` only where the name does not already
+  say it — and note `<param>` is all-or-nothing per member, or the build warns.
+  `<exception>` for what a caller must catch. `<remarks>` almost never.
 
 ## Working style for Claude
 
