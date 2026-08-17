@@ -110,9 +110,9 @@ internal sealed class MainForm : Form, IPathReceiver
         // Labelled "?" as the help menu, the convention this app follows. Holds
         // the log and the About box.
         ToolStripMenuItem help = Item("menu.help");
-        help.DropDownItems.Add(Item("menu.help.log", ShowLog, Keys.Control | Keys.L));
+        help.DropDownItems.Add(Item("menu.help.log", () => Dialogs.ShowLog(this), Keys.Control | Keys.L));
         help.DropDownItems.Add(new ToolStripSeparator());
-        help.DropDownItems.Add(Item("menu.help.about", ShowAbout));
+        help.DropDownItems.Add(Item("menu.help.about", () => Dialogs.ShowAbout(this)));
 
         var menu = new MenuStrip();
         menu.Items.Add(file);
@@ -578,18 +578,6 @@ internal sealed class MainForm : Form, IPathReceiver
         {
             MetadataFields.Apply(m, field, box.Text);
         }
-    }
-
-    private void ShowLog()
-    {
-        using var form = new LogForm();
-        form.ShowDialog(this);
-    }
-
-    private void ShowAbout()
-    {
-        using var form = new AboutForm();
-        form.ShowDialog(this);
     }
 
     private void ShowSettings()

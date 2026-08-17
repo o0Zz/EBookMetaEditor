@@ -51,7 +51,7 @@ public sealed class RawContainer : IContainer
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
         {
-            throw new BookIoException($"Could not open '{path}' for reading.", path, ex);
+            throw new BookIoException($"Could not open '{path}' for reading.", ex);
         }
 
         try
@@ -80,7 +80,7 @@ public sealed class RawContainer : IContainer
 
         if (!stream.CanSeek)
         {
-            throw new BookFormatException("A raw file must be read from a seekable stream.", path);
+            throw new BookFormatException("A raw file must be read from a seekable stream.");
         }
 
         var entry = new ContainerEntry
@@ -145,8 +145,7 @@ public sealed class RawContainer : IContainer
         if (pending.Count != 1)
         {
             throw new BookFormatException(
-                $"A raw file holds exactly one document, but {pending.Count} were supplied.",
-                targetPath);
+                $"A raw file holds exactly one document, but {pending.Count} were supplied.");
         }
 
         try
@@ -159,7 +158,7 @@ public sealed class RawContainer : IContainer
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            throw new BookIoException($"Could not write '{targetPath}'.", targetPath, ex);
+            throw new BookIoException($"Could not write '{targetPath}'.", ex);
         }
     }
 

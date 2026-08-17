@@ -12,7 +12,6 @@ internal sealed class CbzBuilder
     private byte[]? _comicInfoBytes;
     private string _comicInfoPath = "ComicInfo.xml";
     private bool _comicInfoFirst = true;
-    private string? _cometXml;
 
     private sealed record Entry(string Name, byte[] Content, bool Stored);
 
@@ -52,13 +51,6 @@ internal sealed class CbzBuilder
         return this;
     }
 
-    /// <summary>Adds a CoMet document alongside <c>ComicInfo.xml</c>.</summary>
-    internal CbzBuilder WithCoMet(string? xml = null)
-    {
-        _cometXml = xml ?? DefaultCoMet;
-        return this;
-    }
-
     /// <summary>Replaces the page images with the given names, in order.</summary>
     internal CbzBuilder WithPages(params string[] names)
     {
@@ -72,10 +64,6 @@ internal sealed class CbzBuilder
         _extraEntries.Add(new Entry(name, content, stored));
         return this;
     }
-
-    /// <summary>Adds a text entry.</summary>
-    internal CbzBuilder WithEntry(string name, string content) =>
-        WithEntry(name, Encoding.UTF8.GetBytes(content));
 
     /// <summary>Builds the archive and writes it to a file.</summary>
     internal string WriteTo(string path) => WriteTo(path, ContainerKind.Zip);
@@ -103,26 +91,6 @@ internal sealed class CbzBuilder
         }
 
         return path;
-    }
-
-    /// <summary>Builds the archive in memory.</summary>
-    internal byte[] Build()
-    {
-        string temp = System.IO.Path.Combine(
-            System.IO.Path.GetTempPath(), "ebookmeta-build-" + Guid.NewGuid().ToString("n") + ".zip");
-
-        try
-        {
-            ZipContainer.Create(BuildEntries(), temp);
-            return File.ReadAllBytes(temp);
-        }
-        finally
-        {
-            if (File.Exists(temp))
-            {
-                File.Delete(temp);
-            }
-        }
     }
 
     /// <summary>
@@ -181,11 +149,6 @@ internal sealed class CbzBuilder
         foreach (string name in _pageNames)
         {
             entries.Add(Deflated(name, PngBuilder.OnePixel));
-        }
-
-        if (_cometXml is not null)
-        {
-            entries.Add(Deflated("comet.xml", Encoding.UTF8.GetBytes(_cometXml)));
         }
 
         foreach (Entry entry in _extraEntries)
@@ -271,12 +234,4 @@ internal sealed class CbzBuilder
         </ComicInfo>
         """;
 
-    /// <summary>A CoMet document that disagrees with <see cref="DefaultComicInfo"/>.</summary>
-    internal const string DefaultCoMet = """
-        <?xml version="1.0" encoding="utf-8"?>
-        <comet xmlns:comet="http://www.denvog.com/comet/">
-          <title>A Different Title</title>
-          <series>Something Else</series>
-        </comet>
-        """;
 }

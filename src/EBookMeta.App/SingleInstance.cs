@@ -48,13 +48,6 @@ internal static class SingleInstance
     /// <returns><see langword="true"/> if they were delivered.</returns>
     internal static bool Forward(string[] paths)
     {
-        if (paths.Length == 0)
-        {
-            // Nothing to say, but the running instance should still come forward,
-            // which is what a bare second launch means.
-            paths = [];
-        }
-
         try
         {
             using var client = new NamedPipeClientStream(

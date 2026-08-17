@@ -1,4 +1,3 @@
-using EBookMeta.Containers;
 using EBookMeta.Model;
 
 namespace EBookMeta;

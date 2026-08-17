@@ -86,7 +86,6 @@ about.title = À propos d'EBookMetaEditor
 about.version = Version {0}
 about.what = Un éditeur de métadonnées rapide pour livres numériques et bandes dessinées. Clic droit sur un fichier, correction des métadonnées, fermeture. Le XML endommagé est réparé à l'ouverture ; le fichier sur le disque n'est modifié qu'à l'enregistrement.
 about.formats = Formats modifiables :
-about.formats.none = (aucun enregistré)
 about.author = By o0Zz (https://github.com/o0Zz/EBookMetaEditor)
 
 log.title = Journal
@@ -125,6 +124,12 @@ batch.cancelled = {0} annulée.
 batch.failed = {0} échouée : {1}
 
 batch.nothingToSave = Aucun fichier n'est coché pour être enregistré.
+batch.saveReport.saved.one = 1 fichier enregistré
+batch.saveReport.saved.many = {0} fichiers enregistrés
+batch.saveReport.unchanged.one = 1 inchangé
+batch.saveReport.unchanged.many = {0} inchangés
+batch.saveReport.failed.one = 1 échec
+batch.saveReport.failed.many = {0} échecs
 
 # Copier-coller. Une valeur collée va dans chaque cellule sélectionnée ; un bloc
 # copié se remplit vers la droite et vers le bas depuis le coin haut-gauche.

@@ -182,12 +182,13 @@ src/EBookMeta.Core/      net48 — all logic. ZERO UI dependencies.
                          MobiFormat (MOBI/PRC + AZW/AZW3) — each holding its own
                          detection, read, write, repairs and metadata document
   Xml/                   XmlEncodingDetector, XmlSourceFormat, XmlExactWriter,
-                         XmlLineIndex
-  Model/                 BookMetadata, Creator, Identifier, SeriesInfo, CoverImage,
-                         UnmappedField, BookDate (which owns date parsing)
+                         XmlLineIndex, XmlTree (tree edits two formats share)
+  Model/                 BookMetadata, Creator, Identifier, SeriesInfo (which owns
+                         series-index text), CoverImage, UnmappedField, BookDate
+                         (which owns date parsing)
 src/EBookMeta.App/       net48 — WinForms, single instance, argv = paths
   Program, MainForm, BatchForm, SettingsForm, LogForm, AboutForm, Dialogs,
-  AppSettings, ShellRegistration, SingleInstance, AppIcon, Strings,
+  AppSettings, ShellRegistration, SingleInstance, AppIcon, Strings, KeyValueFile,
   EmbeddedAssemblies
   Languages/             one key = value file per interface language
 tests/EBookMeta.Core.Tests/  net48
@@ -303,9 +304,11 @@ parallel batch threads. Note what is *not* in `Write`'s signature: no source pat
 No format touches the user's file; it produces a complete new file at a path
 `AtomicFileWriter` supplies.
 
-`FormatCapabilities` declares which model fields a format can store, and **the UI
-reads it to disable fields** so a user never types into a box whose content will be
-discarded. Adding a model field means updating every format — intentional friction.
+`FormatCapabilities` declares which model fields a format can store on write, and
+**the UI reads it to disable fields** so a user never types into a box whose content
+will be discarded. Adding a model field means updating every format — intentional
+friction. It says nothing about reading: a format reads whatever it finds, and a
+second flag set describing that had no reader.
 
 ### Opening a file: every format is asked
 
@@ -377,14 +380,21 @@ most one entry's content — the EPUB `mimetype`, twenty stored bytes.
 ### Metadata model
 
 `BookMetadata` covers the common 80%: title, sort title, creators (name, sort name,
-role), series + index, description, publisher, dates, language, subjects,
+role), series + index, description, publisher, publication date, language, subjects,
 identifiers, rights, cover.
+
+**One date, not three.** Creation and modification dates were modelled and never
+read by anything — no editor showed them and no format wrote them back. An EPUB 2
+`dc:date` marked `opf:event="creation"` or `"modification"` is therefore skipped on
+read rather than promoted into the publication date, and `dcterms:modified` is not
+read at all. Both survive a save regardless, because nothing goes near the element.
 
 - **Never lose a field you do not understand.** For XML formats this is achieved by
   *not touching the node*: the document retains the parsed tree and mutates only
   elements a field actually changed, so an unrecognised `<meta>` survives because
-  nothing went near it. `UnmappedFields` records such fields for the UI; it is not
-  the preservation mechanism.
+  nothing went near it. `UnmappedFields` records such fields, and the tests assert
+  preservation through it; it is not the preservation mechanism, and no window shows
+  it yet.
 - **Role mapping is lossy and that is accepted.** `ComicInfo`'s Writer / Penciller
   / Inker / Colorist / Letterer / CoverArtist do not map cleanly onto MARC
   relators. Keep the native role string alongside the mapped one and prefer it when
@@ -622,6 +632,10 @@ shows English rather than raw key names.
 
 - **Not .resx.** Satellite assemblies are DLLs in subfolders and this app is one
   file. A plain text file is also something a translator can open.
+- **`KeyValueFile` reads that format, and `settings.txt` uses it too.** The settings
+  were a hand-rolled JSON object and a 67-line scanner for three keys — a language
+  code, a bool and a `;`-joined extension list. Two text formats in one 200 KB exe
+  was one too many.
 - **Adding a language is adding a file.** The picker is built from what is
   embedded and the csproj globs `Languages\*.lang`. `WithCulture=false` on that
   item is load-bearing — without it MSBuild builds a satellite assembly.
@@ -705,6 +719,28 @@ Required coverage:
 
 Repair and write tests assert on exact resulting bytes, so an accidental reformat
 fails loudly.
+
+**Line endings are load-bearing in this project.** `.gitattributes` normalises every
+text file to LF and `.editorconfig` agrees, and the builders hold their fixtures in
+C# raw string literals — which capture the *source file's* own newlines. A tool that
+rewrites a builder as CRLF therefore changes the bytes of every fixture it builds,
+`Fb2Tests.Saving_without_editing_is_byte_identical` fails on a doubled `\r\r\n`, and
+`git diff` shows nothing because git normalises on read. Check the working copy, not
+the diff.
+
+Four gaps, known and deliberately open — the builder options that could have covered
+the first two had no test behind them and were removed rather than left as scaffolding:
+
+- **a missing `mimetype`.** EPUB-E040 covers "missing, compressed, or not first";
+  only compressed and not-first are tested.
+- **reading CoMet.** `comet.xml` is read for cross-checking and no fixture carries
+  one; the CBZ test only proves a `<comet>` root is refused as a `ComicInfo.xml`.
+- **PAX headers.** `TarContainer` handles them — `ReadNameOverride`, `DeclaresPaxSize`
+  and the `HeaderFor` fallback — with no fixture, and bsdtar and macOS `tar` emit PAX
+  by default. It is untested code, not dead code: without it an entry name falls back
+  to the truncated ustar field. Do not delete it.
+- `ZipCompressionMethods.ToName` names stored and deflate only. Anything else reads
+  as `method 12` in a diagnostic, which is what the code says it will do.
 
 ## Dependencies
 
@@ -791,7 +827,9 @@ a product requirement — the whole point is right-click, fix, close.
   XML file with illustrations base64-encoded in, so ten megabytes is ordinary.
   `Fb2Format` locates `<description>`, parses that alone, and splices its serialised
   form back at the offsets it came from. Do not "simplify" it into a whole-document
-  parse — that breaks the budget and invariant 15 in one change.
+  parse — that breaks the budget and invariant 15 in one change. It also keeps one
+  copy of the text and no more: a second, byte-array copy of the whole document was
+  retained per open for a reader that never existed.
 - MOBI reads record 0 and nothing else; the record table gives every other record's
   length without touching it.
 - Decode the cover image off the UI thread.

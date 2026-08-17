@@ -8,7 +8,10 @@ internal sealed class RawTarBuilder
     private const int BlockSize = 512;
 
     private readonly List<Entry> _entries = [];
-    private int _blockingFactor = 20;
+
+    // GNU tar's default, meaning a ten-kilobyte tail that a naive writer replaces
+    // with 1024 bytes.
+    private const int BlockingFactor = 20;
 
     private sealed record Entry(
         string Name,
@@ -35,17 +38,18 @@ internal sealed class RawTarBuilder
         new(2013, 6, 20, 12, 0, 0, TimeSpan.Zero);
 
     /// <summary>Adds a file entry.</summary>
-    internal RawTarBuilder WithFile(
-        string name,
-        byte[] content,
-        int mode = DefaultMode,
-        int uid = DefaultUid,
-        int gid = DefaultGid,
-        string userName = DefaultUserName,
-        string groupName = DefaultGroupName)
+    internal RawTarBuilder WithFile(string name, byte[] content)
     {
         _entries.Add(new Entry(
-            name, content, mode, uid, gid, userName, groupName, FixedTimestamp, GnuLongName: false));
+            name,
+            content,
+            DefaultMode,
+            DefaultUid,
+            DefaultGid,
+            DefaultUserName,
+            DefaultGroupName,
+            FixedTimestamp,
+            GnuLongName: false));
 
         return this;
     }
@@ -71,16 +75,6 @@ internal sealed class RawTarBuilder
             FixedTimestamp,
             GnuLongName: true));
 
-        return this;
-    }
-
-    /// <summary>
-    /// Sets how many blocks the archive is padded to. GNU tar's default is 20,
-    /// meaning a ten-kilobyte tail that a naive writer replaces with 1024 bytes.
-    /// </summary>
-    internal RawTarBuilder WithBlockingFactor(int blocks)
-    {
-        _blockingFactor = blocks;
         return this;
     }
 
@@ -129,7 +123,7 @@ internal sealed class RawTarBuilder
         output.Write(new byte[BlockSize * 2], 0, BlockSize * 2);
 
         long blocks = output.Length / BlockSize;
-        long padding = (_blockingFactor - (blocks % _blockingFactor)) % _blockingFactor;
+        long padding = (BlockingFactor - (blocks % BlockingFactor)) % BlockingFactor;
 
         if (padding > 0)
         {

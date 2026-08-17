@@ -86,7 +86,6 @@ about.title = Informazioni su EBookMetaEditor
 about.version = Versione {0}
 about.what = Un editor di metadati veloce per libri elettronici e fumetti. Clic destro su un file, correggi i metadati, chiudi. L'XML danneggiato viene riparato all'apertura; il file su disco cambia solo quando salvi.
 about.formats = Formati modificabili:
-about.formats.none = (nessuno registrato)
 about.author = By o0Zz (https://github.com/o0Zz/EBookMetaEditor)
 
 log.title = Registro
@@ -125,6 +124,12 @@ batch.cancelled = {0} annullata.
 batch.failed = {0} non riuscita: {1}
 
 batch.nothingToSave = Nessun file è spuntato per il salvataggio.
+batch.saveReport.saved.one = 1 file salvato
+batch.saveReport.saved.many = {0} file salvati
+batch.saveReport.unchanged.one = 1 non modificato
+batch.saveReport.unchanged.many = {0} non modificati
+batch.saveReport.failed.one = 1 non riuscito
+batch.saveReport.failed.many = {0} non riusciti
 
 # Copia e incolla. Un singolo valore va in ogni cella selezionata; un blocco
 # copiato si riempie verso destra e verso il basso dall'angolo in alto a sinistra.

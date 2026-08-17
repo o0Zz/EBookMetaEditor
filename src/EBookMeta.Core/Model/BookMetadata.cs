@@ -36,15 +36,6 @@ public sealed class BookMetadata
     public BookDate? PublicationDate { get; set; }
 
     /// <summary>
-    /// The date the work was created, where the source distinguishes it from
-    /// publication.
-    /// </summary>
-    public BookDate? CreationDate { get; set; }
-
-    /// <summary>The last-modified date — EPUB 3's <c>dcterms:modified</c>.</summary>
-    public BookDate? ModificationDate { get; set; }
-
-    /// <summary>
     /// The language, as a BCP 47 tag such as <c>en</c>, <c>fr-CA</c> or
     /// <c>zh-Hant</c>. Stored as the source wrote it; rule EPUB-W014 warns when
     /// it is not plausibly well-formed rather than correcting it.

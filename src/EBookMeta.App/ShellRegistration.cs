@@ -98,17 +98,8 @@ internal static class ShellRegistration
         command.SetValue(null, $"\"{exe}\" \"%1\"");
     }
 
-    private static void Unregister(string extension)
-    {
-        try
-        {
-            Registry.CurrentUser.DeleteSubKeyTree(VerbPath(extension), throwOnMissingSubKey: false);
-        }
-        catch (ArgumentException)
-        {
-            // Already absent, which is the state we wanted.
-        }
-    }
+    private static void Unregister(string extension) =>
+        Registry.CurrentUser.DeleteSubKeyTree(VerbPath(extension), throwOnMissingSubKey: false);
 
     private static string VerbPath(string extension) =>
         $@"Software\Classes\SystemFileAssociations\{extension}\shell\{VerbKeyName}";

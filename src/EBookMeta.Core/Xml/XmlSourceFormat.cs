@@ -81,15 +81,8 @@ internal sealed class XmlSourceFormat
     /// <param name="newLine">The line ending to use.</param>
     /// <returns>Formatting for a new document.</returns>
     internal static XmlSourceFormat ForNewDocument(
-        XmlEncodingInfo encoding, string declarationText, string newLine)
-    {
-        Throw.IfNull(encoding);
-        Throw.IfNullOrEmpty(declarationText);
-        Throw.IfNullOrEmpty(newLine);
-
-        return new XmlSourceFormat(
-            encoding, declarationText, newLine, newLine, selfClosingHasSpace: false, newLine);
-    }
+        XmlEncodingInfo encoding, string declarationText, string newLine) =>
+        new(encoding, declarationText, newLine, newLine, selfClosingHasSpace: false, newLine);
 
     /// <summary>Serialises a document back to bytes in its original shape.</summary>
     /// <param name="root">The root element, or null for an empty document.</param>

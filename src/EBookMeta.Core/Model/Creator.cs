@@ -47,12 +47,6 @@ public sealed record Creator
     /// <summary>Whether this is a primary creator or a secondary contributor.</summary>
     public CreatorKind Kind { get; init; } = CreatorKind.Creator;
 
-    /// <summary>
-    /// The <c>id</c> attribute this creator carried in the source document, when
-    /// the format has such a thing.
-    /// </summary>
-    public string? SourceId { get; init; }
-
     /// <summary>Returns the display name, for diagnostics.</summary>
     public override string ToString() => Name;
 }

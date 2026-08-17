@@ -26,12 +26,6 @@ public sealed record UnmappedField
     /// </summary>
     public string? Text { get; init; }
 
-    /// <summary>
-    /// The verbatim payload, for record-based binary formats where these bytes
-    /// are the only surviving copy and must be written back unchanged.
-    /// </summary>
-    public byte[]? Bytes { get; init; }
-
     /// <summary>Returns "Source/Key = Text", for diagnostics.</summary>
     public override string ToString() =>
         $"{Source}/{Key}{(Text is null ? "" : $" = {Text}")}";

@@ -139,13 +139,6 @@ public sealed record ContainerEntry
     /// </summary>
     public bool IsDirectory { get; init; }
 
-    /// <summary>
-    /// <see langword="true"/> when <see cref="CompressionMethod"/> is one this
-    /// build can reproduce on write: stored or deflate.
-    /// </summary>
-    public bool IsReproducibleCompression =>
-        CompressionMethod is ZipCompressionMethods.Stored or ZipCompressionMethods.Deflate;
-
     /// <summary>Returns the name and size, for diagnostics.</summary>
     public override string ToString() => $"{Name} ({Length} bytes, method {CompressionMethod})";
 
@@ -187,21 +180,6 @@ public static class ZipCompressionMethods
     /// <summary>Deflate — the method essentially every other entry uses.</summary>
     public const ushort Deflate = 8;
 
-    /// <summary>Deflate64. Readable by some tools, not writable here.</summary>
-    public const ushort Deflate64 = 9;
-
-    /// <summary>bzip2.</summary>
-    public const ushort BZip2 = 12;
-
-    /// <summary>LZMA.</summary>
-    public const ushort Lzma = 14;
-
-    /// <summary>Zstandard.</summary>
-    public const ushort Zstd = 93;
-
-    /// <summary>XZ.</summary>
-    public const ushort Xz = 95;
-
     /// <summary>Returns a human-readable name for a method code.</summary>
     /// <param name="method">A ZIP compression method code.</param>
     /// <returns>The method's usual name, or <c>method N</c> if unrecognised.</returns>
@@ -209,11 +187,6 @@ public static class ZipCompressionMethods
     {
         Stored => "stored",
         Deflate => "deflate",
-        Deflate64 => "deflate64",
-        BZip2 => "bzip2",
-        Lzma => "lzma",
-        Zstd => "zstd",
-        Xz => "xz",
         _ => $"method {method}",
     };
 }

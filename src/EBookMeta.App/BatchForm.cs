@@ -210,9 +210,9 @@ internal sealed class BatchForm : Form, IPathReceiver
         edit.DropDownItems.Add(Item("menu.edit.number", NumberSelection, Keys.Control | Keys.I));
 
         ToolStripMenuItem help = Item("menu.help");
-        help.DropDownItems.Add(Item("menu.help.log", ShowLog, Keys.Control | Keys.L));
+        help.DropDownItems.Add(Item("menu.help.log", () => Dialogs.ShowLog(this), Keys.Control | Keys.L));
         help.DropDownItems.Add(new ToolStripSeparator());
-        help.DropDownItems.Add(Item("menu.help.about", ShowAbout));
+        help.DropDownItems.Add(Item("menu.help.about", () => Dialogs.ShowAbout(this)));
 
         // Named explicitly: a bare MenuStrip takes its accessible name from the
         // nearest label, which is whatever text happens to sit next to it — so a
@@ -1045,7 +1045,31 @@ internal sealed class BatchForm : Form, IPathReceiver
         RunInBackground(
             "batch.verb.saving",
             "Saving",
-            (progress, token) => _session.Save(keepBackup, progress, token).ToString());
+            (progress, token) => Describe(_session.Save(keepBackup, progress, token)));
+    }
+
+    /// <summary>
+    /// The save report as a status line. <c>BatchSaveReport.ToString</c> is the log's
+    /// English form; this one is the window's.
+    /// </summary>
+    private static string Describe(BatchSaveReport report)
+    {
+        var parts = new List<string>
+        {
+            Strings.Plural("batch.saveReport.saved", report.Saved, report.Saved),
+        };
+
+        if (report.Skipped > 0)
+        {
+            parts.Add(Strings.Plural("batch.saveReport.unchanged", report.Skipped, report.Skipped));
+        }
+
+        if (report.Failed > 0)
+        {
+            parts.Add(Strings.Plural("batch.saveReport.failed", report.Failed, report.Failed));
+        }
+
+        return string.Join(" · ", parts);
     }
 
     /// <summary>
@@ -1236,18 +1260,6 @@ internal sealed class BatchForm : Form, IPathReceiver
         {
             AcceptPaths(dropped);
         }
-    }
-
-    private void ShowLog()
-    {
-        using var form = new LogForm();
-        form.ShowDialog(this);
-    }
-
-    private void ShowAbout()
-    {
-        using var form = new AboutForm();
-        form.ShowDialog(this);
     }
 
     /// <inheritdoc />

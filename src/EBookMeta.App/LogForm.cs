@@ -161,11 +161,6 @@ internal sealed class LogForm : Form
 
     private void CopyAll()
     {
-        if (_text.TextLength == 0)
-        {
-            return;
-        }
-
         try
         {
             Clipboard.SetText(_text.Text);

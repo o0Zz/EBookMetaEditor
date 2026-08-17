@@ -159,7 +159,7 @@ public sealed class RarContainer : IContainer
         }
         catch (Exception ex) when (IsUnreadable(ex))
         {
-            throw new BookFormatException($"'{path}' is not a readable RAR archive.", path, ex);
+            throw new BookFormatException($"'{path}' is not a readable RAR archive.", ex);
         }
 
         try
@@ -174,7 +174,7 @@ public sealed class RarContainer : IContainer
                     + "be read either.";
 
                 Log.Rule(LogLevel.Error, "CBR-F001", Reason, path);
-                throw new BookFormatException(Reason, path);
+                throw new BookFormatException(Reason);
             }
 
             if (archive.IsEncrypted)
@@ -184,7 +184,7 @@ public sealed class RarContainer : IContainer
                     + "password.";
 
                 Log.Rule(LogLevel.Error, "CBR-F001", Reason, path);
-                throw new BookFormatException(Reason, path);
+                throw new BookFormatException(Reason);
             }
 
             // Materialised once so an entry's Index keeps addressing the same archive
@@ -228,7 +228,7 @@ public sealed class RarContainer : IContainer
         {
             archive.Dispose();
             throw new BookFormatException(
-                $"'{path}' could not be read as a RAR archive.", path, ex);
+                $"'{path}' could not be read as a RAR archive.", ex);
         }
         catch
         {
@@ -256,7 +256,7 @@ public sealed class RarContainer : IContainer
         catch (Exception ex) when (IsUnreadable(ex))
         {
             throw new BookFormatException(
-                $"Entry '{entry.Name}' could not be decompressed.", entry.Name, ex);
+                $"Entry '{entry.Name}' could not be decompressed.", ex);
         }
     }
 
@@ -280,7 +280,7 @@ public sealed class RarContainer : IContainer
                 + "found on this computer. The file was not changed. (You need to install https://www.win-rar.com/)";
 
             Log.Rule(LogLevel.Error, "CBR-F002", Reason, Path);
-            throw new BookFormatException(Reason, Path);
+            throw new BookFormatException(Reason);
         }
 
         Log.Debug($"Using the RAR archiver at '{tool}'.");
@@ -315,17 +315,13 @@ public sealed class RarContainer : IContainer
             List<string> names = Stage(entries, staging);
             Run(tool, staging, System.IO.Path.GetFullPath(targetPath), names, stored);
         }
-        catch (BookFormatException)
-        {
-            throw;
-        }
         catch (Exception ex) when (IsWriteFailure(ex))
         {
             // One answer for every cause, on purpose — see IsWriteFailure. The
             // particulars go here because the message withholds them.
             Log.Debug($"Could not write '{targetPath}': {ex.GetType().Name}: {ex.Message}");
 
-            throw new BookIoException($"Could not write '{targetPath}'.", targetPath, ex);
+            throw new BookIoException($"Could not write '{targetPath}'.", ex);
         }
         finally
         {
@@ -356,8 +352,7 @@ public sealed class RarContainer : IContainer
             {
                 throw new BookFormatException(
                     $"Entry '{pending.Name}' is absolute or escapes the archive, so it "
-                    + "cannot be written. Nothing was changed.",
-                    pending.Name);
+                    + "cannot be written. Nothing was changed.");
             }
 
             string relative = pending.Name.Replace('/', System.IO.Path.DirectorySeparatorChar);
@@ -367,7 +362,7 @@ public sealed class RarContainer : IContainer
             if (!full.StartsWith(root + System.IO.Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
             {
                 throw new BookFormatException(
-                    $"Entry '{pending.Name}' does not stay inside the archive.", pending.Name);
+                    $"Entry '{pending.Name}' does not stay inside the archive.");
             }
 
             // RAR records a folder marker with no trailing separator, so IsDirectory is
@@ -386,8 +381,7 @@ public sealed class RarContainer : IContainer
             {
                 throw new BookFormatException(
                     $"Entry '{pending.Name}' appears more than once, which cannot be "
-                    + "reproduced. Nothing was changed.",
-                    pending.Name);
+                    + "reproduced. Nothing was changed.");
             }
 
             string? directory = System.IO.Path.GetDirectoryName(full);

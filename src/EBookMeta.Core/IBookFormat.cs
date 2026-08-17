@@ -151,62 +151,50 @@ public enum MetadataField
     /// <summary>Creator names.</summary>
     Creators = 1 << 2,
 
-    /// <summary>Per-creator sort names.</summary>
-    CreatorSortNames = 1 << 3,
-
     /// <summary>Per-creator roles.</summary>
-    CreatorRoles = 1 << 4,
+    CreatorRoles = 1 << 3,
 
     /// <summary>Series name.</summary>
-    Series = 1 << 5,
+    Series = 1 << 4,
 
     /// <summary>Position within the series.</summary>
-    SeriesIndex = 1 << 6,
+    SeriesIndex = 1 << 5,
 
     /// <summary>Description or synopsis.</summary>
-    Description = 1 << 7,
+    Description = 1 << 6,
 
     /// <summary>Publisher.</summary>
-    Publisher = 1 << 8,
+    Publisher = 1 << 7,
 
     /// <summary>Publication date.</summary>
-    PublicationDate = 1 << 9,
-
-    /// <summary>Modification date.</summary>
-    ModificationDate = 1 << 10,
+    PublicationDate = 1 << 8,
 
     /// <summary>Language.</summary>
-    Language = 1 << 11,
+    Language = 1 << 9,
 
     /// <summary>Subjects, genres or tags.</summary>
-    Subjects = 1 << 12,
+    Subjects = 1 << 10,
 
     /// <summary>Scheme-qualified identifiers.</summary>
-    Identifiers = 1 << 13,
+    Identifiers = 1 << 11,
 
     /// <summary>Rights statement.</summary>
-    Rights = 1 << 14,
+    Rights = 1 << 12,
 
     /// <summary>Cover image.</summary>
-    Cover = 1 << 15,
+    Cover = 1 << 13,
 
     /// <summary>Everything.</summary>
-    All = (1 << 16) - 1,
+    All = (1 << 14) - 1,
 }
 
 /// <summary>
-/// What a format can do with a file: which fields it can read, which it can write,
-/// and whether it can write at all. Both editors read this to disable fields, so a
-/// user never types into a box whose content would be discarded.
+/// What a format can store when it writes, and whether it can write at all. Both
+/// editors read this to disable fields, so a user never types into a box whose
+/// content would be discarded.
 /// </summary>
 public sealed record FormatCapabilities
 {
-    /// <summary>The format these capabilities describe.</summary>
-    public required FormatId Format { get; init; }
-
-    /// <summary>Fields this format can be read for.</summary>
-    public required MetadataField ReadableFields { get; init; }
-
     /// <summary>
     /// Fields this format can store on write. <see cref="MetadataField.None"/>
     /// when <see cref="CanWrite"/> is <see langword="false"/>.
@@ -220,11 +208,6 @@ public sealed record FormatCapabilities
     /// <param name="fields">The fields an edit would touch.</param>
     /// <returns><see langword="true"/> if all of them are writable.</returns>
     public bool CanWriteAll(MetadataField fields) => (WritableFields & fields) == fields;
-
-    /// <summary>Returns the subset of <paramref name="fields"/> this format would discard.</summary>
-    /// <param name="fields">The fields an edit would touch.</param>
-    /// <returns>The fields that cannot be stored.</returns>
-    public MetadataField UnsupportedIn(MetadataField fields) => fields & ~WritableFields;
 }
 
 /// <summary>How much of a file a read should bother with.</summary>
@@ -273,7 +256,7 @@ public sealed record FormatClaim
 public sealed class BookSource : IDisposable
 {
     /// <summary>How many bytes the magic-number pass reads.</summary>
-    public const int HeaderLength = 8192;
+    private const int HeaderLength = 8192;
 
     private readonly byte[] _head;
     private readonly int _headLength;
@@ -304,12 +287,9 @@ public sealed class BookSource : IDisposable
     /// <summary>The start of the file, for formats that have no magic number.</summary>
     public ReadOnlySpan<byte> Head => _head.AsSpan(0, _headLength);
 
-    /// <summary>Whether this build has a container implementation for these bytes.</summary>
-    public bool HasContainer => BookContainers.IsSupported(ContainerKind);
-
     /// <summary>The open container, opened on first use and shared from then on.</summary>
     /// <exception cref="NotSupportedException">
-    /// <see cref="HasContainer"/> is <see langword="false"/>.
+    /// This build has no container implementation for these bytes.
     /// </exception>
     /// <exception cref="BookFormatException">The file is not a readable container.</exception>
     public IContainer Container
@@ -327,8 +307,6 @@ public sealed class BookSource : IDisposable
     /// <exception cref="BookIoException">The file could not be read.</exception>
     public static BookSource Open(string path)
     {
-        Throw.IfNullOrEmpty(path);
-
         byte[] head = new byte[HeaderLength];
         int read;
 
@@ -342,11 +320,11 @@ public sealed class BookSource : IDisposable
                 bufferSize: HeaderLength,
                 FileOptions.SequentialScan);
 
-            read = stream.ReadAtLeast(head, HeaderLength, throwOnEndOfStream: false);
+            read = stream.ReadAtLeast(head, HeaderLength);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
         {
-            throw new BookIoException($"Could not read '{path}'.", path, ex);
+            throw new BookIoException($"Could not read '{path}'.", ex);
         }
 
         (ContainerKind kind, string? detail) = BookContainers.Sniff(head.AsSpan(0, read));

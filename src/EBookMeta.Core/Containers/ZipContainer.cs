@@ -22,8 +22,7 @@ public sealed class ZipContainer : IContainer
         bool ownsStream,
         ContainerEntry[] entries,
         string? path,
-        string? archiveComment,
-        bool allEntriesReproducible)
+        string? archiveComment)
     {
         _archive = archive;
         _stream = stream;
@@ -31,7 +30,6 @@ public sealed class ZipContainer : IContainer
         _entries = entries;
         Path = path;
         ArchiveComment = archiveComment;
-        AllEntriesUseReproducibleCompression = allEntriesReproducible;
     }
 
     /// <inheritdoc />
@@ -45,12 +43,6 @@ public sealed class ZipContainer : IContainer
 
     /// <inheritdoc />
     public string? ArchiveComment { get; }
-
-    /// <summary>
-    /// Whether every entry uses a compression method this build can reproduce
-    /// exactly, meaning stored or deflate.
-    /// </summary>
-    public bool AllEntriesUseReproducibleCompression { get; }
 
     /// <summary>Opens a ZIP container from a file path.</summary>
     /// <param name="path">The archive to open.</param>
@@ -77,7 +69,7 @@ public sealed class ZipContainer : IContainer
     {
         Throw.IfNull(stream);
 
-        ZipCentralDirectory directory = ZipCentralDirectory.Read(stream, path);
+        ZipCentralDirectory directory = ZipCentralDirectory.Read(stream);
 
         stream.Position = 0;
         ZipArchive archive;
@@ -87,48 +79,43 @@ public sealed class ZipContainer : IContainer
         }
         catch (InvalidDataException ex)
         {
-            throw new BookFormatException($"'{path}' is not a readable ZIP archive.", path, ex);
+            throw new BookFormatException($"'{path}' is not a readable ZIP archive.", ex);
         }
 
         try
         {
             // Disagreeing with ZipArchive on entry count means we do not understand the
             // layout, and a rebuild could pair the wrong method onto the wrong entry.
-            if (directory.Records.Count != archive.Entries.Count)
+            if (directory.CompressionMethods.Count != archive.Entries.Count)
             {
                 throw new BookFormatException(
-                    $"Central directory lists {directory.Records.Count} entries but the archive " +
-                    $"reads {archive.Entries.Count}. The file is inconsistent and will not be edited.",
-                    path);
+                    $"Central directory lists {directory.CompressionMethods.Count} entries but the " +
+                    $"archive reads {archive.Entries.Count}. The file is inconsistent and will not " +
+                    "be edited.");
             }
 
             var entries = new ContainerEntry[archive.Entries.Count];
-            bool allReproducible = true;
 
             for (int i = 0; i < entries.Length; i++)
             {
                 ZipArchiveEntry zipEntry = archive.Entries[i];
-                ZipCentralDirectoryRecord record = directory.Records[i];
 
-                var entry = new ContainerEntry
+                entries[i] = new ContainerEntry
                 {
                     // Name comes from ZipArchive, not from our parser, so the
                     // two views cannot diverge on entry-name encoding.
                     Name = zipEntry.FullName,
                     Index = i,
                     Length = zipEntry.Length,
-                    CompressionMethod = record.CompressionMethod,
+                    CompressionMethod = directory.CompressionMethods[i],
                     LastModified = zipEntry.LastWriteTime,
                     IsDirectory = zipEntry.FullName.EndsWith('/') && zipEntry.Length == 0,
                 };
-
-                entries[i] = entry;
-                allReproducible &= entry.IsReproducibleCompression || entry.IsDirectory;
             }
 
             return new ZipContainer(
                 archive, stream, ownsStream: !leaveOpen, entries, path,
-                directory.ArchiveComment, allReproducible);
+                directory.ArchiveComment);
         }
         catch
         {
@@ -158,7 +145,6 @@ public sealed class ZipContainer : IContainer
             throw new BookFormatException(
                 $"Entry '{entry.Name}' is corrupt or uses an unsupported compression method " +
                 $"({ZipCompressionMethods.ToName(entry.CompressionMethod)}).",
-                entry.Name,
                 ex);
         }
     }
@@ -223,7 +209,7 @@ public sealed class ZipContainer : IContainer
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            throw new BookIoException($"Could not write '{targetPath}'.", targetPath, ex);
+            throw new BookIoException($"Could not write '{targetPath}'.", ex);
         }
     }
 
@@ -248,16 +234,6 @@ public sealed class ZipContainer : IContainer
     }
 }
 
-/// <summary>One central directory record, reduced to the fields EBookMetaEditor needs.</summary>
-internal sealed record ZipCentralDirectoryRecord
-{
-    /// <summary>The entry name as stored, decoded best-effort for diagnostics.</summary>
-    internal required string Name { get; init; }
-
-    /// <summary>The compression method code — the reason this parser exists.</summary>
-    internal required ushort CompressionMethod { get; init; }
-}
-
 /// <summary>
 /// A minimal, read-only parser for a ZIP's end-of-central-directory and central
 /// directory records.
@@ -278,14 +254,17 @@ internal sealed class ZipCentralDirectory
     private const uint Zip64Marker32 = 0xFFFFFFFF;
     private const ushort Zip64Marker16 = 0xFFFF;
 
-    private ZipCentralDirectory(IReadOnlyList<ZipCentralDirectoryRecord> records, string? comment)
+    private ZipCentralDirectory(IReadOnlyList<ushort> compressionMethods, string? comment)
     {
-        Records = records;
+        CompressionMethods = compressionMethods;
         ArchiveComment = comment;
     }
 
-    /// <summary>The central directory records, in stored order.</summary>
-    internal IReadOnlyList<ZipCentralDirectoryRecord> Records { get; }
+    /// <summary>
+    /// Each entry's compression method code, in stored order — the reason this
+    /// parser exists, since <c>ZipArchiveEntry</c> does not expose it.
+    /// </summary>
+    internal IReadOnlyList<ushort> CompressionMethods { get; }
 
     /// <summary>
     /// The archive-level comment, or <see langword="null"/> when there is none.
@@ -294,52 +273,50 @@ internal sealed class ZipCentralDirectory
 
     /// <summary>Parses the central directory of an open, seekable ZIP stream.</summary>
     /// <param name="stream">A readable, seekable stream positioned anywhere.</param>
-    /// <param name="path">The file path, for error messages only.</param>
     /// <returns>The parsed directory.</returns>
     /// <exception cref="BookFormatException">
     /// The stream is truncated, or its structure does not parse. Surfaced to
     /// the user as rule GEN-F001.
     /// </exception>
-    internal static ZipCentralDirectory Read(Stream stream, string? path)
+    internal static ZipCentralDirectory Read(Stream stream)
     {
         Throw.IfNull(stream);
 
         if (!stream.CanSeek)
         {
-            throw new BookFormatException("A ZIP container requires a seekable stream.", path);
+            throw new BookFormatException("A ZIP container requires a seekable stream.");
         }
 
         if (stream.Length < EocdFixedSize)
         {
             throw new BookFormatException(
-                $"File is {stream.Length} bytes, too short to be a ZIP archive.", path);
+                $"File is {stream.Length} bytes, too short to be a ZIP archive.");
         }
 
-        (long cdOffset, long cdSize, long entryCount, string? comment) = ReadEndOfCentralDirectory(stream, path);
+        (long cdOffset, long cdSize, long entryCount, string? comment) = ReadEndOfCentralDirectory(stream);
 
         if (cdOffset < 0 || cdSize < 0 || cdOffset + cdSize > stream.Length)
         {
             throw new BookFormatException(
                 $"Central directory is declared at offset {cdOffset} with size {cdSize}, " +
-                $"which lies outside the {stream.Length}-byte file.", path);
+                $"which lies outside the {stream.Length}-byte file.");
         }
 
         if (cdSize > int.MaxValue)
         {
             throw new BookFormatException(
-                $"Central directory is {cdSize} bytes, larger than this build reads.", path);
+                $"Central directory is {cdSize} bytes, larger than this build reads.");
         }
 
         byte[] directory = new byte[(int)cdSize];
         stream.Position = cdOffset;
         stream.ReadExactly(directory);
 
-        List<ZipCentralDirectoryRecord> records = ParseRecords(directory, entryCount, path);
-        return new ZipCentralDirectory(records, comment);
+        return new ZipCentralDirectory(ParseRecords(directory, entryCount), comment);
     }
 
     private static (long CdOffset, long CdSize, long EntryCount, string? Comment) ReadEndOfCentralDirectory(
-        Stream stream, string? path)
+        Stream stream)
     {
         int searchLength = (int)Math.Min(stream.Length, EocdFixedSize + MaxCommentSize);
         byte[] tail = new byte[searchLength];
@@ -351,7 +328,7 @@ internal sealed class ZipCentralDirectory
         {
             throw new BookFormatException(
                 "No end-of-central-directory record found. The file is not a ZIP archive, " +
-                "or has been truncated.", path);
+                "or has been truncated.");
         }
 
         ReadOnlySpan<byte> span = tail.AsSpan(eocd);
@@ -361,7 +338,7 @@ internal sealed class ZipCentralDirectory
         ushort commentLength = BinaryPrimitives.ReadUInt16LittleEndian(span.Slice(20));
 
         string? comment = commentLength > 0 && EocdFixedSize + commentLength <= span.Length
-            ? DecodeName(span.Slice(EocdFixedSize, commentLength), utf8: false)
+            ? DecodeComment(span.Slice(EocdFixedSize, commentLength))
             : null;
 
         // Any of these three being saturated means the true values live in a
@@ -378,19 +355,19 @@ internal sealed class ZipCentralDirectory
         }
 
         long eocdAbsolute = stream.Length - searchLength + eocd;
-        return ReadZip64(stream, eocdAbsolute, path) is var (offset, size, count)
+        return ReadZip64(stream, eocdAbsolute) is var (offset, size, count)
             ? (offset, size, count, comment)
             : (cdOffset32, cdSize32, entryCount16, comment);
     }
 
     private static (long CdOffset, long CdSize, long EntryCount)? ReadZip64(
-        Stream stream, long eocdAbsolute, string? path)
+        Stream stream, long eocdAbsolute)
     {
         long locatorOffset = eocdAbsolute - Zip64EocdLocatorSize;
         if (locatorOffset < 0)
         {
             throw new BookFormatException(
-                "Archive declares ZIP64 fields but has no ZIP64 locator.", path);
+                "Archive declares ZIP64 fields but has no ZIP64 locator.");
         }
 
         byte[] locator = new byte[Zip64EocdLocatorSize];
@@ -400,14 +377,14 @@ internal sealed class ZipCentralDirectory
         if (BinaryPrimitives.ReadUInt32LittleEndian(locator) != Zip64EocdLocatorSignature)
         {
             throw new BookFormatException(
-                "Archive declares ZIP64 fields but the ZIP64 locator signature is wrong.", path);
+                "Archive declares ZIP64 fields but the ZIP64 locator signature is wrong.");
         }
 
         long zip64EocdOffset = (long)BinaryPrimitives.ReadUInt64LittleEndian(locator.AsSpan(8));
         if (zip64EocdOffset < 0 || zip64EocdOffset + 56 > stream.Length)
         {
             throw new BookFormatException(
-                $"ZIP64 end-of-central-directory offset {zip64EocdOffset} lies outside the file.", path);
+                $"ZIP64 end-of-central-directory offset {zip64EocdOffset} lies outside the file.");
         }
 
         byte[] zip64 = new byte[56];
@@ -417,7 +394,7 @@ internal sealed class ZipCentralDirectory
         if (BinaryPrimitives.ReadUInt32LittleEndian(zip64) != Zip64EocdSignature)
         {
             throw new BookFormatException(
-                "ZIP64 end-of-central-directory signature is wrong.", path);
+                "ZIP64 end-of-central-directory signature is wrong.");
         }
 
         long entryCount = (long)BinaryPrimitives.ReadUInt64LittleEndian(zip64.AsSpan(32));
@@ -446,10 +423,10 @@ internal sealed class ZipCentralDirectory
         return -1;
     }
 
-    private static List<ZipCentralDirectoryRecord> ParseRecords(
-        ReadOnlySpan<byte> directory, long expectedCount, string? path)
+    private static List<ushort> ParseRecords(
+        ReadOnlySpan<byte> directory, long expectedCount)
     {
-        var records = new List<ZipCentralDirectoryRecord>(
+        var methods = new List<ushort>(
             expectedCount is > 0 and < 4096 ? (int)expectedCount : 16);
 
         int offset = 0;
@@ -462,7 +439,6 @@ internal sealed class ZipCentralDirectory
                 break;
             }
 
-            ushort flags = BinaryPrimitives.ReadUInt16LittleEndian(header.Slice(8));
             ushort method = BinaryPrimitives.ReadUInt16LittleEndian(header.Slice(10));
             ushort nameLength = BinaryPrimitives.ReadUInt16LittleEndian(header.Slice(28));
             ushort extraLength = BinaryPrimitives.ReadUInt16LittleEndian(header.Slice(30));
@@ -472,35 +448,24 @@ internal sealed class ZipCentralDirectory
             if (offset + recordLength > directory.Length)
             {
                 throw new BookFormatException(
-                    $"Central directory record at offset {offset} runs past the end of the directory.",
-                    path);
+                    $"Central directory record at offset {offset} runs past the end of the directory.");
             }
 
-            string name = DecodeName(
-                header.Slice(CentralFileHeaderFixedSize, nameLength),
-                utf8: (flags & 0x0800) != 0);
-
-            // Sizes deliberately not read: ZIP64 saturates them and puts the real values
-            // in an extra field. Only the compression method is wanted here.
-            records.Add(new ZipCentralDirectoryRecord
-            {
-                Name = name,
-                CompressionMethod = method,
-            });
+            // Names and sizes deliberately not read: ZipArchive supplies the names, and
+            // ZIP64 saturates the sizes and puts the real values in an extra field.
+            methods.Add(method);
 
             offset += recordLength;
         }
 
-        return records;
+        return methods;
     }
 
     /// <summary>
-    /// Decodes an entry name. Bit 11 of the general purpose flags means UTF-8;
-    /// otherwise the spec says CP437, which is unavailable in .NET without an
-    /// extra encoding provider. Latin-1 agrees with CP437 across ASCII, which
-    /// covers effectively every ebook and comic entry name, and never throws on
-    /// the bytes that differ.
+    /// Decodes the archive comment. The spec says CP437, which is unavailable in
+    /// .NET without an extra encoding provider; Latin-1 agrees with it across ASCII
+    /// and never throws on the bytes that differ.
     /// </summary>
-    private static string DecodeName(ReadOnlySpan<byte> bytes, bool utf8) =>
-        utf8 ? Encoding.UTF8.GetString(bytes) : Encodings.Latin1.GetString(bytes);
+    private static string DecodeComment(ReadOnlySpan<byte> bytes) =>
+        Encodings.Latin1.GetString(bytes);
 }

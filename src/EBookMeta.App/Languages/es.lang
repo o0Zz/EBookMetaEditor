@@ -86,7 +86,6 @@ about.title = Acerca de EBookMetaEditor
 about.version = Versión {0}
 about.what = Un editor de metadatos rápido para libros electrónicos y cómics. Haga clic derecho en un archivo, corrija los metadatos y cierre. El XML dañado se repara al abrir; el archivo del disco solo cambia cuando usted guarda.
 about.formats = Formatos editables:
-about.formats.none = (ninguno registrado)
 about.author = By o0Zz (https://github.com/o0Zz/EBookMetaEditor)
 
 log.title = Registro
@@ -125,6 +124,12 @@ batch.cancelled = {0} cancelada.
 batch.failed = {0} fallida: {1}
 
 batch.nothingToSave = Ningún archivo está marcado para guardar.
+batch.saveReport.saved.one = 1 archivo guardado
+batch.saveReport.saved.many = {0} archivos guardados
+batch.saveReport.unchanged.one = 1 sin cambios
+batch.saveReport.unchanged.many = {0} sin cambios
+batch.saveReport.failed.one = 1 con errores
+batch.saveReport.failed.many = {0} con errores
 
 # Copiar y pegar. Un solo valor va a cada celda seleccionada; un bloque copiado se
 # rellena hacia la derecha y hacia abajo desde la esquina superior izquierda.

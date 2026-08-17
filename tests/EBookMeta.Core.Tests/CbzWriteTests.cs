@@ -373,6 +373,5 @@ public sealed class CbzWriteTests
         Assert.False(capabilities.CanWriteAll(MetadataField.Cover));
         Assert.False(capabilities.CanWriteAll(MetadataField.SortTitle));
         Assert.True(capabilities.CanWriteAll(MetadataField.Series | MetadataField.SeriesIndex));
-        Assert.Equal(MetadataField.Cover, capabilities.UnsupportedIn(MetadataField.Cover));
     }
 }

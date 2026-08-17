@@ -25,10 +25,7 @@ public sealed partial class EpubFormat : IBookFormat
     /// <inheritdoc />
     public FormatCapabilities Capabilities { get; } = new()
     {
-        Format = FormatId.Epub,
-
         // EPUB expresses every field the model carries.
-        ReadableFields = MetadataField.All,
         WritableFields = MetadataField.All,
     };
 
@@ -157,7 +154,7 @@ public sealed partial class EpubFormat : IBookFormat
     private static ContainerEntry ResolvePackageDocument(IContainer container)
     {
         ContainerEntry? entry = FindEntry(container, ContainerEntryName)
-            ?? throw new BookFormatException($"'{ContainerEntryName}' is missing.", ContainerEntryName);
+            ?? throw new BookFormatException($"'{ContainerEntryName}' is missing.");
 
         byte[] bytes = container.ReadAllBytes(entry);
 
@@ -170,7 +167,7 @@ public sealed partial class EpubFormat : IBookFormat
         catch (XmlException ex)
         {
             throw new BookFormatException(
-                $"'{ContainerEntryName}' is not well-formed XML: {ex.Message}", ContainerEntryName, ex);
+                $"'{ContainerEntryName}' is not well-formed XML: {ex.Message}", ex);
         }
 
         // Namespace-agnostic: the container namespace is fixed by spec, but files that
@@ -184,13 +181,12 @@ public sealed partial class EpubFormat : IBookFormat
         if (opfPath is null)
         {
             throw new BookFormatException(
-                $"'{ContainerEntryName}' declares no rootfile.", ContainerEntryName);
+                $"'{ContainerEntryName}' declares no rootfile.");
         }
 
         return FindEntry(container, opfPath)
             ?? throw new BookFormatException(
-                $"'{ContainerEntryName}' points at '{opfPath}', which is not in the archive.",
-                ContainerEntryName);
+                $"'{ContainerEntryName}' points at '{opfPath}', which is not in the archive.");
     }
 
     /// <inheritdoc />
@@ -994,7 +990,7 @@ internal sealed partial class OpfDocument
         catch (XmlException ex)
         {
             throw new BookFormatException(
-                $"'{entryName}' is not well-formed XML: {ex.Message}", entryName, ex);
+                $"'{entryName}' is not well-formed XML: {ex.Message}", ex);
         }
 
         // None of these survive in the parsed tree, and each would otherwise turn a
@@ -1128,7 +1124,6 @@ internal sealed partial class OpfDocument
             // is the format's business, not the document's.
             Role = scheme is null or "marc:relators" ? nativeRole : null,
             Kind = kind,
-            SourceId = id,
         };
     }
 
@@ -1164,33 +1159,14 @@ internal sealed partial class OpfDocument
 
         foreach (XElement date in DcElements("date"))
         {
-            // EPUB 2 distinguishes publication from creation with opf:event.
-            string? evt = (string?)date.Attribute(OpfNs + "event");
-            BookDate parsed = BookDate.Parse(date.Value.Trim());
-
-            switch (evt?.ToLowerInvariant())
+            // EPUB 2 marks a creation or modification date with opf:event. The model
+            // holds neither, and neither is the publication date, so they are skipped
+            // rather than promoted into one; anything else is the publication date.
+            if (((string?)date.Attribute(OpfNs + "event"))?.ToLowerInvariant()
+                is not ("creation" or "modification"))
             {
-                case "creation":
-                    metadata.CreationDate ??= parsed;
-                    break;
-                case "modification":
-                    metadata.ModificationDate ??= parsed;
-                    break;
-                default:
-                    metadata.PublicationDate ??= parsed;
-                    break;
+                metadata.PublicationDate ??= BookDate.Parse(date.Value.Trim());
             }
-        }
-
-        // EPUB 3 states last-modified as dcterms:modified rather than dc:date.
-        XElement? modifiedMeta = Metadata?
-            .Elements()
-            .FirstOrDefault(e => e.Name.LocalName == "meta" &&
-                                 (string?)e.Attribute("property") == "dcterms:modified");
-
-        if (modifiedMeta is not null)
-        {
-            metadata.ModificationDate ??= BookDate.Parse(modifiedMeta.Value.Trim());
         }
     }
 
@@ -1207,7 +1183,6 @@ internal sealed partial class OpfDocument
             {
                 Value = element.Value.Trim(),
                 Scheme = scheme,
-                SourceId = id,
                 IsUnique = id is not null && string.Equals(id, uniqueRef, StringComparison.Ordinal),
             });
         }
@@ -1229,7 +1204,7 @@ internal sealed partial class OpfDocument
                 ? null
                 : refinements[id].FirstOrDefault(r => r.Property == "group-position")?.Value;
 
-            metadata.Series = MakeSeries(collection.Value.Trim(), position);
+            metadata.Series = SeriesInfo.Create(collection.Value.Trim(), position);
             return;
         }
 
@@ -1237,20 +1212,8 @@ internal sealed partial class OpfDocument
         string? name = LegacyMeta("calibre:series");
         if (name is not null)
         {
-            metadata.Series = MakeSeries(name, LegacyMeta("calibre:series_index"));
+            metadata.Series = SeriesInfo.Create(name, LegacyMeta("calibre:series_index"));
         }
-    }
-
-    private static SeriesInfo MakeSeries(string name, string? index)
-    {
-        if (string.IsNullOrWhiteSpace(index))
-        {
-            return new SeriesInfo { Name = name };
-        }
-
-        return decimal.TryParse(index, NumberStyles.Number, CultureInfo.InvariantCulture, out decimal parsed)
-            ? new SeriesInfo { Name = name, Index = parsed }
-            : new SeriesInfo { Name = name, RawIndex = index };
     }
 
     /// <summary>Records <c>&lt;meta&gt;</c> elements that map onto no model field.</summary>
@@ -1331,7 +1294,7 @@ internal sealed partial class OpfDocument
         Throw.IfNull(metadata);
 
         XElement metadataElement = Metadata
-            ?? throw new BookFormatException("The package has no metadata element.", EntryName);
+            ?? throw new BookFormatException("The package has no metadata element.");
 
         // Touch only what differs. This reconciles "write both EPUB 2 and 3
         // conventions" (invariant 7) with "an unedited save is byte-identical"
@@ -1352,8 +1315,6 @@ internal sealed partial class OpfDocument
         InvalidateCaches();
     }
 
-    private static bool Same(string? a, string? b) => string.Equals(a, b, StringComparison.Ordinal);
-
     private void ApplyTitle(XElement metadataElement, BookMetadata current, BookMetadata metadata)
     {
         XElement? title = DcElements("title").FirstOrDefault();
@@ -1372,7 +1333,7 @@ internal sealed partial class OpfDocument
                 + "EPUB requires one, and readers will show the file name instead.");
 
             RemoveRefinement(title, null);
-            RemoveWithWhitespace(title);
+            XmlTree.RemoveWithWhitespace(title);
             return;
         }
 
@@ -1381,12 +1342,12 @@ internal sealed partial class OpfDocument
             title = AddDcElement(metadataElement, "title", position: 0);
             SetValue(title, metadata.Title);
         }
-        else if (!Same(current.Title, metadata.Title))
+        else if (!XmlTree.Same(current.Title, metadata.Title))
         {
             SetValue(title, metadata.Title);
         }
 
-        if (!Same(current.SortTitle, metadata.SortTitle))
+        if (!XmlTree.Same(current.SortTitle, metadata.SortTitle))
         {
             ApplyFileAs(metadataElement, title, metadata.SortTitle, "title");
         }
@@ -1494,9 +1455,9 @@ internal sealed partial class OpfDocument
 
         for (int i = 0; i < a.Count; i++)
         {
-            if (!Same(a[i].Name, b[i].Name) ||
-                !Same(a[i].SortName, b[i].SortName) ||
-                !Same(a[i].NativeRole ?? a[i].Role, b[i].NativeRole ?? b[i].Role) ||
+            if (!XmlTree.Same(a[i].Name, b[i].Name) ||
+                !XmlTree.Same(a[i].SortName, b[i].SortName) ||
+                !XmlTree.Same(a[i].NativeRole ?? a[i].Role, b[i].NativeRole ?? b[i].Role) ||
                 a[i].Kind != b[i].Kind)
             {
                 return false;
@@ -1544,7 +1505,7 @@ internal sealed partial class OpfDocument
         for (int i = wanted.Count; i < existing.Count; i++)
         {
             RemoveRefinement(existing[i], null);
-            RemoveWithWhitespace(existing[i]);
+            XmlTree.RemoveWithWhitespace(existing[i]);
         }
     }
 
@@ -1552,22 +1513,16 @@ internal sealed partial class OpfDocument
     {
         SeriesInfo? series = metadata.Series;
 
-        if (Same(current.Series?.Name, series?.Name) &&
+        if (XmlTree.Same(current.Series?.Name, series?.Name) &&
             current.Series?.Index == series?.Index &&
-            Same(current.Series?.RawIndex, series?.RawIndex))
+            XmlTree.Same(current.Series?.RawIndex, series?.RawIndex))
         {
             return;
         }
 
-        string? index = series?.Index is { } value
-            // Invariant culture: a French locale would write "2,5", which no
-            // reader parses.
-            ? value.ToString("0.############", CultureInfo.InvariantCulture)
-            : series?.RawIndex;
-
         // EPUB 2 form — calibre's, and what most files in the wild actually use.
         SetLegacyMeta(metadataElement, "calibre:series", series?.Name);
-        SetLegacyMeta(metadataElement, "calibre:series_index", index);
+        SetLegacyMeta(metadataElement, "calibre:series_index", series?.IndexText);
 
         // EPUB 3 form.
         XElement? collection = metadataElement
@@ -1580,7 +1535,7 @@ internal sealed partial class OpfDocument
             if (collection is not null)
             {
                 RemoveRefinement(collection, null);
-                RemoveWithWhitespace(collection);
+                XmlTree.RemoveWithWhitespace(collection);
             }
 
             return;
@@ -1596,13 +1551,13 @@ internal sealed partial class OpfDocument
         SetValue(collection, series.Name);
         SetRefinement(metadataElement, collection, "collection-type", "series", "collection", null);
 
-        if (index is null)
+        if (series.IndexText is { } index)
         {
-            RemoveRefinement(collection, "group-position");
+            SetRefinement(metadataElement, collection, "group-position", index, "collection", null);
         }
         else
         {
-            SetRefinement(metadataElement, collection, "group-position", index, "collection", null);
+            RemoveRefinement(collection, "group-position");
         }
     }
 
@@ -1626,13 +1581,13 @@ internal sealed partial class OpfDocument
 
         for (int i = metadata.Subjects.Count; i < existing.Count; i++)
         {
-            RemoveWithWhitespace(existing[i]);
+            XmlTree.RemoveWithWhitespace(existing[i]);
         }
     }
 
     private void ApplyDate(XElement metadataElement, BookMetadata current, BookMetadata metadata)
     {
-        if (Same(current.PublicationDate?.Raw, metadata.PublicationDate?.Raw))
+        if (XmlTree.Same(current.PublicationDate?.Raw, metadata.PublicationDate?.Raw))
         {
             return;
         }
@@ -1646,7 +1601,7 @@ internal sealed partial class OpfDocument
             // publication date, so this needs no warning.
             if (date is not null)
             {
-                RemoveWithWhitespace(date);
+                XmlTree.RemoveWithWhitespace(date);
             }
 
             return;
@@ -1661,7 +1616,7 @@ internal sealed partial class OpfDocument
 
     private void ApplySimple(XElement metadataElement, string localName, string? currentValue, string? value)
     {
-        if (Same(currentValue, value))
+        if (XmlTree.Same(currentValue, value))
         {
             return;
         }
@@ -1672,7 +1627,7 @@ internal sealed partial class OpfDocument
         {
             if (element is not null)
             {
-                RemoveWithWhitespace(element);
+                XmlTree.RemoveWithWhitespace(element);
             }
 
             return;
@@ -1704,7 +1659,7 @@ internal sealed partial class OpfDocument
         {
             if (meta is not null)
             {
-                RemoveWithWhitespace(meta);
+                XmlTree.RemoveWithWhitespace(meta);
             }
 
             return;
@@ -1773,7 +1728,7 @@ internal sealed partial class OpfDocument
 
         foreach (XElement element in doomed)
         {
-            RemoveWithWhitespace(element);
+            XmlTree.RemoveWithWhitespace(element);
         }
     }
 
@@ -1827,39 +1782,14 @@ internal sealed partial class OpfDocument
     /// </summary>
     private static void Append(XElement parent, XElement child)
     {
-        string indent = DetectIndent(parent);
+        string indent = XmlTree.DetectIndent(parent, "\n    ");
         parent.Add(new XText(indent), child);
     }
 
     private static void InsertSeparatorBefore(XElement element, XElement reference)
     {
-        string indent = reference.Parent is null ? "\n" : DetectIndent(reference.Parent);
+        string indent = reference.Parent is null ? "\n" : XmlTree.DetectIndent(reference.Parent, "\n    ");
         element.AddBeforeSelf(new XText(indent));
-    }
-
-    private static string DetectIndent(XElement parent)
-    {
-        // The whitespace before the first child is the parent's indentation
-        // style, whatever it happens to be. Guessing two spaces instead would
-        // make generated elements visibly foreign in a file that uses tabs.
-        if (parent.FirstNode is XText text && text.Value.Contains('\n'))
-        {
-            return text.Value;
-        }
-
-        return "\n    ";
-    }
-
-    private static void RemoveWithWhitespace(XElement element)
-    {
-        // Take the whitespace that preceded the element too, otherwise deleting
-        // a field leaves a blank line behind and the diff shows two changes.
-        if (element.PreviousNode is XText text && text.Value.Trim().Length == 0)
-        {
-            text.Remove();
-        }
-
-        element.Remove();
     }
 
     private void InvalidateCaches() => _manifest = null;

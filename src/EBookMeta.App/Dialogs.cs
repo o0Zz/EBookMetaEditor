@@ -50,6 +50,22 @@ internal static class Dialogs
         Margin = new Padding(4, 3, 4, 3),
     };
 
+    /// <summary>Shows the session log, modal to a window.</summary>
+    /// <param name="owner">The window it belongs to.</param>
+    internal static void ShowLog(IWin32Window owner)
+    {
+        using var form = new LogForm();
+        form.ShowDialog(owner);
+    }
+
+    /// <summary>Shows the about box, modal to a window.</summary>
+    /// <param name="owner">The window it belongs to.</param>
+    internal static void ShowAbout(IWin32Window owner)
+    {
+        using var form = new AboutForm();
+        form.ShowDialog(owner);
+    }
+
     /// <summary>Builds a button that closes its dialog with a result.</summary>
     /// <param name="key">The <see cref="Strings"/> key for its caption.</param>
     /// <param name="result">The result to close with.</param>

@@ -20,11 +20,6 @@ public sealed record Identifier
     public string? Scheme { get; init; }
 
     /// <summary>
-    /// The <c>id</c> attribute this identifier carried in the source document.
-    /// </summary>
-    public string? SourceId { get; init; }
-
-    /// <summary>
     /// Whether this is the work's unique identifier — the one
     /// <c>package/@unique-identifier</c> points at, for a format that has the
     /// concept.

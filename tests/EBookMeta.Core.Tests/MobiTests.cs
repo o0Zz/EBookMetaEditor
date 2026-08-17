@@ -470,7 +470,6 @@ public sealed class MobiTests
 
         Assert.NotNull(BookFormats.For(FormatId.Mobi));
         Assert.NotNull(BookFormats.For(FormatId.Azw3));
-        Assert.True(BookContainers.IsSupported(ContainerKind.PalmDb));
     }
 
     /// <summary>The whole path a user takes: open, edit, save, reopen.</summary>

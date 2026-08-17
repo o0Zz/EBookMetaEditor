@@ -7,13 +7,11 @@ namespace EBookMeta.Tests.Builders;
 internal sealed class EpubBuilder
 {
     private readonly List<Entry> _extraEntries = [];
-    private string _opfPath = "OEBPS/content.opf";
+    private const string OpfPath = "OEBPS/content.opf";
     private string? _opfText;
-    private byte[]? _opfBytes;
-    private bool _includeMimetype = true;
     private bool _mimetypeStored = true;
     private bool _mimetypeFirst = true;
-    private string _mimetypeContent = "application/epub+zip";
+    private const string MimetypeContent = "application/epub+zip";
     private string? _containerXml = DefaultContainerXml;
     private bool _includeCoverImage = true;
 
@@ -61,20 +59,6 @@ internal sealed class EpubBuilder
             """);
     }
 
-    /// <summary>Uses raw OPF bytes, for encoding fixtures.</summary>
-    internal EpubBuilder WithOpfBytes(byte[] opf)
-    {
-        _opfBytes = opf;
-        return this;
-    }
-
-    /// <summary>Omits the <c>mimetype</c> entry entirely (EPUB-E040).</summary>
-    internal EpubBuilder WithoutMimetype()
-    {
-        _includeMimetype = false;
-        return this;
-    }
-
     /// <summary>Deflates <c>mimetype</c> instead of storing it (EPUB-E040).</summary>
     internal EpubBuilder WithCompressedMimetype()
     {
@@ -89,24 +73,10 @@ internal sealed class EpubBuilder
         return this;
     }
 
-    /// <summary>Gives <c>mimetype</c> the wrong content (EPUB-E040).</summary>
-    internal EpubBuilder WithMimetypeContent(string content)
-    {
-        _mimetypeContent = content;
-        return this;
-    }
-
     /// <summary>Omits or replaces <c>META-INF/container.xml</c> (EPUB-F002).</summary>
     internal EpubBuilder WithContainerXml(string? xml)
     {
         _containerXml = xml;
-        return this;
-    }
-
-    /// <summary>Changes where the package document lives.</summary>
-    internal EpubBuilder WithOpfPath(string path)
-    {
-        _opfPath = path;
         return this;
     }
 
@@ -135,31 +105,11 @@ internal sealed class EpubBuilder
         return path;
     }
 
-    /// <summary>Builds the archive in memory.</summary>
-    internal byte[] Build()
-    {
-        string temp = System.IO.Path.Combine(
-            System.IO.Path.GetTempPath(), "ebookmeta-build-" + Guid.NewGuid().ToString("n") + ".zip");
-
-        try
-        {
-            ZipContainer.Create(BuildEntries(), temp);
-            return File.ReadAllBytes(temp);
-        }
-        finally
-        {
-            if (File.Exists(temp))
-            {
-                File.Delete(temp);
-            }
-        }
-    }
-
     private List<PendingEntry> BuildEntries()
     {
         var entries = new List<PendingEntry>();
 
-        if (_includeMimetype && _mimetypeFirst)
+        if (_mimetypeFirst)
         {
             entries.Add(Mimetype());
         }
@@ -169,7 +119,7 @@ internal sealed class EpubBuilder
             entries.Add(Deflated("META-INF/container.xml", Encoding.UTF8.GetBytes(_containerXml)));
         }
 
-        entries.Add(Deflated(_opfPath, _opfBytes ?? Encoding.UTF8.GetBytes(_opfText ?? Epub3Opf)));
+        entries.Add(Deflated(OpfPath, Encoding.UTF8.GetBytes(_opfText ?? Epub3Opf)));
 
         entries.Add(Deflated(
             "OEBPS/text/chapter1.xhtml",
@@ -189,7 +139,7 @@ internal sealed class EpubBuilder
                 FixedTimestamp));
         }
 
-        if (_includeMimetype && !_mimetypeFirst)
+        if (!_mimetypeFirst)
         {
             entries.Add(Mimetype());
         }
@@ -199,7 +149,7 @@ internal sealed class EpubBuilder
 
     private PendingEntry Mimetype() => PendingEntry.FromBytes(
         "mimetype",
-        Encoding.UTF8.GetBytes(_mimetypeContent),
+        Encoding.UTF8.GetBytes(MimetypeContent),
         _mimetypeStored ? ZipCompressionMethods.Stored : ZipCompressionMethods.Deflate,
         FixedTimestamp);
 

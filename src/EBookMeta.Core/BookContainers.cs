@@ -37,13 +37,6 @@ public static class BookContainers
         };
     }
 
-    /// <summary>Whether this build has an implementation for a container.</summary>
-    /// <param name="kind">The container to test.</param>
-    /// <returns><see langword="true"/> when the container can be opened.</returns>
-    public static bool IsSupported(ContainerKind kind) =>
-        kind is ContainerKind.Zip or ContainerKind.Tar or ContainerKind.Rar
-            or ContainerKind.Raw or ContainerKind.PalmDb;
-
     private static ReadOnlySpan<byte> Rar4Magic => "Rar!\x1a\x07\x00"u8;
     private static ReadOnlySpan<byte> Rar5Magic => "Rar!\x1a\x07\x01\x00"u8;
     private static ReadOnlySpan<byte> SevenZipMagic => [0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C];
@@ -138,7 +131,7 @@ public static class BookContainers
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
         {
-            throw new BookIoException($"Could not open '{path}' for reading.", path, ex);
+            throw new BookIoException($"Could not open '{path}' for reading.", ex);
         }
 
         try
@@ -157,11 +150,10 @@ public static class BookContainers
     /// another is open.
     /// </summary>
     /// <param name="path">The container file.</param>
-    /// <param name="entryName">The entry being read, for the error message.</param>
-    /// <param name="what">How to name the entry in that message — "Entry 'x'".</param>
+    /// <param name="what">How to name the entry in the error message — "Entry 'x'".</param>
     /// <returns>A stream positioned at the start of the file; the caller owns it.</returns>
     /// <exception cref="BookFormatException">The file could not be reopened.</exception>
-    internal static FileStream ReopenForEntry(string path, string entryName, string what)
+    internal static FileStream ReopenForEntry(string path, string what)
     {
         try
         {
@@ -175,7 +167,7 @@ public static class BookContainers
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            throw new BookFormatException($"{what} could not be read.", entryName, ex);
+            throw new BookFormatException($"{what} could not be read.", ex);
         }
     }
 }

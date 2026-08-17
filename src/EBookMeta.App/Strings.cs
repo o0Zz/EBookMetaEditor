@@ -133,29 +133,15 @@ internal static class Strings
             return null;
         }
 
-        var table = new Dictionary<string, string>(StringComparer.Ordinal);
-
         // UTF-8 without a BOM, and detectEncodingFromByteOrderMarks left on so a
         // translator who saves with one in Notepad is not punished for it.
         using var reader = new StreamReader(stream, new System.Text.UTF8Encoding(false), detectEncodingFromByteOrderMarks: true);
 
-        while (reader.ReadLine() is { } line)
+        Dictionary<string, string> table = KeyValueFile.Read(reader);
+
+        foreach (string key in table.Keys.ToList())
         {
-            string trimmed = line.Trim();
-
-            if (trimmed.Length == 0 || trimmed[0] == '#')
-            {
-                continue;
-            }
-
-            int equals = trimmed.IndexOf('=');
-
-            if (equals <= 0)
-            {
-                continue;
-            }
-
-            table[trimmed.Substring(0, equals).Trim()] = Unescape(trimmed.Substring(equals + 1).Trim());
+            table[key] = Unescape(table[key]);
         }
 
         return table;

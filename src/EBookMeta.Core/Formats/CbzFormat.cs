@@ -29,19 +29,9 @@ public sealed partial class CbzFormat : IBookFormat
 
         Capabilities = new FormatCapabilities
         {
-            Format = id,
-
-            // ComicInfo has no sort forms, identifiers or rights statement, so those
-            // stay off rather than being typed in and discarded on save.
-            ReadableFields =
-                MetadataField.Title | MetadataField.Creators | MetadataField.CreatorRoles |
-                MetadataField.Series | MetadataField.SeriesIndex | MetadataField.Description |
-                MetadataField.Publisher | MetadataField.PublicationDate | MetadataField.Language |
-                MetadataField.Subjects | MetadataField.Cover,
-
-            // Everything readable except the cover. A comic's cover is its first
-            // page image, so replacing it means replacing a page — and page-image
-            // processing is deliberately out of scope.
+            // ComicInfo has no sort forms, identifiers or rights statement. Nor is the
+            // cover writable: a comic's cover is its first page image, so replacing it
+            // means replacing a page, and page-image processing is out of scope.
             WritableFields =
                 MetadataField.Title | MetadataField.Creators | MetadataField.CreatorRoles |
                 MetadataField.Series | MetadataField.SeriesIndex | MetadataField.Description |
@@ -213,7 +203,7 @@ public sealed partial class CbzFormat : IBookFormat
                 + "one, so nothing was written.";
 
             Log.Rule(LogLevel.Error, "CBZ-W012", reason, targetPath);
-            throw new BookFormatException(reason, targetPath);
+            throw new BookFormatException(reason);
         }
 
         ContainerEntry? entry = FindComicInfo(container);
@@ -437,14 +427,12 @@ public sealed class ComicInfoDocument
 
     private ComicInfoDocument(
         XDocument document,
-        byte[] originalBytes,
         XmlSourceFormat format,
         string entryName,
         string indent,
         bool created)
     {
         Document = document;
-        OriginalBytes = originalBytes;
         Format = format;
         EntryName = entryName;
         Indent = indent;
@@ -453,18 +441,6 @@ public sealed class ComicInfoDocument
 
     /// <summary>The parsed document.</summary>
     public XDocument Document { get; }
-
-    /// <summary>
-    /// The bytes exactly as read, or as generated for a document this build
-    /// created. Retained for the session, like an OPF's.
-    /// </summary>
-    public byte[] OriginalBytes { get; }
-
-    /// <summary>What the bytes said about their own encoding.</summary>
-    public XmlEncodingInfo Encoding => Format.Encoding;
-
-    /// <summary>The XML declaration exactly as it appeared, re-emitted verbatim.</summary>
-    public string? DeclarationText => Format.DeclarationText;
 
     /// <summary>The container entry this document was read from.</summary>
     public string EntryName { get; }
@@ -504,7 +480,6 @@ public sealed class ComicInfoDocument
     /// </exception>
     public static ComicInfoDocument Parse(ReadOnlySpan<byte> bytes, string entryName = DefaultEntryName)
     {
-        byte[] original = bytes.ToArray();
         XmlEncodingInfo encoding = XmlEncodingDetector.Detect(bytes);
         string text = XmlEncodingDetector.Decode(bytes, encoding);
 
@@ -516,23 +491,21 @@ public sealed class ComicInfoDocument
         catch (XmlException ex)
         {
             throw new BookFormatException(
-                $"'{entryName}' is not well-formed XML: {ex.Message}", entryName, ex);
+                $"'{entryName}' is not well-formed XML: {ex.Message}", ex);
         }
 
         if (document.Root is not { } root || root.Name.LocalName != "ComicInfo")
         {
             throw new BookFormatException(
                 $"'{entryName}' is XML but its root element is "
-                + $"'{document.Root?.Name.LocalName ?? "(none)"}', not 'ComicInfo'.",
-                entryName);
+                + $"'{document.Root?.Name.LocalName ?? "(none)"}', not 'ComicInfo'.");
         }
 
         return new ComicInfoDocument(
             document,
-            original,
             XmlSourceFormat.Detect(text, encoding),
             entryName,
-            DetectIndent(root),
+            XmlTree.DetectIndent(root, "\n  "),
             created: false);
     }
 
@@ -560,7 +533,6 @@ public sealed class ComicInfoDocument
         // nodes go through the tree, which translates endings, so CRLF becomes CR CRLF.
         return new ComicInfoDocument(
             new XDocument(root),
-            [],
             XmlSourceFormat.ForNewDocument(utf8, "<?xml version=\"1.0\" encoding=\"utf-8\"?>", "\r\n"),
             entryName,
             "\n  ",
@@ -604,18 +576,7 @@ public sealed class ComicInfoDocument
             return;
         }
 
-        string? number = Value("Number");
-
-        if (number is null)
-        {
-            metadata.Series = new SeriesInfo { Name = name };
-            return;
-        }
-
-        metadata.Series = decimal.TryParse(
-                number, NumberStyles.Number, CultureInfo.InvariantCulture, out decimal index)
-            ? new SeriesInfo { Name = name, Index = index }
-            : new SeriesInfo { Name = name, RawIndex = number };
+        metadata.Series = SeriesInfo.Create(name, Value("Number"));
     }
 
     /// <summary>Reads the creator elements, keeping each one's native role.</summary>
@@ -718,7 +679,7 @@ public sealed class ComicInfoDocument
         Throw.IfNull(metadata);
 
         XElement root = Root
-            ?? throw new BookFormatException($"'{EntryName}' has no ComicInfo element.", EntryName);
+            ?? throw new BookFormatException($"'{EntryName}' has no ComicInfo element.");
 
         BookMetadata current = ReadMetadata();
 
@@ -763,23 +724,13 @@ public sealed class ComicInfoDocument
     {
         SeriesInfo? series = metadata.Series;
 
-        string? number = series?.Index is { } value
-            // Invariant culture: a French locale would write "2,5", which no
-            // reader parses.
-            ? value.ToString("0.############", CultureInfo.InvariantCulture)
-            : series?.RawIndex;
-
-        string? currentNumber = current.Series?.Index is { } currentValue
-            ? currentValue.ToString("0.############", CultureInfo.InvariantCulture)
-            : current.Series?.RawIndex;
-
         SetElement(root, "Series", current.Series?.Name, series?.Name);
-        SetElement(root, "Number", currentNumber, number);
+        SetElement(root, "Number", current.Series?.IndexText, series?.IndexText);
     }
 
     private void ApplyDate(XElement root, BookMetadata current, BookMetadata metadata)
     {
-        if (Same(current.PublicationDate?.Raw, metadata.PublicationDate?.Raw))
+        if (XmlTree.Same(current.PublicationDate?.Raw, metadata.PublicationDate?.Raw))
         {
             return;
         }
@@ -916,8 +867,8 @@ public sealed class ComicInfoDocument
 
         for (int i = 0; i < a.Count; i++)
         {
-            if (!Same(a[i].Name, b[i].Name) ||
-                !Same(a[i].NativeRole ?? a[i].Role, b[i].NativeRole ?? b[i].Role))
+            if (!XmlTree.Same(a[i].Name, b[i].Name) ||
+                !XmlTree.Same(a[i].NativeRole ?? a[i].Role, b[i].NativeRole ?? b[i].Role))
             {
                 return false;
             }
@@ -934,7 +885,7 @@ public sealed class ComicInfoDocument
     {
         string? wanted = string.IsNullOrWhiteSpace(value) ? null : value!.Trim();
 
-        if (Same(currentValue, wanted))
+        if (XmlTree.Same(currentValue, wanted))
         {
             return;
         }
@@ -945,7 +896,7 @@ public sealed class ComicInfoDocument
         {
             if (element is not null)
             {
-                RemoveWithWhitespace(element);
+                XmlTree.RemoveWithWhitespace(element);
             }
 
             return;
@@ -996,33 +947,6 @@ public sealed class ComicInfoDocument
 
     private XElement? FindChild(string localName) =>
         Root?.Elements().FirstOrDefault(e => e.Name.LocalName == localName);
-
-    private static void RemoveWithWhitespace(XElement element)
-    {
-        // Take the whitespace that preceded the element too, otherwise deleting a
-        // field leaves a blank line behind and the diff shows two changes.
-        if (element.PreviousNode is XText text && text.Value.Trim().Length == 0)
-        {
-            text.Remove();
-        }
-
-        element.Remove();
-    }
-
-    private static string DetectIndent(XElement root)
-    {
-        // The whitespace before the first child is the document's own indentation
-        // style, whatever it happens to be. Guessing two spaces instead would make
-        // a generated element visibly foreign in a file that uses tabs.
-        if (root.FirstNode is XText text && text.Value.Contains('\n'))
-        {
-            return text.Value;
-        }
-
-        return "\n  ";
-    }
-
-    private static bool Same(string? a, string? b) => string.Equals(a, b, StringComparison.Ordinal);
 
     /// <summary>
     /// Splits a comma-separated ComicRack list, which is how the format stores

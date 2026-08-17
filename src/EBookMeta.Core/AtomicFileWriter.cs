@@ -37,7 +37,7 @@ public static class AtomicFileWriter
             if (!File.Exists(temp))
             {
                 throw new BookIoException(
-                    "The writer did not produce a file. Nothing was changed.", full);
+                    "The writer did not produce a file. Nothing was changed.");
             }
 
             if (!File.Exists(full))
@@ -74,7 +74,7 @@ public static class AtomicFileWriter
             // The half-written temp file is ours and worthless; the user's
             // original is untouched, which is the point.
             DeleteIfExists(temp);
-            throw new BookIoException($"Could not write '{full}'. The original is unchanged.", full, ex);
+            throw new BookIoException($"Could not write '{full}'. The original is unchanged.", ex);
         }
     }
 

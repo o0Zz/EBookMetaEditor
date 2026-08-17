@@ -87,9 +87,8 @@ namespace EBookMeta.Compat
         /// <param name="stream">The stream to read.</param>
         /// <param name="buffer">The buffer to fill.</param>
         /// <param name="count">The number of bytes wanted.</param>
-        /// <param name="throwOnEndOfStream">Whether a short read is an error.</param>
         /// <returns>The number of bytes actually read.</returns>
-        internal static int ReadAtLeast(this Stream stream, byte[] buffer, int count, bool throwOnEndOfStream)
+        internal static int ReadAtLeast(this Stream stream, byte[] buffer, int count)
         {
             int total = 0;
             while (total < count)
@@ -97,12 +96,6 @@ namespace EBookMeta.Compat
                 int read = stream.Read(buffer, total, count - total);
                 if (read == 0)
                 {
-                    if (throwOnEndOfStream)
-                    {
-                        throw new EndOfStreamException(
-                            $"Expected {count} bytes but the stream ended after {total}.");
-                    }
-
                     break;
                 }
 
@@ -161,8 +154,6 @@ namespace EBookMeta.Compat
 // Compiler-recognised types net48 does not ship. Looked up by full name only, so
 // declaring them here enables `init`, `record` and `required` with no dependency.
 
-#pragma warning disable CS9113 // Parameter is unread — these are marker attributes.
-
 namespace System.Runtime.CompilerServices
 {
     /// <summary>
@@ -209,15 +200,6 @@ namespace System.Runtime.CompilerServices
     {
         /// <summary>The name of the required compiler feature.</summary>
         public string FeatureName { get; } = featureName;
-
-        /// <summary>Whether a compiler that does not recognise the feature may ignore it.</summary>
-        public bool IsOptional { get; init; }
-
-        /// <summary>The <c>RefStructs</c> feature name.</summary>
-        public const string RefStructs = nameof(RefStructs);
-
-        /// <summary>The <c>RequiredMembers</c> feature name.</summary>
-        public const string RequiredMembers = nameof(RequiredMembers);
     }
 }
 
@@ -233,5 +215,3 @@ namespace System.Diagnostics.CodeAnalysis
     {
     }
 }
-
-#pragma warning restore CS9113

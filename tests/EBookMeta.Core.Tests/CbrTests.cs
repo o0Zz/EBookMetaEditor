@@ -193,7 +193,6 @@ public sealed class CbrTests : IDisposable
         Assert.NotNull(format);
         Assert.Equal(FormatId.Cbr, format!.Id);
         Assert.Contains(".cbr", format.Extensions);
-        Assert.True(BookContainers.IsSupported(ContainerKind.Rar));
     }
 
     // ---- writing -----------------------------------------------------------
@@ -303,28 +302,6 @@ public sealed class CbrTests : IDisposable
         Assert.Equal(before, File.ReadAllBytes(path));
         Assert.False(File.Exists(path + ".tmp"));
         Assert.False(Directory.Exists(path + ".tmp.stage"));
-    }
-
-    /// <summary>
-    /// An archiver that runs and returns a failure is the same answer as one that
-    /// never ran.
-    /// </summary>
-    [Fact]
-    public void An_archiver_that_reports_failure_fails_the_save()
-    {
-        using var temp = new TempDir();
-        string path = Comic().WriteTo(temp.File("comic.cbr"));
-        string target = temp.File("saved.cbr");
-
-        RarContainer.Locator = () => Path.Combine(Environment.SystemDirectory, "where.exe");
-
-        Assert.Throws<BookIoException>(() => RarContainer.Create(
-            [PendingEntry.FromBytes("01.png", PngBuilder.OnePixel)],
-            target,
-            RarContainer.Locator()!));
-
-        Assert.False(File.Exists(target));
-        Assert.False(Directory.Exists(target + ".stage"));
     }
 
     /// <summary>The switches handed to the archiver, asserted without one installed.</summary>

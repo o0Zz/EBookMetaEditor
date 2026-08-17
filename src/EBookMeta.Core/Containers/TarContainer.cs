@@ -89,7 +89,7 @@ public sealed class TarContainer : IContainer
         if (!stream.CanSeek)
         {
             throw new BookFormatException(
-                "A TAR archive must be read from a seekable stream.", path);
+                "A TAR archive must be read from a seekable stream.");
         }
 
         var entries = new List<ContainerEntry>();
@@ -124,8 +124,7 @@ public sealed class TarContainer : IContainer
                         ? "This file is not a readable TAR archive: the first header's "
                             + "checksum does not match."
                         : $"The TAR header after entry {entries.Count} is corrupt: its "
-                            + "checksum does not match.",
-                    path);
+                            + "checksum does not match.");
             }
 
             long headerStart = position;
@@ -141,8 +140,7 @@ public sealed class TarContainer : IContainer
                 if (prefixSize < 0)
                 {
                     throw new BookFormatException(
-                        $"A TAR extended header at offset {position} has an unreadable size.",
-                        path);
+                        $"A TAR extended header at offset {position} has an unreadable size.");
                 }
 
                 byte[] data = new byte[prefixSize];
@@ -151,7 +149,7 @@ public sealed class TarContainer : IContainer
                 if (!ReadExactly(stream, data, data.Length))
                 {
                     throw new BookFormatException(
-                        $"A TAR extended header at offset {position} is truncated.", path);
+                        $"A TAR extended header at offset {position} is truncated.");
                 }
 
                 nameOverride ??= TarHeader.ReadNameOverride(type, data);
@@ -166,8 +164,7 @@ public sealed class TarContainer : IContainer
                 {
                     throw new BookFormatException(
                         $"A TAR extended header at offset {headerStart} is not followed by "
-                        + "the entry it describes.",
-                        path);
+                        + "the entry it describes.");
                 }
 
                 type = TarHeader.ReadTypeFlag(block);
@@ -177,7 +174,7 @@ public sealed class TarContainer : IContainer
             if (size < 0)
             {
                 throw new BookFormatException(
-                    $"The TAR header at offset {position} has an unreadable size.", path);
+                    $"The TAR header at offset {position} has an unreadable size.");
             }
 
             // Directories and links carry no content of their own, whatever their
@@ -194,7 +191,7 @@ public sealed class TarContainer : IContainer
             if (!ReadExactly(stream, header, header.Length))
             {
                 throw new BookFormatException(
-                    $"The TAR header at offset {headerStart} is truncated.", path);
+                    $"The TAR header at offset {headerStart} is truncated.");
             }
 
             string name = nameOverride ?? TarHeader.ReadName(block);
@@ -272,7 +269,7 @@ public sealed class TarContainer : IContainer
         // Its own handle, so two entries can be read at once. The rebuild reads
         // entries one at a time, but nothing in the interface promises that.
         FileStream own = BookContainers.ReopenForEntry(
-            Path, entry.Name, $"Entry '{entry.Name}'");
+            Path, $"Entry '{entry.Name}'");
 
         return new SectionStream(own, layout.DataOffset, length, ownsStream: true);
     }
@@ -363,7 +360,7 @@ public sealed class TarContainer : IContainer
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            throw new BookIoException($"Could not write '{targetPath}'.", targetPath, ex);
+            throw new BookIoException($"Could not write '{targetPath}'.", ex);
         }
     }
 
@@ -779,8 +776,7 @@ internal static class TarHeader
             // one is a capability nothing in this build needs: the only synthesized
             // entry is ComicInfo.xml at the archive root.
             throw new BookFormatException(
-                $"Entry name '{name}' is too long for a TAR header and cannot be written.",
-                name);
+                $"Entry name '{name}' is too long for a TAR header and cannot be written.");
         }
 
         Array.Copy(bytes, split + 1, block, NameOffset, bytes.Length - split - 1);

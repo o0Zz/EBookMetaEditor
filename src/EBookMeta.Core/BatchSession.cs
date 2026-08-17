@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
-using EBookMeta.Containers;
 using EBookMeta.Model;
 
 namespace EBookMeta;
@@ -207,12 +206,6 @@ public sealed class BatchEntryComparer : IComparer<BatchEntry>
         return new BatchEntryComparer(key, null, descending);
     }
 
-    /// <summary>Orders by file name, the way a person reads one.</summary>
-    /// <param name="descending">Whether to reverse the order.</param>
-    /// <returns>The comparer.</returns>
-    public static BatchEntryComparer ByFileName(bool descending) =>
-        ByText(entry => entry.FileName, descending);
-
     /// <inheritdoc />
     public int Compare(BatchEntry? x, BatchEntry? y)
     {
@@ -295,26 +288,11 @@ public sealed class BatchSession
     {
         Throw.IfNull(paths);
 
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var entries = new List<BatchEntry>();
+        var session = new BatchSession([]);
+        session.Append(paths);
 
-        foreach (string path in paths)
-        {
-            if (string.IsNullOrWhiteSpace(path))
-            {
-                continue;
-            }
-
-            string full = FullPath(path);
-
-            if (seen.Add(full))
-            {
-                entries.Add(new BatchEntry(full));
-            }
-        }
-
-        Log.Info($"Batch of {entries.Count} file(s) prepared.");
-        return new BatchSession(entries);
+        Log.Info($"Batch of {session.Entries.Count} file(s) prepared.");
+        return session;
     }
 
     /// <summary>Adds more files to an existing batch.</summary>
@@ -324,6 +302,22 @@ public sealed class BatchSession
     {
         Throw.IfNull(paths);
 
+        IReadOnlyList<BatchEntry> added = Append(paths);
+
+        if (added.Count > 0)
+        {
+            Log.Info($"{added.Count} file(s) added to the batch; {_entries.Count} in total.");
+        }
+
+        return added;
+    }
+
+    /// <summary>
+    /// Appends every path not already in the batch, in order, skipping blanks and
+    /// duplicates. The one place a <see cref="BatchEntry"/> is created.
+    /// </summary>
+    private List<BatchEntry> Append(IEnumerable<string> paths)
+    {
         var known = new HashSet<string>(_entries.Select(e => e.Path), StringComparer.OrdinalIgnoreCase);
         var added = new List<BatchEntry>();
 
@@ -342,11 +336,6 @@ public sealed class BatchSession
                 _entries.Add(entry);
                 added.Add(entry);
             }
-        }
-
-        if (added.Count > 0)
-        {
-            Log.Info($"{added.Count} file(s) added to the batch; {_entries.Count} in total.");
         }
 
         return added;
@@ -369,12 +358,12 @@ public sealed class BatchSession
                 recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly);
 
             return [.. files
-                .Where(path => BookFormats.IsSupported(BookFormats.FromExtension(path)))
+                .Where(path => BookFormats.For(BookFormats.FromExtension(path)) is not null)
                 .OrderBy(path => path, NaturalNameComparer.Instance)];
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
-            throw new BookIoException($"Could not list '{directory}'.", directory, ex);
+            throw new BookIoException($"Could not list '{directory}'.", ex);
         }
     }
 

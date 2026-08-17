@@ -36,11 +36,7 @@ public static class BookFormats
 
     /// <summary>Registers a format, replacing any previous one for its id.</summary>
     /// <param name="format">The format to register.</param>
-    public static void Register(IBookFormat format)
-    {
-        Throw.IfNull(format);
-        Registered[format.Id] = format;
-    }
+    public static void Register(IBookFormat format) => Registered[format.Id] = format;
 
     /// <summary>The implementation for a format, if this build has one.</summary>
     /// <param name="format">The format to look up.</param>
@@ -50,11 +46,6 @@ public static class BookFormats
     /// </returns>
     public static IBookFormat? For(FormatId format) =>
         Registered.TryGetValue(format, out IBookFormat? registered) ? registered : null;
-
-    /// <summary>Whether this build can open a format.</summary>
-    /// <param name="format">The format to test.</param>
-    /// <returns><see langword="true"/> when an implementation is registered for it.</returns>
-    public static bool IsSupported(FormatId format) => Registered.ContainsKey(format);
 
     private static ReadOnlySpan<byte> PdfMagic => "%PDF-"u8;
 

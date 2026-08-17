@@ -86,7 +86,7 @@ public sealed class PalmDbContainer : IContainer
         if (!stream.CanSeek)
         {
             throw new BookFormatException(
-                "A PalmDB database must be read from a seekable stream.", path);
+                "A PalmDB database must be read from a seekable stream.");
         }
 
         long length = stream.Length;
@@ -94,18 +94,18 @@ public sealed class PalmDbContainer : IContainer
         if (length < HeaderLength)
         {
             throw new BookFormatException(
-                "This file is too short to be a PalmDB database.", path);
+                "This file is too short to be a PalmDB database.");
         }
 
         byte[] header = new byte[HeaderLength];
         stream.Position = 0;
-        ReadExactly(stream, header, header.Length, path);
+        ReadExactly(stream, header, header.Length);
 
         int count = BinaryPrimitives.ReadUInt16BigEndian(header.AsSpan(RecordCountOffset));
 
         if (count == 0)
         {
-            throw new BookFormatException("This PalmDB database holds no records.", path);
+            throw new BookFormatException("This PalmDB database holds no records.");
         }
 
         long tableLength = (long)count * RecordEntryLength;
@@ -113,12 +113,11 @@ public sealed class PalmDbContainer : IContainer
         if (HeaderLength + tableLength > length)
         {
             throw new BookFormatException(
-                $"The record table claims {count} records, which does not fit in the file.",
-                path);
+                $"The record table claims {count} records, which does not fit in the file.");
         }
 
         byte[] table = new byte[tableLength];
-        ReadExactly(stream, table, table.Length, path);
+        ReadExactly(stream, table, table.Length);
 
         var offsets = new long[count];
         var records = new RecordInfo[count];
@@ -138,14 +137,13 @@ public sealed class PalmDbContainer : IContainer
             if (offsets[i] > length)
             {
                 throw new BookFormatException(
-                    $"Record {i} starts at {offsets[i]}, past the end of the file.", path);
+                    $"Record {i} starts at {offsets[i]}, past the end of the file.");
             }
 
             if (i > 0 && offsets[i] < offsets[i - 1])
             {
                 throw new BookFormatException(
-                    $"Record {i} starts before record {i - 1}; the record table is corrupt.",
-                    path);
+                    $"Record {i} starts before record {i - 1}; the record table is corrupt.");
             }
         }
 
@@ -197,7 +195,7 @@ public sealed class PalmDbContainer : IContainer
         }
 
         FileStream own = BookContainers.ReopenForEntry(
-            Path, entry.Name, $"Record {entry.Index}");
+            Path, $"Record {entry.Index}");
 
         return new SectionStream(own, start, length, ownsStream: true);
     }
@@ -222,8 +220,7 @@ public sealed class PalmDbContainer : IContainer
             throw new BookFormatException(
                 $"A PalmDB rebuild must write the same {_entries.Length} records it read, "
                 + $"but {pending.Count} were supplied. Record numbers are referenced from "
-                + "inside the file, so they cannot be added or removed here.",
-                targetPath);
+                + "inside the file, so they cannot be added or removed here.");
         }
 
         try
@@ -240,13 +237,12 @@ public sealed class PalmDbContainer : IContainer
             if (firstRecord < tableEnd)
             {
                 throw new BookFormatException(
-                    "The first record overlaps the record table; the file is corrupt.",
-                    targetPath);
+                    "The first record overlaps the record table; the file is corrupt.");
             }
 
             byte[] gap = new byte[firstRecord - tableEnd];
             _stream.Position = tableEnd;
-            ReadExactly(_stream, gap, gap.Length, targetPath);
+            ReadExactly(_stream, gap, gap.Length);
 
             // Sizes have to be known before the table can be written, so the record
             // bodies are materialised first. Only record 0 is ever rewritten; the
@@ -273,8 +269,7 @@ public sealed class PalmDbContainer : IContainer
                 {
                     throw new BookFormatException(
                         "The rebuilt database would exceed the 4 GB a PalmDB record "
-                        + "offset can express.",
-                        targetPath);
+                        + "offset can express.");
                 }
 
                 BinaryPrimitives.WriteUInt32BigEndian(entry, (uint)offset);
@@ -296,11 +291,11 @@ public sealed class PalmDbContainer : IContainer
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            throw new BookIoException($"Could not write '{targetPath}'.", targetPath, ex);
+            throw new BookIoException($"Could not write '{targetPath}'.", ex);
         }
     }
 
-    private static void ReadExactly(Stream stream, byte[] buffer, int count, string? path)
+    private static void ReadExactly(Stream stream, byte[] buffer, int count)
     {
         int total = 0;
 
@@ -311,7 +306,7 @@ public sealed class PalmDbContainer : IContainer
             if (read <= 0)
             {
                 throw new BookFormatException(
-                    "This PalmDB database is truncated.", path);
+                    "This PalmDB database is truncated.");
             }
 
             total += read;

@@ -6,24 +6,16 @@ namespace EBookMeta.Tests.Builders;
 /// <summary>A stand-in for the external archiver a CBR save shells out to.</summary>
 internal static class StandInArchiver
 {
-    private static readonly object Gate = new();
     private static string? _path;
 
     /// <summary>The stand-in, compiled on first use and reused after.</summary>
-    /// <param name="exitCode">
-    /// What it should return. Non-zero also means it writes nothing, which is how a
-    /// real archiver behaves when it gives up.
-    /// </param>
     /// <returns>The path to the executable.</returns>
-    internal static string Path(int exitCode = 0)
+    internal static string Path()
     {
-        lock (Gate)
-        {
-            // Compiled once per test run and left in the output directory; the exit
-            // code is passed at run time so one build serves both cases.
-            _path ??= Compile();
-            return _path;
-        }
+        // Compiled once per test run and left in the output directory; the exit code
+        // comes from ExitCodeVariable at run time, so one build serves every case.
+        // The suite runs serially, so nothing guards this.
+        return _path ??= Compile();
     }
 
     /// <summary>

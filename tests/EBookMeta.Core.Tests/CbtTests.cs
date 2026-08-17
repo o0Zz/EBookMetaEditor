@@ -312,8 +312,16 @@ public sealed class CbtTests
         using var temp = new TempDir();
         string path = RealisticArchive().WriteTo(temp.File("comic.cbz"));
 
-        Book.Load(path, null);
+        Log.Clear();
+        Book book = Book.Load(path);
 
+        Assert.Equal(FormatId.Cbt, book.Detected.Format);
+        Assert.Equal(FormatId.Cbz, book.Detected.ClaimedByExtension);
+        Assert.False(book.Detected.ExtensionAgrees);
+
+        Assert.Contains(
+            Log.Entries,
+            e => e.Message.StartsWith("GEN-W002:", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -323,7 +331,6 @@ public sealed class CbtTests
 
         Assert.NotNull(format);
         Assert.True(format!.Capabilities.CanWrite);
-        Assert.True(BookContainers.IsSupported(ContainerKind.Tar));
     }
 
     /// <summary>The whole path a user takes: open, save, unchanged.</summary>

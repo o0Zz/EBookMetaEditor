@@ -1,5 +1,4 @@
 using System.Globalization;
-using EBookMeta.Xml;
 using EBookMeta.Model;
 
 namespace EBookMeta;
@@ -51,7 +50,7 @@ public static class MetadataFields
             MetadataField.Creators => string.Join(
                 CreatorSeparator, metadata.PrimaryCreators.Select(c => c.Name)),
             MetadataField.Series => metadata.Series?.Name ?? string.Empty,
-            MetadataField.SeriesIndex => ReadSeriesIndex(metadata),
+            MetadataField.SeriesIndex => metadata.Series?.IndexText ?? string.Empty,
             MetadataField.Description => metadata.Description ?? string.Empty,
             MetadataField.Publisher => metadata.Publisher ?? string.Empty,
             MetadataField.PublicationDate => metadata.PublicationDate?.Raw ?? string.Empty,
@@ -92,20 +91,6 @@ public static class MetadataFields
             _ => throw new ArgumentOutOfRangeException(
                 nameof(field), field, "There is no text projection for this field."),
         };
-    }
-
-    private static string ReadSeriesIndex(BookMetadata metadata)
-    {
-        if (metadata.Series is not { } series)
-        {
-            return string.Empty;
-        }
-
-        // Invariant culture: a French locale would render 2.5 as "2,5", which is
-        // then what a save would write, and no reader parses that.
-        return series.Index?.ToString("0.############", CultureInfo.InvariantCulture)
-            ?? series.RawIndex
-            ?? string.Empty;
     }
 
     private static bool Set(string? value, string? current, Action<string?> assign)
@@ -149,7 +134,6 @@ public static class MetadataFields
                 SortName = previous?.SortName,
                 NativeRole = previous?.NativeRole ?? "aut",
                 Role = previous?.Role ?? "aut",
-                SourceId = previous?.SourceId,
                 Kind = CreatorKind.Creator,
             });
         }
@@ -207,18 +191,13 @@ public static class MetadataFields
             return true;
         }
 
-        if (string.Equals(ReadSeriesIndex(metadata), raw, StringComparison.Ordinal))
+        if (string.Equals(series.IndexText ?? string.Empty, raw, StringComparison.Ordinal))
         {
             return false;
         }
 
-        // An index that will not parse is kept verbatim rather than discarded:
-        // "3 of 7" and "Annual" are real, and the format that supplied one can
-        // usually store it back.
-        metadata.Series = decimal.TryParse(
-                raw, NumberStyles.Number, CultureInfo.InvariantCulture, out decimal index)
-            ? series with { Index = index, RawIndex = null }
-            : series with { Index = null, RawIndex = raw };
+        SeriesInfo parsed = SeriesInfo.Create(series.Name, raw);
+        metadata.Series = series with { Index = parsed.Index, RawIndex = parsed.RawIndex };
 
         return true;
     }

@@ -408,7 +408,6 @@ public sealed class Fb2Tests
 
         Assert.NotNull(BookFormats.For(FormatId.Fb2));
         Assert.NotNull(BookFormats.For(FormatId.Fb2Zip));
-        Assert.True(BookContainers.IsSupported(ContainerKind.Raw));
     }
 
     /// <summary>The whole path a user takes: open, edit, save, reopen.</summary>

@@ -23,19 +23,11 @@ public sealed partial class MobiFormat : IBookFormat
 
         Capabilities = new FormatCapabilities
         {
-            Format = id,
-
             // No series: EXTH has no record for one this build can verify against the
             // published format, and a guessed record number would put the user's series
-            // into a field meaning something else. No sort forms either.
-            ReadableFields =
-                MetadataField.Title | MetadataField.Creators | MetadataField.Description |
-                MetadataField.Publisher | MetadataField.PublicationDate |
-                MetadataField.Language | MetadataField.Subjects |
-                MetadataField.Identifiers | MetadataField.Rights | MetadataField.Cover,
-
-            // Everything readable but the cover (a whole PalmDB record) and the
-            // identifiers (an edited ASIN breaks the book's link to its store entry).
+            // into a field meaning something else. No sort forms either, no cover (a
+            // whole PalmDB record) and no identifiers (an edited ASIN breaks the book's
+            // link to its store entry).
             WritableFields =
                 MetadataField.Title | MetadataField.Creators | MetadataField.Description |
                 MetadataField.Publisher | MetadataField.PublicationDate |
@@ -81,8 +73,8 @@ public sealed partial class MobiFormat : IBookFormat
 
         options ??= ReadOptions.Default;
 
-        List<MobiDocument> headers = ReadHeaders(container);
-        MobiDocument preferred = headers[headers.Count - 1];
+        List<(int Record, MobiDocument Header)> headers = ReadHeaders(container);
+        MobiDocument preferred = headers[headers.Count - 1].Header;
 
         BookMetadata metadata = preferred.ReadMetadata();
 
@@ -112,23 +104,23 @@ public sealed partial class MobiFormat : IBookFormat
         Throw.IfNull(metadata);
         Throw.IfNullOrEmpty(targetPath);
 
-        List<MobiDocument> headers = ReadHeaders(container);
+        List<(int Record, MobiDocument Header)> headers = ReadHeaders(container);
 
         // What Read handed the caller, so the difference between it and what came
         // back is exactly what the user edited.
-        BookMetadata baseline = headers[headers.Count - 1].ReadMetadata();
+        BookMetadata baseline = headers[headers.Count - 1].Header.ReadMetadata();
 
         var rewritten = new Dictionary<int, byte[]>();
         bool modified = false;
 
-        foreach (MobiDocument header in headers)
+        foreach ((int record, MobiDocument header) in headers)
         {
             // Only edited fields, never the whole record: the halves of a joint file
             // carry different metadata, and writing one over the other would delete
             // what only the other had — on a save that may have edited nothing.
             header.ApplyMetadata(Merge(baseline, metadata, header.ReadMetadata()));
 
-            rewritten[IndexOf(header)] = header.Serialize();
+            rewritten[record] = header.Serialize();
             modified |= header.IsModified;
         }
 
@@ -216,8 +208,11 @@ public sealed partial class MobiFormat : IBookFormat
     /// Reads every header record in the database: record 0, and the KF8 part's own
     /// if this is a joint file.
     /// </summary>
-    /// <returns>The headers, in record order, so the last is the preferred one.</returns>
-    private static List<MobiDocument> ReadHeaders(
+    /// <returns>
+    /// The headers with the record each came from, in record order, so the last is
+    /// the preferred one.
+    /// </returns>
+    private static List<(int Record, MobiDocument Header)> ReadHeaders(
         IContainer container)
     {
         MobiDocument first = ParseHeader(container, 0);
@@ -231,10 +226,10 @@ public sealed partial class MobiFormat : IBookFormat
                 + "would produce a file no reader would open, so nothing was changed.";
 
             Log.Rule(LogLevel.Error, "MOBI-F002", drm, container.Entries[0].Name);
-            throw new BookFormatException(drm, path: null);
+            throw new BookFormatException(drm);
         }
 
-        var headers = new List<MobiDocument> { first };
+        var headers = new List<(int Record, MobiDocument Header)> { (0, first) };
 
         if (first.Kf8BoundaryRecord is not { } boundary ||
             boundary <= 0 || boundary >= container.Entries.Count)
@@ -248,7 +243,7 @@ public sealed partial class MobiFormat : IBookFormat
 
             if (!kf8.HasDrm)
             {
-                headers.Add(kf8);
+                headers.Add((boundary, kf8));
             }
         }
         catch (BookFormatException)
@@ -278,16 +273,6 @@ public sealed partial class MobiFormat : IBookFormat
             throw;
         }
     }
-
-    /// <summary>Which record a header came from, worked out from its location.</summary>
-    private static int IndexOf(MobiDocument header) =>
-        int.TryParse(
-            header.Location.Replace("record", string.Empty),
-            System.Globalization.NumberStyles.Integer,
-            System.Globalization.CultureInfo.InvariantCulture,
-            out int index)
-            ? index
-            : 0;
 
     /// <summary>Reads the cover out of the image record EXTH 201 points at.</summary>
     private static void ReadCover(
@@ -492,15 +477,14 @@ public sealed class MobiDocument
         if (record.Length < MobiIdentifierOffset + 8)
         {
             throw new BookFormatException(
-                "The first record is too short to hold a MOBI header.", location);
+                "The first record is too short to hold a MOBI header.");
         }
 
         if (Encoding.ASCII.GetString(record, MobiIdentifierOffset, 4) != "MOBI")
         {
             throw new BookFormatException(
                 "The first record carries no MOBI header, so this database is a PalmDB "
-                + "but not a book this build can edit.",
-                location);
+                + "but not a book this build can edit.");
         }
 
         int mobiLength = (int)BinaryPrimitives.ReadUInt32BigEndian(
@@ -510,8 +494,7 @@ public sealed class MobiDocument
         {
             throw new BookFormatException(
                 $"The MOBI header claims to be {mobiLength} bytes, which does not fit in "
-                + "the record.",
-                location);
+                + "the record.");
         }
 
         byte[] palmDoc = record.AsSpan(0, PalmDocHeaderLength).ToArray();
@@ -568,8 +551,7 @@ public sealed class MobiDocument
         {
             throw new BookFormatException(
                 $"The EXTH block claims to be {declaredLength} bytes, which does not fit "
-                + "in the record.",
-                location);
+                + "in the record.");
         }
 
         int position = start + 12;
@@ -580,8 +562,7 @@ public sealed class MobiDocument
             if (position + 8 > limit)
             {
                 throw new BookFormatException(
-                    $"The EXTH block claims {count} records but runs out after {i}.",
-                    location);
+                    $"The EXTH block claims {count} records but runs out after {i}.");
             }
 
             int type = (int)BinaryPrimitives.ReadUInt32BigEndian(record.AsSpan(position));
@@ -591,8 +572,7 @@ public sealed class MobiDocument
             {
                 throw new BookFormatException(
                     $"EXTH record {i} declares a length of {length}, which does not fit "
-                    + "in the block.",
-                    location);
+                    + "in the block.");
             }
 
             into.Add(new ExthRecord(type, record.AsSpan(position + 8, length - 8).ToArray()));
@@ -710,7 +690,6 @@ public sealed class MobiDocument
                 Source = "EXTH",
                 Key = record.Type.ToString(CultureInfo.InvariantCulture),
                 Text = Printable(record.Data),
-                Bytes = record.Data,
             });
         }
     }

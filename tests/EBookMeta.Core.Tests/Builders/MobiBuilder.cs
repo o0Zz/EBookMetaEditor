@@ -36,13 +36,6 @@ internal sealed class MobiBuilder
         return this;
     }
 
-    /// <summary>Adds an EXTH record holding a big-endian 32-bit number.</summary>
-    internal MobiBuilder WithExthNumber(int type, uint value)
-    {
-        _exth.Add((type, BigEndian(value)));
-        return this;
-    }
-
     /// <summary>Sets the title in the header's own name field.</summary>
     internal MobiBuilder WithFullName(string? name)
     {
@@ -58,9 +51,9 @@ internal sealed class MobiBuilder
     }
 
     /// <summary>Marks the text as DRM-encrypted.</summary>
-    internal MobiBuilder WithDrm(int encryptionType = 2)
+    internal MobiBuilder WithDrm()
     {
-        _encryptionType = encryptionType;
+        _encryptionType = 2;
         return this;
     }
 
@@ -339,6 +332,6 @@ internal sealed class MobiBuilder
 
             // Not mapped by this build: a watermark and a creator-software tag.
             .WithExth(208, "watermark-payload")
-            .WithExthNumber(204, 201)
+            .WithExth(204, BigEndian(201))
             .WithTextRecord("The book's text.");
 }

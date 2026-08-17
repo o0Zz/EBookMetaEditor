@@ -126,10 +126,10 @@ internal sealed class Fb2Builder
     }
 
     /// <summary>Builds the document inside a ZIP, as an <c>.fb2.zip</c>.</summary>
-    internal string WriteZipTo(string path, string entryName = "book.fb2")
+    internal string WriteZipTo(string path)
     {
         ZipContainer.Create(
-            [PendingEntry.FromBytes(entryName, Build(), ZipCompressionMethods.Deflate, Timestamp)],
+            [PendingEntry.FromBytes("book.fb2", Build(), ZipCompressionMethods.Deflate, Timestamp)],
             path);
 
         return path;

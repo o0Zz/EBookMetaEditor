@@ -23,18 +23,9 @@ public sealed partial class Fb2Format : IBookFormat
 
         Capabilities = new FormatCapabilities
         {
-            Format = id,
-
-            // FictionBook has no sort title, rights statement or per-creator sort form,
-            // so those stay off rather than being typed in and discarded.
-            ReadableFields =
-                MetadataField.Title | MetadataField.Creators | MetadataField.CreatorRoles |
-                MetadataField.Series | MetadataField.SeriesIndex | MetadataField.Description |
-                MetadataField.Publisher | MetadataField.PublicationDate | MetadataField.Language |
-                MetadataField.Subjects | MetadataField.Identifiers | MetadataField.Cover,
-
-            // Everything readable but the cover and identifiers: a cover is a base64
-            // <binary> in the part of the document this format never parses.
+            // FictionBook has no sort title or rights statement, and neither the cover
+            // nor the identifiers are writable: a cover is a base64 <binary> in the part
+            // of the document this format never parses.
             WritableFields =
                 MetadataField.Title | MetadataField.Creators | MetadataField.CreatorRoles |
                 MetadataField.Series | MetadataField.SeriesIndex | MetadataField.Description |
@@ -187,7 +178,7 @@ public sealed partial class Fb2Format : IBookFormat
             }
 
             throw new BookFormatException(
-                "This archive contains no FictionBook document.", path: null);
+                "This archive contains no FictionBook document.");
         }
 
         return candidates[0];
@@ -300,9 +291,7 @@ public sealed class Fb2Document
         int descriptionStart,
         int descriptionEnd,
         XElement description,
-        XmlEncodingInfo encoding,
-        byte[] originalBytes,
-        string entryName)
+        XmlEncodingInfo encoding)
     {
         _text = text;
         _descriptionStart = descriptionStart;
@@ -314,22 +303,7 @@ public sealed class Fb2Document
         _selfClosingHasSpace = span.Contains(" />", StringComparison.Ordinal);
         _newLine = text.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
         _indent = DetectIndent(description);
-
-        OriginalBytes = originalBytes;
-        EntryName = entryName;
     }
-
-    /// <summary>The document's bytes exactly as read.</summary>
-    public byte[] OriginalBytes { get; }
-
-    /// <summary>The container entry this came from, for diagnostics.</summary>
-    public string EntryName { get; }
-
-    /// <summary>What the bytes said about their own encoding.</summary>
-    public XmlEncodingInfo Encoding => _encoding;
-
-    /// <summary>The parsed <c>&lt;description&gt;</c> element.</summary>
-    public XElement Description => _description;
 
     /// <summary>Parses a FictionBook document from its bytes.</summary>
     /// <param name="bytes">The document's bytes.</param>
@@ -343,13 +317,12 @@ public sealed class Fb2Document
     {
         Throw.IfNullOrEmpty(entryName);
 
-        byte[] original = bytes.ToArray();
         XmlEncodingInfo encoding = XmlEncodingDetector.Detect(bytes);
         string text = XmlEncodingDetector.Decode(bytes, encoding);
 
         (int start, int end, XElement description) = Locate(text, entryName);
 
-        return new Fb2Document(text, start, end, description, encoding, original, entryName);
+        return new Fb2Document(text, start, end, description, encoding);
     }
 
     /// <summary>
@@ -392,8 +365,7 @@ public sealed class Fb2Document
                     {
                         throw new BookFormatException(
                             $"'{entryName}' is XML but its root element is "
-                            + $"'{reader.LocalName}', not 'FictionBook'.",
-                            entryName);
+                            + $"'{reader.LocalName}', not 'FictionBook'.");
                     }
 
                     continue;
@@ -415,8 +387,7 @@ public sealed class Fb2Document
                 {
                     throw new BookFormatException(
                         $"'{entryName}' could not be read: the description element was not "
-                        + "where the parser said it was.",
-                        entryName);
+                        + "where the parser said it was.");
                 }
 
                 // An empty <description/> ends at its own '>'; anything else ends
@@ -435,14 +406,13 @@ public sealed class Fb2Document
         catch (XmlException ex)
         {
             throw new BookFormatException(
-                $"'{entryName}' is not well-formed XML: {ex.Message}", entryName, ex);
+                $"'{entryName}' is not well-formed XML: {ex.Message}", ex);
         }
 
         throw new BookFormatException(
             rootName is null
                 ? $"'{entryName}' contains no XML elements."
-                : $"'{entryName}' has no <description> element, so it carries no metadata.",
-            entryName);
+                : $"'{entryName}' has no <description> element, so it carries no metadata.");
     }
 
     /// <summary>
@@ -539,7 +509,7 @@ public sealed class Fb2Document
         }
 
         throw new BookFormatException(
-            $"'{entryName}' has a <{name}> element that is never closed.", entryName);
+            $"'{entryName}' has a <{name}> element that is never closed.");
     }
 
     private static bool IsNameEnd(string text, int index) =>
@@ -695,17 +665,7 @@ public sealed class Fb2Document
             return null;
         }
 
-        string? number = (string?)sequence.Attribute("number");
-
-        if (string.IsNullOrWhiteSpace(number))
-        {
-            return new SeriesInfo { Name = name.Trim() };
-        }
-
-        return decimal.TryParse(
-            number!.Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, out decimal index)
-            ? new SeriesInfo { Name = name.Trim(), Index = index }
-            : new SeriesInfo { Name = name.Trim(), RawIndex = number.Trim() };
+        return SeriesInfo.Create(name.Trim(), ((string?)sequence.Attribute("number"))?.Trim());
     }
 
     private static void ReadCreators(XElement? titleInfo, BookMetadata metadata)
@@ -935,8 +895,8 @@ public sealed class Fb2Document
 
     private void ApplySeries(XElement titleInfo, BookMetadata current, BookMetadata metadata)
     {
-        string? currentNumber = IndexText(current.Series);
-        string? number = IndexText(metadata.Series);
+        string? currentNumber = current.Series?.IndexText;
+        string? number = metadata.Series?.IndexText;
 
         if (Same(current.Series?.Name, metadata.Series?.Name) && Same(currentNumber, number))
         {
@@ -960,11 +920,6 @@ public sealed class Fb2Document
         sequence.SetAttributeValue("name", name.Trim());
         sequence.SetAttributeValue("number", number);
     }
-
-    private static string? IndexText(SeriesInfo? series) =>
-        series?.Index is { } value
-            ? value.ToString("0.############", CultureInfo.InvariantCulture)
-            : series?.RawIndex;
 
     private void ApplyAnnotation(XElement titleInfo, BookMetadata current, BookMetadata metadata)
     {

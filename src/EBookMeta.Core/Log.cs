@@ -39,11 +39,9 @@ public sealed record LogEntry(DateTime Time, LogLevel Level, string Message)
 /// <summary>The session log: what the application did, in order.</summary>
 public static class Log
 {
-    /// <summary>
-    /// The most entries kept in memory. A session is short, so this only exists
-    /// so that a runaway loop cannot exhaust memory before anyone notices.
-    /// </summary>
-    public const int Capacity = 5000;
+    // A session is short, so this only exists so that a runaway loop cannot exhaust
+    // memory before anyone notices.
+    private const int Capacity = 5000;
 
     private static readonly object Gate = new();
     private static readonly List<LogEntry> Lines = [];
@@ -72,12 +70,6 @@ public static class Log
             }
         }
     }
-
-    /// <summary>
-    /// Whether to write every entry to <see cref="FilePath"/> rather than waiting
-    /// for a warning.
-    /// </summary>
-    public static bool AlwaysWriteToFile { get; set; }
 
     /// <summary>Whether anything has been written to <see cref="FilePath"/> this session.</summary>
     public static bool FileWritten { get; private set; }
@@ -136,8 +128,6 @@ public static class Log
     /// </param>
     public static void Rule(LogLevel level, string ruleId, string message, string? location = null)
     {
-        Throw.IfNullOrEmpty(ruleId);
-
         Write(level, location is null
             ? $"{ruleId}: {message}"
             : $"{ruleId}: {message} ({location})");
@@ -194,7 +184,7 @@ public static class Log
             // A warning starts the file; from then on everything goes to it. The
             // lines after a problem are as much of the story as the problem, so
             // flushing only on warnings would drop the half that explains it.
-            if (_filePath is not null && (AlwaysWriteToFile || FileWritten || level >= LogLevel.Warning))
+            if (_filePath is not null && (FileWritten || level >= LogLevel.Warning))
             {
                 AppendPending();
             }
@@ -205,11 +195,11 @@ public static class Log
     }
 
     /// <summary>Appends everything not yet written. Caller holds <see cref="Gate"/>.</summary>
-    private static string? AppendPending()
+    private static void AppendPending()
     {
         if (_filePath is null || _fileFailed || _flushed >= Lines.Count)
         {
-            return null;
+            return;
         }
 
         try
@@ -223,7 +213,6 @@ public static class Log
             File.AppendAllText(_filePath, text.ToString(), new UTF8Encoding(false));
             _flushed = Lines.Count;
             FileWritten = true;
-            return null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
         {
@@ -231,7 +220,6 @@ public static class Log
             // meant to report. Give up on the file for the rest of the session
             // and keep logging to memory.
             _fileFailed = true;
-            return $"The log could not be written to {_filePath}: {ex.Message}";
         }
     }
 }

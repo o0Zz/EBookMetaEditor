@@ -5,7 +5,7 @@ namespace EBookMeta.App;
 /// <summary>User preferences, persisted beside the executable.</summary>
 internal sealed class AppSettings
 {
-    private const string FileName = "settings.json";
+    private const string FileName = "settings.txt";
 
     /// <summary>
     /// The interface language, as a two-letter code, or empty to follow Windows.
@@ -35,15 +35,18 @@ internal sealed class AppSettings
                 return settings;
             }
 
-            foreach (KeyValuePair<string, string> pair in ParseFlatJson(File.ReadAllText(settings.Path)))
+            using var reader = new StreamReader(
+                settings.Path, new UTF8Encoding(false), detectEncodingFromByteOrderMarks: true);
+
+            foreach (KeyValuePair<string, string> pair in KeyValueFile.Read(reader))
             {
                 Apply(settings, pair.Key, pair.Value);
             }
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or FormatException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // Unreadable or corrupt settings are not worth blocking a launch
-            // over; defaults are all perfectly usable.
+            // An unreadable settings file is not worth blocking a launch over;
+            // the defaults are all perfectly usable.
         }
 
         return settings;
@@ -53,17 +56,14 @@ internal sealed class AppSettings
     /// <returns>An error message, or <see langword="null"/> on success.</returns>
     internal string? TrySave()
     {
-        var json = new StringBuilder();
-        json.Append("{\n");
-        Append(json, "language", Language, quote: true);
-        Append(json, "keepBackupOnSave", KeepBackupOnSave ? "true" : "false", quote: false);
-        Append(json, "registeredExtensions", string.Join(";", RegisteredExtensions), quote: true);
-        json.Length -= 2; // trailing ",\n"
-        json.Append("\n}\n");
+        var text = new StringBuilder();
+        Append(text, "language", Language);
+        Append(text, "keepBackupOnSave", KeepBackupOnSave ? "true" : "false");
+        Append(text, "registeredExtensions", string.Join(";", RegisteredExtensions));
 
         try
         {
-            File.WriteAllText(Path, json.ToString(), new UTF8Encoding(false));
+            File.WriteAllText(Path, text.ToString(), new UTF8Encoding(false));
             return null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -125,79 +125,6 @@ internal sealed class AppSettings
         }
     }
 
-    private static void Append(StringBuilder json, string key, string value, bool quote)
-    {
-        json.Append("  \"").Append(key).Append("\": ");
-        json.Append(quote ? "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"" : value);
-        json.Append(",\n");
-    }
-
-    /// <summary>Reads a flat JSON object of string and boolean values.</summary>
-    private static Dictionary<string, string> ParseFlatJson(string text)
-    {
-        var result = new Dictionary<string, string>(StringComparer.Ordinal);
-        int i = 0;
-
-        while (i < text.Length)
-        {
-            int keyStart = text.IndexOf('"', i);
-            if (keyStart < 0)
-            {
-                break;
-            }
-
-            int keyEnd = text.IndexOf('"', keyStart + 1);
-            if (keyEnd < 0)
-            {
-                break;
-            }
-
-            string key = text.Substring(keyStart + 1, keyEnd - keyStart - 1);
-
-            int colon = text.IndexOf(':', keyEnd);
-            if (colon < 0)
-            {
-                break;
-            }
-
-            i = colon + 1;
-            while (i < text.Length && char.IsWhiteSpace(text[i]))
-            {
-                i++;
-            }
-
-            if (i >= text.Length)
-            {
-                break;
-            }
-
-            if (text[i] == '"')
-            {
-                int valueEnd = text.IndexOf('"', i + 1);
-                if (valueEnd < 0)
-                {
-                    break;
-                }
-
-                result[key] = text.Substring(i + 1, valueEnd - i - 1)
-                    .Replace("\\\"", "\"")
-                    .Replace("\\\\", "\\");
-
-                i = valueEnd + 1;
-            }
-            else
-            {
-                int valueEnd = i;
-                while (valueEnd < text.Length && text[valueEnd] is not (',' or '}' or '\n' or '\r'))
-                {
-                    valueEnd++;
-                }
-
-                result[key] = text.Substring(i, valueEnd - i).Trim();
-                i = valueEnd;
-            }
-        }
-
-        return result;
-    }
+    private static void Append(StringBuilder text, string key, string value) =>
+        text.Append(key).Append(" = ").Append(value).AppendLine();
 }

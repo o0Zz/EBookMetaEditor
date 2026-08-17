@@ -100,7 +100,6 @@ about.title = About EBookMetaEditor
 about.version = Version {0}
 about.what = A fast metadata editor for ebooks and comics. Right-click a file, fix the metadata, close. Broken XML is repaired on open; the file on disk is only changed when you save.
 about.formats = Editable formats:
-about.formats.none = (none registered)
 # A name and a URL: the same line in every language, and deliberately not translated.
 about.author = By o0Zz (https://github.com/o0Zz/EBookMetaEditor)
 
@@ -142,6 +141,12 @@ batch.cancelled = {0} cancelled.
 batch.failed = {0} failed: {1}
 
 batch.nothingToSave = No file is ticked to be saved.
+batch.saveReport.saved.one = 1 file saved
+batch.saveReport.saved.many = {0} files saved
+batch.saveReport.unchanged.one = 1 unchanged
+batch.saveReport.unchanged.many = {0} unchanged
+batch.saveReport.failed.one = 1 failed
+batch.saveReport.failed.many = {0} failed
 
 # Copy and paste. A pasted value goes into every selected cell, or a copied block
 # fills right and down from the top-left of the selection.
