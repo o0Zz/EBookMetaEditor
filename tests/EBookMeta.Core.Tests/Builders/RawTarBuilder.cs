@@ -22,7 +22,8 @@ internal sealed class RawTarBuilder
         string UserName,
         string GroupName,
         DateTimeOffset Modified,
-        bool GnuLongName);
+        bool GnuLongName,
+        bool Directory = false);
 
     /// <summary>
     /// The owner details GNU tar records for a file created by an ordinary user,
@@ -50,6 +51,27 @@ internal sealed class RawTarBuilder
             DefaultGroupName,
             FixedTimestamp,
             GnuLongName: false));
+
+        return this;
+    }
+
+    /// <summary>
+    /// Adds a folder marker, which <c>tar</c> records with type flag <c>5</c> and a
+    /// trailing separator on the name.
+    /// </summary>
+    internal RawTarBuilder WithDirectory(string name)
+    {
+        _entries.Add(new Entry(
+            name.EndsWith("/", StringComparison.Ordinal) ? name : name + "/",
+            [],
+            DefaultMode,
+            DefaultUid,
+            DefaultGid,
+            DefaultUserName,
+            DefaultGroupName,
+            FixedTimestamp,
+            GnuLongName: false,
+            Directory: true));
 
         return this;
     }
@@ -114,7 +136,9 @@ internal sealed class RawTarBuilder
                 continue;
             }
 
-            output.Write(Header(entry, entry.Content.Length, '0'), 0, BlockSize);
+            output.Write(
+                Header(entry, entry.Content.Length, entry.Directory ? '5' : '0'), 0, BlockSize);
+
             WritePadded(output, entry.Content);
         }
 

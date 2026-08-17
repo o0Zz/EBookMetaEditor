@@ -51,7 +51,32 @@ public sealed class CbtTests
             .WithFile("03.png", PngBuilder.OnePixel)
             .WithFile(ComicInfoDocument.DefaultEntryName, CbzBuilder.DefaultComicInfo);
 
-    /// <summary>Hard invariant 6, for comics in a TAR.</summary>
+    /// <summary>
+    /// Every entry's name, content and timestamp.
+    /// </summary>
+    /// <remarks>
+    /// Content as base64 so a tuple compares it by value; a byte[] inside one compares
+    /// by reference and every assertion would pass.
+    /// </remarks>
+    private static (string Name, string Content, DateTimeOffset Modified)[] Contents(string path)
+    {
+        using TarContainer container = TarContainer.Open(path);
+
+        return [.. container.Entries.Select(e =>
+        {
+            using Stream stream = container.OpenRead(e);
+            using var buffer = new MemoryStream();
+            stream.CopyTo(buffer);
+
+            return (e.Name, Convert.ToBase64String(buffer.ToArray()), e.LastModified);
+        })];
+    }
+
+    /// <summary>
+    /// Writing is deterministic: an archive this build produced, saved unedited, comes
+    /// back byte for byte. It does <em>not</em> hold for an archive from another
+    /// producer — see <see cref="Saving_keeps_what_the_writer_can_express"/>.
+    /// </summary>
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -69,52 +94,83 @@ public sealed class CbtTests
     }
 
     /// <summary>
-    /// The reason this build writes TAR itself rather than through SharpCompress,
-    /// whose writer takes a name, a size and a timestamp and nothing else.
+    /// What survives a save of an archive another producer wrote: names, order, content
+    /// and timestamps. Its mode, uid, gid, uname, gname and blocking factor do not —
+    /// SharpCompress's writer takes a name, a size and a timestamp.
     /// </summary>
     [Fact]
-    public void Saving_preserves_what_a_real_archive_carries()
+    public void Saving_keeps_what_the_writer_can_express()
     {
         using var temp = new TempDir();
         string source = RealisticArchive().WriteTo(temp.File("comic.cbt"));
         string target = temp.File("saved.cbt");
 
         // The fixture is what tar produces, so the tail is ten kilobytes rather
-        // than the two blocks a minimal writer would emit.
+        // than the two blocks the writer emits.
         Assert.Equal(0, new FileInfo(source).Length % (20 * 512));
 
         Write(source, target, _ => { });
 
-        Assert.Equal(File.ReadAllBytes(source), File.ReadAllBytes(target));
+        Assert.Equal(Contents(source), Contents(target));
     }
 
     /// <summary>
-    /// Editing the metadata rewrites the metadata, and touches nothing else in
-    /// the file.
+    /// Editing the metadata rewrites the metadata, and touches no other entry's name,
+    /// content or timestamp.
     /// </summary>
     [Fact]
-    public void Editing_leaves_every_other_entry_byte_for_byte()
+    public void Editing_leaves_every_other_entry_alone()
     {
         using var temp = new TempDir();
 
-        // ComicInfo.xml last, so everything before it is pages: if a single byte
-        // of their headers or content moved, the prefix comparison below fails.
         string source = RealisticArchive().WriteTo(temp.File("comic.cbt"));
         string target = temp.File("saved.cbt");
 
         Write(source, target, m => m.Title = "Season of Mists");
 
-        byte[] before = File.ReadAllBytes(source);
-        byte[] after = File.ReadAllBytes(target);
+        static (string Name, string Content, DateTimeOffset Modified)[] Pages(string path) =>
+            [.. Contents(path).Where(e =>
+                !e.Name.Equals(ComicInfoDocument.DefaultEntryName, StringComparison.OrdinalIgnoreCase))];
 
-        // Three pages: a header block and a data block each.
-        const int PagesLength = 3 * 2 * 512;
-
-        Assert.Equal(before.Take(PagesLength), after.Take(PagesLength));
+        Assert.Equal(Pages(source), Pages(target));
         Assert.Contains("Season of Mists", ComicInfoText(target), StringComparison.Ordinal);
+    }
 
-        // The blocking factor is the producer's choice and survives the edit.
-        Assert.Equal(0, after.Length % (20 * 512));
+    /// <summary>
+    /// How comics in the wild are packed. The folder marker is dropped on save —
+    /// SharpCompress writes a directory header with no <c>ustar</c> magic, and a comic
+    /// whose first entry is its page folder would come back unrecognisable to
+    /// <see cref="BookContainers.Sniff"/>. The pages carry the structure in their names.
+    /// </summary>
+    [Fact]
+    public void A_comic_whose_pages_sit_in_a_folder_reopens_after_a_save()
+    {
+        using var temp = new TempDir();
+
+        string source = new RawTarBuilder()
+            .WithDirectory("pages")
+            .WithFile("pages/01.png", PngBuilder.OnePixel)
+            .WithFile("pages/02.png", PngBuilder.OnePixel)
+            .WithFile("pages/03.png", PngBuilder.OnePixel)
+            .WithFile(ComicInfoDocument.DefaultEntryName, CbzBuilder.DefaultComicInfo)
+            .WriteTo(temp.File("comic.cbt"));
+
+        Assert.True(Contents(source)[0].Name is "pages" or "pages/");
+
+        Book book = Book.Load(source);
+        book.Metadata.Title = "Season of Mists";
+        book.Save(keepBackup: false);
+
+        // The whole point: the saved file is still a TAR as far as detection is
+        // concerned, and still a comic.
+        Book reopened = Book.Load(source);
+
+        Assert.Equal(FormatId.Cbt, reopened.Detected.Format);
+        Assert.Equal("Season of Mists", reopened.Metadata.Title);
+
+        Assert.Equal(
+            ["pages/01.png", "pages/02.png", "pages/03.png", ComicInfoDocument.DefaultEntryName],
+            Contents(source).Select(e => e.Name));
     }
 
     [Fact]
@@ -219,15 +275,12 @@ public sealed class CbtTests
 
     /// <summary>The same, as GNU tar spells it: an <c>L</c> block carrying the name.</summary>
     [Fact]
-    public void Reads_and_reproduces_a_gnu_long_name()
+    public void Reads_a_gnu_long_name()
     {
         using var temp = new TempDir();
 
         string longName = new string('a', 120) + ".png";
 
-        // Three pages, because the fixture document declares three: a page count
-        // that disagreed would be corrected on save, and correctly so, which would
-        // make the byte comparison below test the wrong thing.
         string source = new RawTarBuilder()
             .WithGnuLongNamedFile(longName, PngBuilder.OnePixel)
             .WithFile("02.png", PngBuilder.OnePixel)
@@ -235,17 +288,49 @@ public sealed class CbtTests
             .WithFile(ComicInfoDocument.DefaultEntryName, CbzBuilder.DefaultComicInfo)
             .WriteTo(temp.File("comic.cbt"));
 
-        using (TarContainer container = TarContainer.Open(source))
-        {
-            Assert.Equal(longName, container.Entries[0].Name);
-        }
+        using TarContainer container = TarContainer.Open(source);
 
-        // The long-name blocks are part of the retained header, so a save puts
-        // them back exactly rather than re-encoding the name some other way.
+        Assert.Equal(longName, container.Entries[0].Name);
+    }
+
+    /// <summary>
+    /// CBT-F001: a name this build's writer cannot express. SharpCompress never fills
+    /// the ustar prefix field, so anything over 100 bytes is refused rather than written
+    /// under a name that is not the one it arrived with.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Saving_refuses_a_name_too_long_for_the_header(bool splittable)
+    {
+        using var temp = new TempDir();
+
+        // Splittable or not makes no difference: the prefix field is never used.
+        string longName = splittable
+            ? "the-sandman/the-dolls-house/scanned-at-600-dpi-by-a-patient-person/"
+                + new string('a', 40) + ".png"
+            : new string('a', 120) + ".png";
+
+        Assert.True(longName.Length > 100);
+
+        string source = new RawTarBuilder()
+            .WithGnuLongNamedFile(longName, PngBuilder.OnePixel)
+            .WithFile("02.png", PngBuilder.OnePixel)
+            .WithFile("03.png", PngBuilder.OnePixel)
+            .WithFile(ComicInfoDocument.DefaultEntryName, CbzBuilder.DefaultComicInfo)
+            .WriteTo(temp.File("comic.cbt"));
+
         string target = temp.File("saved.cbt");
-        Write(source, target, _ => { });
 
-        Assert.Equal(File.ReadAllBytes(source), File.ReadAllBytes(target));
+        BookFormatException error = Assert.Throws<BookFormatException>(
+            () => Write(source, target, m => m.Title = "Season of Mists"));
+
+        Assert.Contains(longName, error.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            Log.Entries, e => e.Message.StartsWith("CBT-F001:", StringComparison.Ordinal));
+
+        // The refusal happens before the source is touched.
+        Assert.Equal(longName, Contents(source)[0].Name);
     }
 
     [Fact]
@@ -333,13 +418,13 @@ public sealed class CbtTests
         Assert.True(format!.Capabilities.CanWrite);
     }
 
-    /// <summary>The whole path a user takes: open, save, unchanged.</summary>
+    /// <summary>The whole path a user takes: open, save, everything still there.</summary>
     [Fact]
     public void A_book_round_trips_through_load_and_save()
     {
         using var temp = new TempDir();
         string path = RealisticArchive().WriteTo(temp.File("comic.cbt"));
-        byte[] before = File.ReadAllBytes(path);
+        var before = Contents(path);
 
         Book book = Book.Load(path);
 
@@ -349,7 +434,8 @@ public sealed class CbtTests
 
         book.Save(keepBackup: false);
 
-        Assert.Equal(before, File.ReadAllBytes(path));
+        Assert.Equal(before, Contents(path));
+        Assert.Equal("The Doll's House", Book.Load(path).Metadata.Title);
     }
 
     [Fact]

@@ -12,6 +12,25 @@ from the Explorer right-click menu.
 2. **It fixes what it can prove and says nothing about the rest.** No Validate
    button, no findings panel — see **Repairs**.
 
+## Keep it simple
+
+- **Do not overthink.** Answer the question asked, at the size it was asked. A one-line
+  fix needs no new abstraction, and a decision that is cheap to reverse needs no
+  paragraph in this file.
+- **Do the simplest thing that meets the requirement.** No speculative generality: no
+  interface with one implementation, no options record with one field, no cache or lock
+  around something that is never contended, no setting nobody asked for. If the caller
+  does not exist yet, neither does the code for it.
+- **Reach for a library before hand-rolling.** Prefer the BCL, then a permissively
+  licensed package, then your own code — in that order. SharpCompress reads RAR and
+  writes ZIP because reimplementing either would be absurd.
+- **Byte-exactness outranks convenience.** Invariant 5 says a save must not rewrite what
+  the user did not edit. Where a library cannot express a field it did not write, that is
+  an **accepted limitation**: named in invariant 5, with a test that states what the
+  property becomes instead. It is never a silent change, and **never a byte-identity
+  expectation edited until it passes.** The ZIP central directory and PalmDB records are
+  read by hand for this reason.
+
 ## Format support
 
 Two independent axes — **container** and **metadata document**. Conflating them is
@@ -230,16 +249,30 @@ mistake silently discards what the source container was holding on to.
   would read as a root entry and `CBZ-E011` would never fire. **`Stage` is the one
   place a directory entry must be handled rather than copied through**: RAR records a
   folder marker with no trailing separator, so only `IsDirectory` tells it from a page,
-  and writing it as a file fails on the directory its own pages just created. ZIP and
-  TAR reproduce their markers as zero-length entries and must keep doing so, or a CBZ
+  and writing it as a file fails on the directory its own pages just created. ZIP
+  reproduces its markers as zero-length entries and must keep doing so, or a CBZ
   with a folder loses them and breaks byte-identity.
-- `TarContainer` retains each entry's raw 512-byte header blocks and re-emits them byte
-  for byte, patching only the length and checksum of the entry that changed, which
-  preserves the mode, uid, gid, uname and gname this build has no field for. **Do not
-  replace it with SharpCompress's `TarWriter`**: it takes only a name, size and
-  timestamp, and pads with two zero blocks where `tar` pads to ten kilobytes, so every
-  save would rewrite every header. Reading TAR is hand-rolled so the retained headers
-  have somewhere to come from.
+- `TarContainer` reads and writes through SharpCompress, which models an entry as a
+  name, a size and a timestamp. A save therefore resets each entry's mode, uid and gid,
+  drops its uname and gname, and pads with two zero blocks where `tar` pads to ten
+  kilobytes — the accepted limitation invariant 5 names.
+
+  **Three SharpCompress writer defects decide how it is configured, so do not
+  "simplify" any of them away.** Each was found by writing a file and reading it back;
+  none is documented.
+
+  1. Its **GNU writer zeroes the magic field** at offset 257, so `BookContainers.Sniff`
+     would not recognise this build's own output. Hence USTAR.
+  2. Its **USTAR writer never fills the ustar prefix field** and throws a bare
+     `Exception` on any name over 100 bytes, splittable or not.
+     `RefuseIfNameTooLong` pre-empts it as CBT-F001, where the entry can still be named.
+  3. **`WriteDirectory` zeroes the magic in either format**, so a comic whose first
+     entry is its page folder — how comics in the wild are packed — would save to a file
+     Sniff rejects. Folder markers are therefore **dropped on write**; the pages carry
+     the structure in their names and `tar -x` recreates the directory. Writing the
+     marker as a zero-length trailing-slash entry instead does not work: SharpCompress
+     reads it back as a regular file named `pages`, which then collides with the
+     directory `pages/01.png` needs.
 
 ### Formats
 
@@ -410,7 +443,18 @@ Not style preferences. Violating these corrupts users' libraries.
    *Accepted limitation, ZIP only:* `System.IO.Compression` does not preserve ZIP extra
    fields, timestamps or the archive comment, so byte-identity holds for archives whose
    structure can be reproduced (every fixture) and may not for third-party files
-   carrying extra fields. Do not hand-roll a ZIP writer. TAR has no such caveat.
+   carrying extra fields. Do not hand-roll a ZIP writer.
+
+   *Accepted limitation, TAR:* SharpCompress's writer takes a name, a size and a
+   timestamp, so a save resets each entry's mode, uid and gid, drops its uname and
+   gname, replaces the producer's blocking factor with the minimum two blocks, and
+   drops folder markers — see **Containers** for why that last one is not optional.
+   Byte-identity therefore holds only for archives this build wrote itself, which is
+   what `Saving_without_editing_is_byte_identical` covers; for a third-party archive
+   the property is names, order, content and timestamps, per
+   `Saving_keeps_what_the_writer_can_express`. **Dropping a marker is the one place
+   this limitation changes archive content rather than a header field**, and it is safe
+   only because the page names still carry the path.
 
 **EPUB**
 
@@ -497,6 +541,7 @@ Provable from the file alone, and logged as a warning through `Log.Rule`.
 | EPUB-F001 / F002 | The OPF or `container.xml` cannot be parsed or located |
 | CBZ-F001 | `ComicInfo.xml` is present but not well-formed |
 | CBZ-W012 | The archive carries a ZIP comment a rebuild cannot write back |
+| CBT-F001 | An entry name is over 100 bytes, which the TAR header this build writes cannot hold |
 | CBR-F001 | The RAR is solid or encrypted, so its entries cannot be read |
 | CBR-F002 | Saving a CBR on a machine where no archiver was found. Everything that can go wrong *with* one is a plain `BookIoException` with no rule ID, on purpose |
 | FB2-F001 / F002 | Not well-formed, or no `<description>` to edit |
@@ -599,9 +644,15 @@ are committed. A broken fixture is named after the rule it triggers.
 
 Required coverage:
 
-- byte-identical round-trip for every format except CBR, which is never written
-- a CBT whose headers carry a real archive's mode, uid, gid, uname and gname, and a
-  blocking factor above the minimum
+- byte-identical round-trip for every format except CBR, which is never written, and
+  CBT, where it holds only for archives this build wrote
+- a CBT written by real `tar`, asserted to keep every entry's name, order, content and
+  timestamp across a save — its mode, uid, gid, uname and blocking factor do not survive
+- a CBT entry name over 100 bytes, splittable and not, both refused as CBT-F001 with the
+  original untouched
+- a CBT whose pages sit in a folder, saved and **reopened** — the folder marker is
+  dropped and the assertion is that detection still works, which is the failure a
+  round-trip through `Book.Load` catches and a container-level test does not
 - a MOBI carrying EXTH records this build does not map, asserted to survive a write
 - a MOBI whose header record is resized both ways, asserted to leave every later record
   readable
@@ -644,10 +695,9 @@ Known gaps, open on purpose:
   compressed and not-first are tested.
 - **reading CoMet.** No fixture carries a `comet.xml`; the CBZ test only proves a
   `<comet>` root is refused as a `ComicInfo.xml`.
-- **PAX headers.** `TarContainer` handles them — `ReadNameOverride`, `DeclaresPaxSize`
-  and the `HeaderFor` fallback — with no fixture, and bsdtar and macOS `tar` emit PAX by
-  default. Untested code, not dead code: without it an entry name falls back to the
-  truncated ustar field. **Do not delete it.**
+- **PAX headers.** SharpCompress handles them and no fixture carries one, though bsdtar
+  and macOS `tar` emit PAX by default. Worth knowing that a PAX archive is read through
+  library code this build does not exercise, and is written back as plain USTAR.
 - `ZipCompressionMethods.ToName` names stored and deflate only; anything else renders as
   `method 12` in a diagnostic.
 
@@ -656,12 +706,15 @@ Known gaps, open on purpose:
 - **Microsoft.NETFramework.ReferenceAssemblies** (in `Directory.Build.props`) —
   build-time only. Lets `net48` build without Visual Studio.
 - **System.Memory** — `Span<T>` and `BinaryPrimitives` on `net48`.
-- **SharpCompress** (MIT) — **ZIP writing and RAR reading**, neither a convenience. On
-  .NET Framework `System.IO.Compression` cannot emit a stored ZIP entry at all
-  (`CompressionLevel.NoCompression` produces deflate at level 0, method 8, not method
-  0), which makes a spec-compliant EPUB impossible since `mimetype` must be stored. ZIP
-  reading stays on `ZipArchive`. SharpCompress also reads 7z and writes TAR; neither is
-  used, and the package supporting a format is not a reason to route it there.
+- **SharpCompress** (MIT) — **ZIP writing, RAR reading, and TAR both ways.** The first
+  two are not conveniences. On .NET Framework `System.IO.Compression` cannot emit a
+  stored ZIP entry at all (`CompressionLevel.NoCompression` produces deflate at level 0,
+  method 8, not method 0), which makes a spec-compliant EPUB impossible since `mimetype`
+  must be stored. ZIP reading stays on `ZipArchive`. TAR *is* a convenience — it was
+  hand-rolled and was traded for ~600 fewer lines, at the cost of header fidelity and
+  with three writer defects to work around; see **Containers**. SharpCompress also reads
+  7z, which is not used, and the package supporting a format is not a reason to route it
+  there.
 - **xunit** — tests only.
 
 **The project is Apache-2.0.** MIT dependencies are fine; copyleft ones are not. Do not

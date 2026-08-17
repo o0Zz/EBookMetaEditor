@@ -1,51 +1,39 @@
+using SharpCompress.Archives.Tar;
+using SharpCompress.Common;
+using SharpCompress.Common.Tar.Headers;
+using SharpCompress.Readers;
+using SharpCompress.Writers.Tar;
 using System.Text;
 
 namespace EBookMeta.Containers;
 
 /// <summary>
-/// A TAR container — the storage behind CBT. Retains each entry's raw 512-byte header
-/// and re-emits it byte for byte, patching only the length and checksum of what
-/// changed, which preserves the mode, uid, gid, uname and gname this build has no
-/// field for. <b>Do not replace with SharpCompress's <c>TarWriter</c></b>: it takes
-/// only a name, size and timestamp, so every save would rewrite every header.
+/// A TAR container — the storage behind CBT. Reads and writes through SharpCompress,
+/// which models an entry as a name, a size and a timestamp: mode, uid and gid are read
+/// but cannot be written back, and uname and gname are not read at all.
 /// </summary>
 public sealed class TarContainer : IContainer
 {
+    private readonly TarArchive _archive;
+    private readonly TarArchiveEntry[] _source;
     private readonly Stream _stream;
     private readonly bool _ownsStream;
     private readonly ContainerEntry[] _entries;
-    private readonly EntryLayout[] _layout;
-    private readonly byte[] _trailer;
     private bool _disposed;
 
-    /// <summary>
-    /// Where an entry's bytes are, and the header blocks that introduce them.
-    /// </summary>
-    /// <param name="Header">
-    /// Every header block for the entry, in order and verbatim: the entry's own
-    /// 512-byte header, preceded by any GNU long-name or PAX blocks and their data.
-    /// The entry's own header is always the last block.
-    /// </param>
-    /// <param name="DataOffset">Where the content starts in the source.</param>
-    /// <param name="DeclaresPaxSize">
-    /// Whether a PAX block states the size, which a patched header would then
-    /// contradict.
-    /// </param>
-    private sealed record EntryLayout(byte[] Header, long DataOffset, bool DeclaresPaxSize);
-
     private TarContainer(
+        TarArchive archive,
+        TarArchiveEntry[] source,
         Stream stream,
         bool ownsStream,
-        string? path,
         ContainerEntry[] entries,
-        EntryLayout[] layout,
-        byte[] trailer)
+        string? path)
     {
+        _archive = archive;
+        _source = source;
         _stream = stream;
         _ownsStream = ownsStream;
         _entries = entries;
-        _layout = layout;
-        _trailer = trailer;
         Path = path;
     }
 
@@ -92,159 +80,65 @@ public sealed class TarContainer : IContainer
                 "A TAR archive must be read from a seekable stream.");
         }
 
-        var entries = new List<ContainerEntry>();
-        var layout = new List<EntryLayout>();
-        byte[] block = new byte[TarHeader.BlockSize];
-        long position = 0;
+        TarArchive archive;
 
-        while (true)
+        try
         {
-            stream.Position = position;
-
-            if (!ReadExactly(stream, block, TarHeader.BlockSize))
-            {
-                // A truncated final block is how an archive that was cut short
-                // ends. There is nothing further to read and nothing to repair;
-                // whatever entries were found are still good.
-                break;
-            }
-
-            // The archive ends at the first all-zero block, which is also how tar
-            // itself decides. Everything from here is the trailer, reproduced
-            // verbatim on write.
-            if (TarHeader.IsZeroBlock(block))
-            {
-                break;
-            }
-
-            if (!TarHeader.ChecksumMatches(block))
-            {
-                throw new BookFormatException(
-                    entries.Count == 0
-                        ? "This file is not a readable TAR archive: the first header's "
-                            + "checksum does not match."
-                        : $"The TAR header after entry {entries.Count} is corrupt: its "
-                            + "checksum does not match.");
-            }
-
-            long headerStart = position;
-            string? nameOverride = null;
-            bool declaresPaxSize = false;
-            char type = TarHeader.ReadTypeFlag(block);
-
-            // GNU long-name and PAX blocks describe the entry that follows. Retained
-            // so a rebuild reproduces them, and read for the name they may override.
-            while (TarHeader.IsPrefixBlock(type))
-            {
-                long prefixSize = TarHeader.ReadSize(block);
-                if (prefixSize < 0)
-                {
-                    throw new BookFormatException(
-                        $"A TAR extended header at offset {position} has an unreadable size.");
-                }
-
-                byte[] data = new byte[prefixSize];
-                stream.Position = position + TarHeader.BlockSize;
-
-                if (!ReadExactly(stream, data, data.Length))
-                {
-                    throw new BookFormatException(
-                        $"A TAR extended header at offset {position} is truncated.");
-                }
-
-                nameOverride ??= TarHeader.ReadNameOverride(type, data);
-                declaresPaxSize |= TarHeader.DeclaresPaxSize(type, data);
-
-                position += TarHeader.BlockSize + TarHeader.Padded(prefixSize);
-                stream.Position = position;
-
-                if (!ReadExactly(stream, block, TarHeader.BlockSize) ||
-                    TarHeader.IsZeroBlock(block) ||
-                    !TarHeader.ChecksumMatches(block))
-                {
-                    throw new BookFormatException(
-                        $"A TAR extended header at offset {headerStart} is not followed by "
-                        + "the entry it describes.");
-                }
-
-                type = TarHeader.ReadTypeFlag(block);
-            }
-
-            long size = TarHeader.ReadSize(block);
-            if (size < 0)
-            {
-                throw new BookFormatException(
-                    $"The TAR header at offset {position} has an unreadable size.");
-            }
-
-            // Directories and links carry no content of their own, whatever their
-            // size field says.
-            if (!TarHeader.IsRegularFile(type))
-            {
-                size = 0;
-            }
-
-            long dataOffset = position + TarHeader.BlockSize;
-            byte[] header = new byte[dataOffset - headerStart];
-
-            stream.Position = headerStart;
-            if (!ReadExactly(stream, header, header.Length))
-            {
-                throw new BookFormatException(
-                    $"The TAR header at offset {headerStart} is truncated.");
-            }
-
-            string name = nameOverride ?? TarHeader.ReadName(block);
-
-            entries.Add(new ContainerEntry
-            {
-                Name = name,
-                Index = entries.Count,
-                Length = size,
-
-                // TAR does not compress. Reported as stored so the entry counts as
-                // reproducible and the format layer, which speaks ZIP method codes,
-                // needs no special case.
-                CompressionMethod = ZipCompressionMethods.Stored,
-                LastModified = TarHeader.ReadLastModified(block),
-                IsDirectory = type == TarHeader.TypeDirectory || name.EndsWith('/'),
-            });
-
-            layout.Add(new EntryLayout(header, dataOffset, declaresPaxSize));
-
-            position = dataOffset + TarHeader.Padded(size);
+            archive = TarArchive.Open(stream, new ReaderOptions { LeaveStreamOpen = true });
+        }
+        catch (Exception ex) when (IsUnreadable(ex))
+        {
+            throw new BookFormatException($"'{path}' is not a readable TAR archive.", ex);
         }
 
-        return new TarContainer(
-            stream,
-            ownsStream: !leaveOpen,
-            path,
-            [.. entries],
-            [.. layout],
-            ReadTrailer(stream, position));
-    }
-
-    /// <summary>Reads everything past the last entry, so a rebuild can put it back.</summary>
-    private static byte[] ReadTrailer(Stream stream, long position)
-    {
-        long available = stream.Length - position;
-
-        // Beyond any plausible blocking factor this is no longer padding but
-        // appended data, and holding it in memory to reproduce it would be a cost
-        // out of proportion to the fidelity it buys.
-        if (available <= 0 || available > MaximumTrailerLength)
+        try
         {
-            return [];
+            // Materialised once so an entry's Index keeps addressing the same archive
+            // entry. TAR names are no more unique than ZIP's, so nothing looks an entry
+            // up by name.
+            TarArchiveEntry[] source = [.. archive.Entries];
+            var entries = new ContainerEntry[source.Length];
+
+            for (int i = 0; i < source.Length; i++)
+            {
+                TarArchiveEntry entry = source[i];
+
+                entries[i] = new ContainerEntry
+                {
+                    Name = entry.Key ?? $"entry{i}",
+                    Index = i,
+                    Length = entry.IsDirectory ? 0 : entry.Size,
+
+                    // TAR does not compress. Reported as stored so the entry counts as
+                    // reproducible and the format layer, which speaks ZIP method codes,
+                    // needs no special case.
+                    CompressionMethod = ZipCompressionMethods.Stored,
+
+                    // SharpCompress hands back a local DateTime, so the kind has to be
+                    // converted rather than reinterpreted or the instant shifts.
+                    LastModified = entry.LastModifiedTime is { } modified
+                        ? new DateTimeOffset(modified.ToUniversalTime(), TimeSpan.Zero)
+                        : default,
+                    IsDirectory = entry.IsDirectory,
+                };
+            }
+
+            Log.Debug($"Opened TAR archive '{path}' with {entries.Length} entries.");
+
+            return new TarContainer(
+                archive, source, stream, ownsStream: !leaveOpen, entries, path);
         }
-
-        byte[] trailer = new byte[available];
-        stream.Position = position;
-
-        return ReadExactly(stream, trailer, trailer.Length) ? trailer : [];
+        catch (Exception ex) when (IsUnreadable(ex))
+        {
+            archive.Dispose();
+            throw new BookFormatException($"'{path}' could not be read as a TAR archive.", ex);
+        }
+        catch
+        {
+            archive.Dispose();
+            throw;
+        }
     }
-
-    /// <summary>One mebibyte, far above the largest blocking factor tar offers.</summary>
-    private const long MaximumTrailerLength = 1024 * 1024;
 
     /// <inheritdoc />
     public Stream OpenRead(ContainerEntry entry)
@@ -258,57 +152,72 @@ public sealed class TarContainer : IContainer
                 nameof(entry), entry.Index, "Entry index is outside this container.");
         }
 
-        EntryLayout layout = _layout[entry.Index];
-        long length = _entries[entry.Index].Length;
-
-        if (Path is null)
+        try
         {
-            return new SectionStream(_stream, layout.DataOffset, length, ownsStream: false);
+            return _source[entry.Index].OpenEntryStream();
         }
-
-        // Its own handle, so two entries can be read at once. The rebuild reads
-        // entries one at a time, but nothing in the interface promises that.
-        FileStream own = BookContainers.ReopenForEntry(
-            Path, $"Entry '{entry.Name}'");
-
-        return new SectionStream(own, layout.DataOffset, length, ownsStream: true);
+        catch (Exception ex) when (IsUnreadable(ex))
+        {
+            throw new BookFormatException($"Entry '{entry.Name}' could not be read.", ex);
+        }
     }
 
     /// <inheritdoc />
+    /// <exception cref="BookFormatException">
+    /// An entry name is too long for the header this build writes (CBT-F001).
+    /// </exception>
     public void Rebuild(IEnumerable<PendingEntry> entries, string targetPath)
     {
         Throw.IfNull(entries);
         Throw.IfNullOrEmpty(targetPath);
         Throw.IfDisposed(_disposed, this);
 
-        Write(entries, targetPath, this);
+        Create(entries, targetPath);
     }
 
     /// <summary>Writes a TAR containing the given entries, in the order given.</summary>
     /// <param name="entries">The entries to write, in order.</param>
     /// <param name="targetPath">The file to create.</param>
     /// <exception cref="BookIoException">The target could not be written.</exception>
-    /// <exception cref="BookFormatException">An entry name cannot be expressed.</exception>
+    /// <exception cref="BookFormatException">
+    /// An entry name is too long for the header this build writes (CBT-F001).
+    /// </exception>
     public static void Create(IEnumerable<PendingEntry> entries, string targetPath)
     {
         Throw.IfNull(entries);
         Throw.IfNullOrEmpty(targetPath);
 
-        Write(entries, targetPath, source: null);
-    }
-
-    private static void Write(
-        IEnumerable<PendingEntry> entries, string targetPath, TarContainer? source)
-    {
         try
         {
             using var output = new FileStream(
                 targetPath, FileMode.Create, FileAccess.Write, FileShare.None);
 
-            byte[] padding = new byte[TarHeader.BlockSize];
+            // USTAR rather than GNU: SharpCompress's GNU writer leaves the magic field
+            // zeroed, and BookContainers.Sniff would not recognise this build's output.
+            using var writer = new TarWriter(
+                output,
+                new TarWriterOptions(
+                    CompressionType.None,
+                    finalizeArchiveOnClose: true,
+                    TarHeaderWriteFormat.USTAR));
 
             foreach (PendingEntry pending in entries)
             {
+                // WriteDirectory emits a header with no magic at all, which would make a
+                // comic whose first entry is its page folder unrecognisable to Sniff.
+                // The paths on the pages carry the structure, so the marker is dropped.
+                if (pending.Source?.IsDirectory == true || pending.Name.EndsWith('/'))
+                {
+                    Log.Debug($"Dropping the folder marker '{pending.Name}'.");
+                    continue;
+                }
+
+                RefuseIfNameTooLong(pending.Name, targetPath);
+
+                DateTime? modified = pending.LastModified == default
+                    ? null
+                    : pending.LastModified.UtcDateTime;
+
                 using Stream content = pending.OpenContent();
                 Stream body = content;
                 long size;
@@ -329,33 +238,12 @@ public sealed class TarContainer : IContainer
                     size = buffered.Length;
                 }
 
-                byte[] header = HeaderFor(pending, size, source);
-                output.Write(header, 0, header.Length);
-                body.CopyTo(output);
+                writer.Write(pending.Name, body, modified, size);
 
                 if (body != content)
                 {
                     body.Dispose();
                 }
-
-                int overhang = (int)(size % TarHeader.BlockSize);
-                if (overhang != 0)
-                {
-                    output.Write(padding, 0, TarHeader.BlockSize - overhang);
-                }
-            }
-
-            byte[] trailer = source?._trailer ?? [];
-
-            if (trailer.Length > 0)
-            {
-                output.Write(trailer, 0, trailer.Length);
-            }
-            else
-            {
-                // The minimum a reader will accept as an end of archive.
-                output.Write(padding, 0, TarHeader.BlockSize);
-                output.Write(padding, 0, TarHeader.BlockSize);
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -364,72 +252,36 @@ public sealed class TarContainer : IContainer
         }
     }
 
+    /// <summary>The name field of a USTAR header, which this build does not split.</summary>
+    private const int MaximumNameLength = 100;
+
     /// <summary>
-    /// Produces the header blocks for an entry: the original where there is one,
-    /// patched only if the content changed size.
+    /// Refuses a name the writer cannot express. SharpCompress never fills the ustar
+    /// prefix field and throws a bare <see cref="Exception"/> instead, so the refusal
+    /// is made here where it can name the entry.
     /// </summary>
-    private static byte[] HeaderFor(PendingEntry pending, long size, TarContainer? source)
+    private static void RefuseIfNameTooLong(string name, string targetPath)
     {
-        EntryLayout? layout = source?.LayoutOf(pending.Source);
+        int length = Encoding.UTF8.GetByteCount(name);
 
-        if (layout is null)
+        if (length <= MaximumNameLength)
         {
-            return TarHeader.Synthesize(pending.Name, size, pending.LastModified);
+            return;
         }
 
-        if (size == pending.Source!.Length)
-        {
-            // The common case by far: an entry copied through untouched, header
-            // included. This is what makes saving an unedited archive produce the
-            // same bytes.
-            return layout.Header;
-        }
+        string reason =
+            $"This archive cannot be saved: the entry '{name}' has a name of {length} bytes, "
+            + $"and this build writes TAR headers that hold at most {MaximumNameLength}. "
+            + "The file was not changed.";
 
-        // A PAX size record would contradict a patched header, and this build does not
-        // rewrite PAX. A clean header loses this entry's mode and owner: lesser harm.
-        if (layout.DeclaresPaxSize)
-        {
-            return TarHeader.Synthesize(pending.Name, size, pending.LastModified);
-        }
-
-        byte[] header = (byte[])layout.Header.Clone();
-        int last = header.Length - TarHeader.BlockSize;
-
-        TarHeader.WithSize(header.AsSpan(last, TarHeader.BlockSize), size)
-            .CopyTo(header.AsSpan(last));
-
-        return header;
+        Log.Rule(LogLevel.Error, "CBT-F001", reason, targetPath);
+        throw new BookFormatException(reason);
     }
 
-    /// <summary>Returns the retained layout for an entry, if it is one of ours.</summary>
-    private EntryLayout? LayoutOf(ContainerEntry? entry)
-    {
-        if (entry is null || (uint)entry.Index >= (uint)_entries.Length)
-        {
-            return null;
-        }
-
-        return ReferenceEquals(_entries[entry.Index], entry) ? _layout[entry.Index] : null;
-    }
-
-    /// <summary>Fills a buffer, returning false if the stream ended first.</summary>
-    private static bool ReadExactly(Stream stream, byte[] buffer, int count)
-    {
-        int total = 0;
-
-        while (total < count)
-        {
-            int read = stream.Read(buffer, total, count - total);
-            if (read <= 0)
-            {
-                return false;
-            }
-
-            total += read;
-        }
-
-        return true;
-    }
+    /// <summary>Whether an exception means "these bytes did not read", not a bug.</summary>
+    private static bool IsUnreadable(Exception ex) =>
+        ex is SharpCompressException or IOException or InvalidDataException
+            or IndexOutOfRangeException or ArgumentOutOfRangeException or NotSupportedException;
 
     /// <inheritdoc />
     public void Dispose()
@@ -440,444 +292,11 @@ public sealed class TarContainer : IContainer
         }
 
         _disposed = true;
+        _archive.Dispose();
 
         if (_ownsStream)
         {
             _stream.Dispose();
         }
     }
-}
-
-/// <summary>
-/// The 512-byte TAR header block: reading the fields this build understands, and
-/// producing one for an entry it has to write.
-/// </summary>
-internal static class TarHeader
-{
-    /// <summary>The size of every block in a TAR archive, header or data.</summary>
-    internal const int BlockSize = 512;
-
-    private const int NameOffset = 0;
-    private const int NameLength = 100;
-    private const int ModeOffset = 100;
-    private const int UidOffset = 108;
-    private const int GidOffset = 116;
-    private const int SizeOffset = 124;
-    private const int SizeLength = 12;
-    private const int ModifiedOffset = 136;
-    private const int ModifiedLength = 12;
-    private const int ChecksumOffset = 148;
-    private const int ChecksumLength = 8;
-    private const int TypeFlagOffset = 156;
-    private const int MagicOffset = 257;
-    private const int PrefixOffset = 345;
-    private const int PrefixLength = 155;
-
-    /// <summary>A regular file. V7 wrote a NUL here; ustar writes '0'.</summary>
-    internal const char TypeRegular = '0';
-
-    /// <summary>A regular file, as the oldest archives spell it.</summary>
-    internal const char TypeRegularLegacy = '\0';
-
-    /// <summary>A directory.</summary>
-    internal const char TypeDirectory = '5';
-
-    /// <summary>GNU long name: the following data blocks hold the real name.</summary>
-    internal const char TypeGnuLongName = 'L';
-
-    /// <summary>GNU long link target, structured like <see cref="TypeGnuLongName"/>.</summary>
-    internal const char TypeGnuLongLink = 'K';
-
-    /// <summary>A PAX extended header, applying to the entry that follows.</summary>
-    internal const char TypePaxExtended = 'x';
-
-    /// <summary>A PAX extended header, as some producers spell it.</summary>
-    internal const char TypePaxExtendedUpper = 'X';
-
-    /// <summary>A PAX global header, applying to the rest of the archive.</summary>
-    internal const char TypePaxGlobal = 'g';
-
-    /// <summary>
-    /// Names and PAX records are decoded as UTF-8, which is what every current
-    /// producer writes. Non-throwing, because a name this build cannot decode is
-    /// still a name it must round-trip: the bytes are copied from the retained
-    /// header either way, and only the display string would be affected.
-    /// </summary>
-    private static readonly UTF8Encoding NameEncoding = new(false, throwOnInvalidBytes: false);
-
-    /// <summary>Whether a block is entirely zero, which is how an archive ends.</summary>
-    /// <param name="block">A 512-byte block.</param>
-    /// <returns><see langword="true"/> when every byte is zero.</returns>
-    internal static bool IsZeroBlock(ReadOnlySpan<byte> block)
-    {
-        foreach (byte value in block)
-        {
-            if (value != 0)
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    /// <summary>Whether the block's stored checksum matches the bytes around it.</summary>
-    /// <param name="block">A 512-byte block.</param>
-    /// <returns><see langword="true"/> when the block is a plausible header.</returns>
-    internal static bool ChecksumMatches(ReadOnlySpan<byte> block)
-    {
-        long stored = ReadOctal(block.Slice(ChecksumOffset, ChecksumLength));
-        if (stored < 0)
-        {
-            return false;
-        }
-
-        int unsigned = 0;
-        int signed = 0;
-
-        for (int i = 0; i < BlockSize; i++)
-        {
-            // The checksum field itself is summed as if it held spaces, since its
-            // contents cannot be known while computing it.
-            byte value = i >= ChecksumOffset && i < ChecksumOffset + ChecksumLength
-                ? (byte)' '
-                : block[i];
-
-            unsigned += value;
-            signed += (sbyte)value;
-        }
-
-        return stored == unsigned || stored == signed;
-    }
-
-    /// <summary>Reads the entry name, joining the ustar prefix when there is one.</summary>
-    /// <param name="block">A 512-byte header block.</param>
-    /// <returns>The name, with forward slashes, exactly as stored.</returns>
-    internal static string ReadName(ReadOnlySpan<byte> block)
-    {
-        string name = ReadString(block.Slice(NameOffset, NameLength));
-
-        // The prefix field is ustar's answer to the 100-byte name limit: the real
-        // name is prefix + '/' + name. It is only meaningful when the ustar magic
-        // is present, because older archives use those bytes as padding.
-        if (!HasUstarMagic(block))
-        {
-            return name;
-        }
-
-        string prefix = ReadString(block.Slice(PrefixOffset, PrefixLength));
-        return prefix.Length == 0 ? name : prefix + "/" + name;
-    }
-
-    /// <summary>Reads the entry's content length in bytes.</summary>
-    /// <param name="block">A 512-byte header block.</param>
-    /// <returns>The length, or -1 when the field is unreadable.</returns>
-    internal static long ReadSize(ReadOnlySpan<byte> block) =>
-        ReadOctal(block.Slice(SizeOffset, SizeLength));
-
-    /// <summary>Reads the modification time.</summary>
-    /// <param name="block">A 512-byte header block.</param>
-    /// <returns>The timestamp, or <see langword="default"/> when unreadable.</returns>
-    internal static DateTimeOffset ReadLastModified(ReadOnlySpan<byte> block)
-    {
-        long seconds = ReadOctal(block.Slice(ModifiedOffset, ModifiedLength));
-
-        if (seconds < 0)
-        {
-            return default;
-        }
-
-        try
-        {
-            return DateTimeOffset.FromUnixTimeSeconds(seconds);
-        }
-        catch (ArgumentOutOfRangeException)
-        {
-            return default;
-        }
-    }
-
-    /// <summary>Reads the type flag, which says what kind of entry this is.</summary>
-    /// <param name="block">A 512-byte header block.</param>
-    /// <returns>The type flag character.</returns>
-    internal static char ReadTypeFlag(ReadOnlySpan<byte> block) => (char)block[TypeFlagOffset];
-
-    /// <summary>Whether a type flag describes something with file content.</summary>
-    /// <param name="type">A type flag from <see cref="ReadTypeFlag"/>.</param>
-    /// <returns><see langword="true"/> for a regular file.</returns>
-    internal static bool IsRegularFile(char type) =>
-        type is TypeRegular or TypeRegularLegacy;
-
-    /// <summary>
-    /// Whether a type flag introduces metadata for the entry that follows rather
-    /// than an entry of its own.
-    /// </summary>
-    /// <param name="type">A type flag from <see cref="ReadTypeFlag"/>.</param>
-    /// <returns><see langword="true"/> for GNU long-name and PAX header blocks.</returns>
-    internal static bool IsPrefixBlock(char type) =>
-        type is TypeGnuLongName or TypeGnuLongLink
-            or TypePaxExtended or TypePaxExtendedUpper or TypePaxGlobal;
-
-    /// <summary>Rounds a content length up to a whole number of blocks.</summary>
-    /// <param name="size">A content length in bytes.</param>
-    /// <returns>The number of bytes the content occupies, including padding.</returns>
-    internal static long Padded(long size) => (size + BlockSize - 1) / BlockSize * BlockSize;
-
-    /// <summary>
-    /// Extracts the <c>path</c> override from a GNU long-name or PAX extended
-    /// header's data.
-    /// </summary>
-    /// <param name="type">The type flag of the block the data belongs to.</param>
-    /// <param name="data">The data blocks' content, trimmed to the declared size.</param>
-    /// <returns>The name it declares, or <see langword="null"/> if it declares none.</returns>
-    internal static string? ReadNameOverride(char type, ReadOnlySpan<byte> data)
-    {
-        if (type == TypeGnuLongName)
-        {
-            // GNU stores the name raw, usually with a trailing NUL.
-            return ReadString(data);
-        }
-
-        if (type is not (TypePaxExtended or TypePaxExtendedUpper))
-        {
-            return null;
-        }
-
-        // PAX records are "<length> <key>=<value>\n", where length counts the whole
-        // record including itself.
-        string text = NameEncoding.GetString(data.ToArray());
-        int position = 0;
-
-        while (position < text.Length)
-        {
-            int space = text.IndexOf(' ', position);
-            if (space < 0 ||
-                !int.TryParse(
-                    text.Substring(position, space - position),
-                    System.Globalization.NumberStyles.None,
-                    System.Globalization.CultureInfo.InvariantCulture,
-                    out int length) ||
-                length <= 0 ||
-                position + length > text.Length)
-            {
-                return null;
-            }
-
-            string record = text.Substring(space + 1, position + length - space - 1).TrimEnd('\n');
-            if (record.StartsWith("path=", StringComparison.Ordinal))
-            {
-                return record.Substring("path=".Length);
-            }
-
-            position += length;
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// Whether a PAX extended header declares a <c>size</c>, which would
-    /// contradict a patched size field in the header that follows.
-    /// </summary>
-    /// <param name="type">The type flag of the block the data belongs to.</param>
-    /// <param name="data">The data blocks' content, trimmed to the declared size.</param>
-    /// <returns><see langword="true"/> when a <c>size</c> record is present.</returns>
-    internal static bool DeclaresPaxSize(char type, ReadOnlySpan<byte> data)
-    {
-        if (type is not (TypePaxExtended or TypePaxExtendedUpper))
-        {
-            return false;
-        }
-
-        return NameEncoding.GetString(data.ToArray()).Contains(" size=", StringComparison.Ordinal);
-    }
-
-    /// <summary>
-    /// Copies a header, changing only the content length and the checksum that
-    /// covers it.
-    /// </summary>
-    /// <param name="header">The original block.</param>
-    /// <param name="size">The new content length.</param>
-    /// <returns>A new 512-byte block.</returns>
-    internal static byte[] WithSize(ReadOnlySpan<byte> header, long size)
-    {
-        byte[] patched = header.ToArray();
-
-        WriteOctal(patched.AsSpan(SizeOffset, SizeLength - 1), size);
-        WriteChecksum(patched);
-
-        return patched;
-    }
-
-    /// <summary>Builds a header for an entry that was not in the source archive.</summary>
-    /// <param name="name">The entry name, with forward slashes.</param>
-    /// <param name="size">The content length in bytes.</param>
-    /// <param name="lastModified">
-    /// The timestamp to record; <see langword="default"/> writes the epoch.
-    /// </param>
-    /// <returns>A 512-byte ustar header block.</returns>
-    /// <exception cref="BookFormatException">
-    /// The name does not fit the ustar name and prefix fields.
-    /// </exception>
-    internal static byte[] Synthesize(string name, long size, DateTimeOffset lastModified)
-    {
-        byte[] block = new byte[BlockSize];
-
-        WriteName(block, name);
-
-        WriteOctal(block.AsSpan(ModeOffset, 7), Convert.ToInt64("644", 8));
-        WriteOctal(block.AsSpan(UidOffset, 7), 0);
-        WriteOctal(block.AsSpan(GidOffset, 7), 0);
-        WriteOctal(block.AsSpan(SizeOffset, SizeLength - 1), size);
-        WriteOctal(
-            block.AsSpan(ModifiedOffset, ModifiedLength - 1),
-            lastModified == default ? 0 : Math.Max(0, lastModified.ToUnixTimeSeconds()));
-
-        block[TypeFlagOffset] = (byte)TypeRegular;
-
-        // "ustar\0" then version "00" — the POSIX spelling. GNU writes "ustar  \0"
-        // across the same eight bytes; either is read by everything, and this is
-        // the one the standard specifies.
-        NameEncoding.GetBytes("ustar", 0, 5, block, MagicOffset);
-        block[MagicOffset + 6] = (byte)'0';
-        block[MagicOffset + 7] = (byte)'0';
-
-        WriteChecksum(block);
-
-        return block;
-    }
-
-    /// <summary>Writes a name across the ustar name and prefix fields.</summary>
-    private static void WriteName(byte[] block, string name)
-    {
-        byte[] bytes = NameEncoding.GetBytes(name);
-
-        if (bytes.Length <= NameLength)
-        {
-            Array.Copy(bytes, 0, block, NameOffset, bytes.Length);
-            return;
-        }
-
-        // ustar splits a long name at a slash: everything before goes in the
-        // prefix, everything after in the name.
-        int split = -1;
-        for (int i = Math.Min(bytes.Length - 1, PrefixLength); i > 0; i--)
-        {
-            if (bytes[i] == (byte)'/' && bytes.Length - i - 1 <= NameLength)
-            {
-                split = i;
-                break;
-            }
-        }
-
-        if (split < 0)
-        {
-            // A GNU long-name block would be the way to express this, and writing
-            // one is a capability nothing in this build needs: the only synthesized
-            // entry is ComicInfo.xml at the archive root.
-            throw new BookFormatException(
-                $"Entry name '{name}' is too long for a TAR header and cannot be written.");
-        }
-
-        Array.Copy(bytes, split + 1, block, NameOffset, bytes.Length - split - 1);
-        Array.Copy(bytes, 0, block, PrefixOffset, split);
-    }
-
-    /// <summary>Computes and stores the block's checksum, which must be done last.</summary>
-    private static void WriteChecksum(byte[] block)
-    {
-        int sum = 0;
-
-        for (int i = 0; i < BlockSize; i++)
-        {
-            sum += i >= ChecksumOffset && i < ChecksumOffset + ChecksumLength ? ' ' : block[i];
-        }
-
-        // Six octal digits, a NUL, then a space. Other spellings exist and are
-        // read, but this is the one POSIX describes and every tool accepts.
-        WriteOctal(block.AsSpan(ChecksumOffset, 6), sum);
-        block[ChecksumOffset + 6] = 0;
-        block[ChecksumOffset + 7] = (byte)' ';
-    }
-
-    /// <summary>
-    /// Reads an octal ASCII field, tolerating the padding producers disagree
-    /// about.
-    /// </summary>
-    /// <returns>The value, or -1 when the field cannot be read.</returns>
-    private static long ReadOctal(ReadOnlySpan<byte> field)
-    {
-        // GNU escapes a value too large for the field by setting the high bit of
-        // the first byte and storing it as base 256, big-endian. Only reachable
-        // for sizes of 8 GiB or more, but reading it costs four lines.
-        if (field.Length > 0 && (field[0] & 0x80) != 0)
-        {
-            long binary = field[0] & 0x3F;
-
-            for (int i = 1; i < field.Length; i++)
-            {
-                binary = (binary << 8) | field[i];
-            }
-
-            return (field[0] & 0x40) != 0 ? -1 : binary;
-        }
-
-        long value = 0;
-        bool any = false;
-
-        foreach (byte character in field)
-        {
-            if (character is 0 or (byte)' ')
-            {
-                // Leading padding is skipped; trailing padding ends the field.
-                if (any)
-                {
-                    break;
-                }
-
-                continue;
-            }
-
-            if (character < '0' || character > '7')
-            {
-                return -1;
-            }
-
-            value = (value << 3) | (long)(character - '0');
-            any = true;
-        }
-
-        return any ? value : 0;
-    }
-
-    /// <summary>
-    /// Writes a right-aligned, zero-padded octal value filling the whole span.
-    /// </summary>
-    private static void WriteOctal(Span<byte> field, long value)
-    {
-        for (int i = field.Length - 1; i >= 0; i--)
-        {
-            field[i] = (byte)('0' + (int)(value & 7));
-            value >>= 3;
-        }
-    }
-
-    /// <summary>Reads a NUL-terminated ASCII field.</summary>
-    private static string ReadString(ReadOnlySpan<byte> field)
-    {
-        int length = field.IndexOf((byte)0);
-        if (length < 0)
-        {
-            length = field.Length;
-        }
-
-        return length == 0 ? string.Empty : NameEncoding.GetString(field.Slice(0, length).ToArray());
-    }
-
-    private static bool HasUstarMagic(ReadOnlySpan<byte> block) =>
-        block[MagicOffset] == 'u' &&
-        block[MagicOffset + 1] == 's' &&
-        block[MagicOffset + 2] == 't' &&
-        block[MagicOffset + 3] == 'a' &&
-        block[MagicOffset + 4] == 'r';
 }
