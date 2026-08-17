@@ -17,7 +17,7 @@ internal sealed class AppSettings
 
     /// <summary>The extensions the context-menu button registers.</summary>
     internal List<string> RegisteredExtensions { get; set; } =
-        [".epub", ".cbz", ".cbt", ".fb2", ".mobi", ".prc", ".azw", ".azw3"];
+        [.. ShellRegistration.SupportedExtensions];
 
     /// <summary>The file the settings were loaded from and will be saved to.</summary>
     internal string Path { get; private set; } = string.Empty;

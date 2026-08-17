@@ -15,7 +15,8 @@ internal sealed class SettingsForm : Form
     {
         _settings = settings;
 
-        Dialogs.Chrome(this, "settings.title", new Size(460, 405));
+        // Width only; the height comes from the content, once it exists.
+        Dialogs.Chrome(this, "settings.title", new Size(460, 0));
 
         _language = new ComboBox
         {
@@ -42,16 +43,22 @@ internal sealed class SettingsForm : Form
 
         _extensions = new CheckedListBox
         {
-            Height = 58,
             Width = 420,
             CheckOnClick = true,
             IntegralHeight = false,
         };
 
+        bool registered = ShellRegistration.IsRegisteredForAny();
+
         foreach (string extension in ShellRegistration.SupportedExtensions)
         {
-            _extensions.Items.Add(extension, settings.RegisteredExtensions.Contains(extension));
+            _extensions.Items.Add(extension, registered
+                ? ShellRegistration.IsRegistered(extension)
+                : settings.RegisteredExtensions.Contains(extension));
         }
+
+        int visible = Math.Min(Math.Max(_extensions.Items.Count, 4), 10);
+        _extensions.Height = (visible * _extensions.ItemHeight) + 6;
 
         _contextMenu = new Button
         {
@@ -72,8 +79,16 @@ internal sealed class SettingsForm : Form
             ForeColor = SystemColors.GrayText,
         };
 
-        Controls.Add(BuildLayout(extensionsLabel, registrationNote));
-        Controls.Add(BuildButtons());
+        TableLayoutPanel layout = BuildLayout(extensionsLabel, registrationNote);
+        FlowLayoutPanel buttons = BuildButtons();
+
+        Controls.Add(layout);
+        Controls.Add(buttons);
+
+        // Exactly what the rows ask for, so the note is not left floating above the
+        // buttons — and so a translation that wraps to another line still fits.
+        ClientSize = new Size(
+            ClientSize.Width, layout.PreferredSize.Height + buttons.PreferredSize.Height);
     }
 
     /// <summary>One column of controls, each sized to whatever its translation needs.</summary>
