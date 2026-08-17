@@ -632,10 +632,11 @@ shows English rather than raw key names.
 
 - **Not .resx.** Satellite assemblies are DLLs in subfolders and this app is one
   file. A plain text file is also something a translator can open.
-- **`KeyValueFile` reads that format, and `settings.txt` uses it too.** The settings
-  were a hand-rolled JSON object and a 67-line scanner for three keys — a language
-  code, a bool and a `;`-joined extension list. Two text formats in one 200 KB exe
-  was one too many.
+- **`KeyValueFile` reads that format, and `EBookMetaEditor.ini` uses it too.** The
+  settings were a hand-rolled JSON object and a 67-line scanner for three keys — a
+  language code, a bool and a `;`-joined extension list. Two text formats in one exe
+  was one too many. The file is named after the executable, like the `.log` beside
+  it, and carries no `[sections]` — nothing has asked for a second group of keys.
 - **Adding a language is adding a file.** The picker is built from what is
   embedded and the csproj globs `Languages\*.lang`. `WithCulture=false` on that
   item is load-bearing — without it MSBuild builds a satellite assembly.

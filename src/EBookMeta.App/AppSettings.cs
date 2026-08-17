@@ -5,7 +5,9 @@ namespace EBookMeta.App;
 /// <summary>User preferences, persisted beside the executable.</summary>
 internal sealed class AppSettings
 {
-    private const string FileName = "settings.txt";
+    // Named after the exe, like EBookMetaEditor.log beside it. Sections are not
+    // supported and not needed: three keys, one flat file.
+    private const string FileName = "EBookMetaEditor.ini";
 
     /// <summary>
     /// The interface language, as a two-letter code, or empty to follow Windows.
