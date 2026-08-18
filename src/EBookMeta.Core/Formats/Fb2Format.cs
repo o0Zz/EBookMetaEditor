@@ -33,10 +33,7 @@ public sealed partial class Fb2Format : IBookFormat
                 MetadataField.Subjects,
         };
 
-        // .fb2.zip is deliberately absent. SystemFileAssociations keys on a single
-        // extension, so registering it would mean claiming ".zip" and putting this
-        // app's verb on every archive on the machine.
-        Extensions = id == FormatId.Fb2Zip ? [] : [".fb2"];
+        Extensions = id == FormatId.Fb2Zip ? [".fb2.zip"] : [".fb2"];
     }
 
     /// <inheritdoc />

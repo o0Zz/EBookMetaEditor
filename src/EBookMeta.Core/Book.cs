@@ -54,7 +54,7 @@ public sealed class Book
     /// <returns>The open book.</returns>
     /// <exception cref="UnsupportedFormatException">
     /// The file was recognised but no registered <see cref="IBookFormat"/> can
-    /// edit it — a 7z archive with a <c>.cbz</c> extension, or a PDF.
+    /// edit it — a PDF wearing a <c>.cbz</c> extension, for instance.
     /// </exception>
     /// <exception cref="BookFormatException">
     /// The file is damaged beyond what can be recovered on the way in.

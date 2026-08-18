@@ -14,12 +14,14 @@ public static class BookFormats
     static BookFormats()
     {
         Register(new EpubFormat());
-        Register(new CbzFormat(FormatId.Cbz));
 
-        // The same implementation twice more: a CBT is a CBZ in a TAR and a CBR a CBZ
-        // in a RAR. Only the container differs, and only CBR's save.
-        Register(new CbzFormat(FormatId.Cbt));
-        Register(new CbzFormat(FormatId.Cbr));
+        // One implementation, once per container: a CBT is a CBZ in a TAR, a CBR one
+        // in a RAR, a CB7 one in a 7z. CbzFormat owns that list, so adding a comic
+        // container does not come back here.
+        foreach (IBookFormat comic in CbzFormat.Variants())
+        {
+            Register(comic);
+        }
 
         // And again for FictionBook, which is one document either bare or zipped.
         Register(new Fb2Format(FormatId.Fb2));
@@ -47,7 +49,15 @@ public static class BookFormats
     public static IBookFormat? For(FormatId format) =>
         Registered.TryGetValue(format, out IBookFormat? registered) ? registered : null;
 
-    private static ReadOnlySpan<byte> PdfMagic => "%PDF-"u8;
+    /// <summary>
+    /// Formats this build names but cannot open. Naming one costs a magic number;
+    /// supporting it would cost a container and a metadata document, so the answer
+    /// stops at "this .cbz is really a PDF".
+    /// </summary>
+    private static readonly (FormatId Format, string Extension, byte[] Magic)[] Unsupported =
+    [
+        (FormatId.Pdf, ".pdf", [.. "%PDF-".Select(c => (byte)c)]),
+    ];
 
     /// <summary>
     /// Offers a file to every registered format and returns it open, claimed by
@@ -70,18 +80,16 @@ public static class BookFormats
 
         try
         {
-            // The answers no registered format is there to give: recognised but not
-            // openable. Naming one costs a magic-number comparison; supporting it
-            // would cost a container and a metadata document.
-            FormatId? unsupported = source.ContainerKind switch
+            // The answer no registered format is there to give: recognised but not
+            // openable.
+            foreach ((FormatId format, _, byte[] magic) in Unsupported)
             {
-                ContainerKind.SevenZip => FormatId.Cb7,
-                _ => source.HeadStartsWith(PdfMagic) ? FormatId.Pdf : null,
-            };
+                if (!source.HeadStartsWith(magic))
+                {
+                    continue;
+                }
 
-            if (unsupported is { } id)
-            {
-                detected = Describe(id, source, claimed, source.ContainerDetail);
+                detected = Describe(format, source, claimed, source.ContainerDetail);
                 source.Dispose();
                 return null;
             }
@@ -164,12 +172,15 @@ public static class BookFormats
             }
         }
 
-        return ext switch
+        foreach ((FormatId format, string extension, _) in Unsupported)
         {
-            ".cb7" => FormatId.Cb7,
-            ".pdf" => FormatId.Pdf,
-            _ => FormatId.Unknown,
-        };
+            if (ext.Equals(extension, StringComparison.Ordinal))
+            {
+                return format;
+            }
+        }
+
+        return FormatId.Unknown;
     }
 
     /// <summary>

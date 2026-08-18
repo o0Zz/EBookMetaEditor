@@ -69,18 +69,24 @@ internal static class StandInArchiver
                 string list = null;
                 bool paths = false;
 
-                foreach (string arg in args)
+                // The verb first, then switches, then paths. WinRAR's -- says the
+                // rest are paths; 7-Zip has no -- and its switches simply lead
+                // with a dash. Both leave the list file as @name.
+                for (int i = 1; i < args.Length; i++)
                 {
-                    if (arg == "--") { paths = true; continue; }
-                    if (!paths) { continue; }
+                    string arg = args[i];
 
-                    if (arg.StartsWith("@")) { list = arg.Substring(1); }
+                    if (arg == "--") { paths = true; continue; }
+                    if (arg.Length == 0) { continue; }
+                    if (!paths && arg[0] == '-') { continue; }
+
+                    if (arg[0] == '@') { list = arg.Substring(1); }
                     else if (target == null) { target = arg; }
                 }
 
                 if (target == null || list == null)
                 {
-                    Console.Error.WriteLine("no target or list file after --");
+                    Console.Error.WriteLine("no target or list file on the command line");
                     return 9;
                 }
 

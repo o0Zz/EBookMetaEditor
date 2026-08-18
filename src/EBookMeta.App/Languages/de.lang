@@ -60,11 +60,7 @@ dialog.number.start = Beginnen bei
 dialog.number.step = Schrittweite
 dialog.number.hint = Die ausgewählten Zeilen werden von oben nach unten nummeriert, in der Reihenfolge der Tabelle. Eine Zeile ohne Reihennamen bleibt unverändert.
 
-filter.supported = Unterstützte Dateien (*.epub;*.cbz;*.cbt;*.cbr;*.fb2;*.fb2.zip;*.mobi;*.prc;*.azw;*.azw3)
-filter.epub = EPUB (*.epub)
-filter.cbz = Comic-Archiv (*.cbz;*.cbt;*.cbr)
-filter.fb2 = FictionBook (*.fb2;*.fb2.zip)
-filter.mobi = Kindle-Buch (*.mobi;*.prc;*.azw;*.azw3)
+filter.supported = Unterstützte Dateien ({0})
 filter.all = Alle Dateien (*.*)
 filter.log = Protokolldatei (*.log)
 filter.text = Textdatei (*.txt)

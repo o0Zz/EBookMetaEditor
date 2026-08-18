@@ -9,6 +9,71 @@ namespace EBookMeta;
 /// <seealso cref="BookFormats" />
 public static class BookContainers
 {
+    private static readonly Dictionary<ContainerKind, ContainerFormat> Registered = [];
+
+    static BookContainers()
+    {
+        // The whole inventory. A new container is one file under Containers/ and one
+        // line here; nothing above this reaches for an implementation by name.
+        Register(ContainerKind.Zip, ZipContainer.Open,
+            Magic("PK\x03\x04"), Magic("PK\x05\x06"), Magic("PK\x07\x08"));
+
+        Register(ContainerKind.Rar, RarContainer.Open,
+            Magic("Rar!\x1a\x07\x01\x00", "RAR 5 archive"),
+            Magic("Rar!\x1a\x07\x00", "RAR 4 archive"));
+
+        Register(ContainerKind.SevenZip, SevenZipContainer.Open,
+            new ContainerSignature
+            {
+                Magic = [0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C],
+                Detail = "7z archive",
+            });
+
+        // TAR's magic sits inside the first header block, not at offset zero, and
+        // PalmDB's type-and-creator pair sits at offset 60.
+        Register(ContainerKind.Tar, TarContainer.Open, Magic("ustar", "TAR archive", 257));
+
+        Register(ContainerKind.PalmDb, PalmDbContainer.Open,
+            Magic("BOOKMOBI", "PalmDB BOOKMOBI", 60),
+            Magic("TEXtREAd", "PalmDB TEXtREAd", 60));
+
+        // No signature: a file carrying no marker at all is a raw one.
+        Register(ContainerKind.Raw, RawContainer.Open);
+    }
+
+    /// <summary>Every registered container.</summary>
+    public static IReadOnlyCollection<ContainerFormat> All => Registered.Values;
+
+    /// <summary>Registers a container, replacing any previous one for its kind.</summary>
+    /// <param name="container">The container to register.</param>
+    public static void Register(ContainerFormat container)
+    {
+        Throw.IfNull(container);
+        Registered[container.Kind] = container;
+    }
+
+    /// <summary>The implementation for a kind, if this build has one.</summary>
+    /// <param name="kind">The kind to look up.</param>
+    /// <returns>
+    /// The implementation, or <see langword="null"/> when nothing handles it.
+    /// </returns>
+    public static ContainerFormat? For(ContainerKind kind) =>
+        Registered.TryGetValue(kind, out ContainerFormat? registered) ? registered : null;
+
+    private static void Register(
+        ContainerKind kind, Func<string, IContainer> open, params ContainerSignature[] signatures) =>
+        Register(new ContainerFormat { Kind = kind, Open = open, Signatures = signatures });
+
+    private static ContainerSignature Magic(string magic, string? detail = null, int offset = 0) =>
+        new()
+        {
+            // Latin-1, so each character is the byte it looks like — every magic
+            // number here is ASCII or an escape below 0x100.
+            Magic = [.. magic.Select(c => (byte)c)],
+            Detail = detail,
+            Offset = offset,
+        };
+
     /// <summary>Opens the container a file turned out to be.</summary>
     /// <param name="path">The file to open.</param>
     /// <param name="kind">
@@ -25,28 +90,11 @@ public static class BookContainers
     {
         Throw.IfNullOrEmpty(path);
 
-        return kind switch
-        {
-            ContainerKind.Zip => ZipContainer.Open(path),
-            ContainerKind.Tar => TarContainer.Open(path),
-            ContainerKind.Rar => RarContainer.Open(path),
-            ContainerKind.Raw => RawContainer.Open(path),
-            ContainerKind.PalmDb => PalmDbContainer.Open(path),
-            _ => throw new NotSupportedException(
-                $"{kind} containers cannot be opened by this build."),
-        };
+        return For(kind) is { } container
+            ? container.Open(path)
+            : throw new NotSupportedException(
+                $"{kind} containers cannot be opened by this build.");
     }
-
-    private static ReadOnlySpan<byte> Rar4Magic => "Rar!\x1a\x07\x00"u8;
-    private static ReadOnlySpan<byte> Rar5Magic => "Rar!\x1a\x07\x01\x00"u8;
-    private static ReadOnlySpan<byte> SevenZipMagic => [0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C];
-    private static ReadOnlySpan<byte> TarMagic => "ustar"u8;
-    private static ReadOnlySpan<byte> MobiPdbType => "BOOKMOBI"u8;
-    private static ReadOnlySpan<byte> TextReadPdbType => "TEXtREAd"u8;
-
-    private const uint ZipLocalFileHeaderSignature = 0x04034B50;
-    private const uint ZipEmptyArchiveSignature = 0x06054B50;
-    private const uint ZipSpannedSignature = 0x08074B50;
 
     /// <summary>Names the physical container a file's leading bytes indicate.</summary>
     /// <param name="head">The first several kilobytes of the file.</param>
@@ -56,52 +104,15 @@ public static class BookContainers
     /// </returns>
     public static (ContainerKind Kind, string? Detail) Sniff(ReadOnlySpan<byte> head)
     {
-        if (head.Length >= 4)
+        foreach (ContainerFormat container in Registered.Values)
         {
-            uint signature = System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(head);
-
-            if (signature is ZipLocalFileHeaderSignature or ZipEmptyArchiveSignature
-                or ZipSpannedSignature)
+            foreach (ContainerSignature signature in container.Signatures)
             {
-                return (ContainerKind.Zip, null);
+                if (signature.Matches(head))
+                {
+                    return (container.Kind, signature.Detail);
+                }
             }
-        }
-
-        if (head.StartsWith(Rar5Magic))
-        {
-            return (ContainerKind.Rar, "RAR 5 archive");
-        }
-
-        if (head.StartsWith(Rar4Magic))
-        {
-            return (ContainerKind.Rar, "RAR 4 archive");
-        }
-
-        if (head.StartsWith(SevenZipMagic))
-        {
-            return (ContainerKind.SevenZip, "7z archive");
-        }
-
-        // PalmDB stores an 8-byte type+creator pair at offset 60.
-        if (head.Length >= 68)
-        {
-            ReadOnlySpan<byte> pdbType = head.Slice(60, 8);
-
-            if (pdbType.SequenceEqual(MobiPdbType))
-            {
-                return (ContainerKind.PalmDb, "PalmDB BOOKMOBI");
-            }
-
-            if (pdbType.SequenceEqual(TextReadPdbType))
-            {
-                return (ContainerKind.PalmDb, "PalmDB TEXtREAd");
-            }
-        }
-
-        // TAR's magic sits inside the first header block, not at offset 0.
-        if (head.Length >= 262 && head.Slice(257, 5).SequenceEqual(TarMagic))
-        {
-            return (ContainerKind.Tar, "TAR archive");
         }
 
         return (ContainerKind.Raw, null);

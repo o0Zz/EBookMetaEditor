@@ -76,6 +76,53 @@ public enum ContainerKind
     PalmDb,
 }
 
+/// <summary>
+/// One container implementation as <see cref="BookContainers"/> knows it: which
+/// <see cref="ContainerKind"/> it is, how its bytes are recognised, and how to open
+/// one. Registering this is the whole of adding a container.
+/// </summary>
+/// <seealso cref="ContainerSignature" />
+public sealed record ContainerFormat
+{
+    /// <summary>The kind this implementation is responsible for.</summary>
+    public required ContainerKind Kind { get; init; }
+
+    /// <summary>Opens a file of this kind.</summary>
+    public required Func<string, IContainer> Open { get; init; }
+
+    /// <summary>
+    /// The magic numbers that name this container. Empty for
+    /// <see cref="ContainerKind.Raw"/>, which is what a file with no marker is.
+    /// Signatures must not overlap: the sniff answers with the first that matches,
+    /// and nothing should depend on registration order.
+    /// </summary>
+    public IReadOnlyList<ContainerSignature> Signatures { get; init; } = [];
+}
+
+/// <summary>A magic number that names a container, and where in the file it sits.</summary>
+/// <seealso cref="ContainerFormat" />
+public sealed record ContainerSignature
+{
+    /// <summary>The bytes to look for.</summary>
+    public required byte[] Magic { get; init; }
+
+    /// <summary>Where they sit. TAR's are 257 bytes into the first header block.</summary>
+    public int Offset { get; init; }
+
+    /// <summary>
+    /// How to describe the match in the log — "RAR 5 archive" — or
+    /// <see langword="null"/> when the magic number speaks for itself.
+    /// </summary>
+    public string? Detail { get; init; }
+
+    /// <summary>Whether a file's leading bytes carry this signature.</summary>
+    /// <param name="head">The first several kilobytes of the file.</param>
+    /// <returns><see langword="true"/> when they do.</returns>
+    public bool Matches(ReadOnlySpan<byte> head) =>
+        head.Length >= Offset + Magic.Length &&
+        head.Slice(Offset, Magic.Length).SequenceEqual(Magic);
+}
+
 /// <summary>Convenience over <see cref="IContainer"/> that every format needs.</summary>
 public static class ContainerExtensions
 {

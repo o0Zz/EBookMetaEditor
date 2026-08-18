@@ -267,18 +267,33 @@ internal sealed class MainForm : Form, IPathReceiver
         OpenBatch(dialog.FileNames);
     }
 
-    /// <summary>The file-dialog filter, assembled rather than translated whole.</summary>
-    internal static string BookFilter() =>
-        $"{Strings.Get("filter.supported")}|{AllPatterns}"
-        + $"|{Strings.Get("filter.epub")}|*.epub"
-        + $"|{Strings.Get("filter.cbz")}|*.cbz;*.cbt;*.cbr"
-        + $"|{Strings.Get("filter.fb2")}|*.fb2;*.fb2.zip"
-        + $"|{Strings.Get("filter.mobi")}|*.mobi;*.prc;*.azw;*.azw3"
-        + $"|{Strings.Get("filter.all")}|*.*";
+    /// <summary>
+    /// The file-dialog filter, built from the format registry rather than listed, so
+    /// a format added to Core appears here without this file or a language file
+    /// being touched.
+    /// </summary>
+    internal static string BookFilter()
+    {
+        IBookFormat[] formats = [.. BookFormats.All.OrderBy(f => f.Id)];
+        string all = Patterns(formats.SelectMany(f => f.Extensions));
 
-    /// <summary>Every pattern the app can open, for the combined filter.</summary>
-    private const string AllPatterns =
-        "*.epub;*.cbz;*.cbt;*.cbr;*.fb2;*.fb2.zip;*.mobi;*.prc;*.azw;*.azw3";
+        var parts = new List<string> { Strings.Format("filter.supported", all), all };
+
+        foreach (IBookFormat format in formats)
+        {
+            string patterns = Patterns(format.Extensions);
+            parts.Add($"{format.Id.DisplayName()} ({patterns})");
+            parts.Add(patterns);
+        }
+
+        parts.Add(Strings.Get("filter.all"));
+        parts.Add("*.*");
+
+        return string.Join("|", parts);
+    }
+
+    private static string Patterns(IEnumerable<string> extensions) =>
+        string.Join(";", extensions.Distinct(StringComparer.Ordinal).Select(e => "*" + e));
 
     private void OpenFolder()
     {
@@ -458,7 +473,7 @@ internal sealed class MainForm : Form, IPathReceiver
         {
             Log.Warning(ex.Message);
 
-            // Naming the format is the point: "this .cbz is really a 7z" beats
+            // Naming the format is the point: "this .cbz is really a PDF" beats
             // "unsupported file". The format name itself is never translated.
             string name = ex.Detected.Format.DisplayName();
 

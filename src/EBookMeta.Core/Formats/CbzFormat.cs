@@ -16,16 +16,44 @@ public sealed partial class CbzFormat : IBookFormat
     /// <summary>The CoMet metadata document, read for cross-checking only.</summary>
     private const string CometEntryName = "comet.xml";
 
+    /// <summary>
+    /// The comic archives this build edits: one metadata document in four
+    /// containers. A row is the whole of adding a fifth — nothing else in this file
+    /// names a container, and nothing outside it names a flavour.
+    /// </summary>
+    private static readonly (FormatId Id, ContainerKind Container, string Extension)[] Flavours =
+    [
+        (FormatId.Cbz, ContainerKind.Zip, ".cbz"),
+        (FormatId.Cbt, ContainerKind.Tar, ".cbt"),
+        (FormatId.Cbr, ContainerKind.Rar, ".cbr"),
+        (FormatId.Cb7, ContainerKind.SevenZip, ".cb7"),
+    ];
+
+    private readonly ContainerKind _container;
+
+    /// <summary>One instance per flavour, which is what the registry wants.</summary>
+    /// <returns>A format for each row of <see cref="Flavours"/>.</returns>
+    internal static IEnumerable<IBookFormat> Variants() =>
+        Flavours.Select(flavour => new CbzFormat(flavour.Id));
 
     /// <summary>Creates the format for one flavour of comic archive.</summary>
     /// <param name="id">
-    /// Which one — <see cref="FormatId.Cbz"/>, <see cref="FormatId.Cbt"/> or
-    /// <see cref="FormatId.Cbr"/>. The default is what every caller outside
-    /// <see cref="BookFormats"/> wants.
+    /// Which one. The default is what every caller outside <see cref="BookFormats"/>
+    /// wants.
     /// </param>
     public CbzFormat(FormatId id = FormatId.Cbz)
     {
         Id = id;
+
+        (_, _container, string extension) =
+            Array.Find(Flavours, flavour => flavour.Id == id) is { Extension: not null } found
+                ? found
+                : Flavours[0];
+
+        // Declared even for the flavours whose save their container may refuse: this
+        // list is what the context-menu checkboxes are built from, and reading one is
+        // ordinary.
+        Extensions = [extension];
 
         Capabilities = new FormatCapabilities
         {
@@ -37,15 +65,6 @@ public sealed partial class CbzFormat : IBookFormat
                 MetadataField.Series | MetadataField.SeriesIndex | MetadataField.Description |
                 MetadataField.Publisher | MetadataField.PublicationDate | MetadataField.Language |
                 MetadataField.Subjects,
-        };
-
-        // Declared even for CBR, whose save its container may refuse: this list is what
-        // the context-menu checkboxes are built from, and reading one is ordinary.
-        Extensions = id switch
-        {
-            FormatId.Cbt => [".cbt"],
-            FormatId.Cbr => [".cbr"],
-            _ => [".cbz"],
         };
     }
 
@@ -69,25 +88,21 @@ public sealed partial class CbzFormat : IBookFormat
     {
         Throw.IfNull(source);
 
-        if (Id == FormatId.Cbt)
-        {
-            return source.ContainerKind == ContainerKind.Tar
-                ? Claim(FormatId.Cbt, "TAR archive", MatchConfidence.Strong)
-                : null;
-        }
-
-        if (Id == FormatId.Cbr)
-        {
-            // The container detail carries the RAR version, which is what the log
-            // and a GEN-W002 report want to say.
-            return source.ContainerKind == ContainerKind.Rar
-                ? Claim(FormatId.Cbr, source.ContainerDetail ?? "RAR archive", MatchConfidence.Strong)
-                : null;
-        }
-
-        if (source.ContainerKind != ContainerKind.Zip)
+        if (source.ContainerKind != _container)
         {
             return null;
+        }
+
+        // TAR, RAR and 7z are this format's alone, so the container is the claim, and
+        // the detail the sniffer wrote — "RAR 5 archive" — is what a GEN-W002 report
+        // wants to say. Deliberately without touching source.Container: opening one
+        // can throw, and TryOpen must not.
+        if (_container != ContainerKind.Zip)
+        {
+            return Claim(
+                Id,
+                source.ContainerDetail ?? $"{Id.DisplayName()} archive",
+                MatchConfidence.Strong);
         }
 
         bool sawImage = false;

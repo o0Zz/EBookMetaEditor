@@ -14,6 +14,11 @@ internal static class ShellRegistration
     [
         .. BookFormats.All
             .SelectMany(f => f.Extensions)
+
+            // SystemFileAssociations keys on a single extension, so a compound one
+            // like .fb2.zip could only be registered as ".zip" — which would put this
+            // app's verb on every archive on the machine.
+            .Where(e => e.IndexOf('.', 1) < 0)
             .Distinct(StringComparer.Ordinal)
             .OrderBy(e => e, StringComparer.Ordinal),
     ];
