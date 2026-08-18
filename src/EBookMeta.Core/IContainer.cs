@@ -1,4 +1,4 @@
-namespace EBookMeta;
+﻿namespace EBookMeta;
 
 /// <summary>
 /// A file that holds named entries — a ZIP, a TAR, a 7z, a PalmDB, or a single
@@ -114,6 +114,26 @@ public sealed record ContainerSignature
     /// <see langword="null"/> when the magic number speaks for itself.
     /// </summary>
     public string? Detail { get; init; }
+
+    /// <summary>Describes a signature whose bytes are all writable as text.</summary>
+    /// <param name="magic">
+    /// The bytes as characters, read as Latin-1 — every character stands for the byte
+    /// it looks like, so an escape above <c>0xFF</c> is a mistake.
+    /// </param>
+    /// <param name="detail">How to describe the match in the log.</param>
+    /// <param name="offset">Where the bytes sit.</param>
+    /// <returns>The signature.</returns>
+    public static ContainerSignature Text(string magic, string? detail = null, int offset = 0)
+    {
+        Throw.IfNullOrEmpty(magic);
+
+        return new ContainerSignature
+        {
+            Magic = [.. magic.Select(c => (byte)c)],
+            Detail = detail,
+            Offset = offset,
+        };
+    }
 
     /// <summary>Whether a file's leading bytes carry this signature.</summary>
     /// <param name="head">The first several kilobytes of the file.</param>

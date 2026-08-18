@@ -1,4 +1,4 @@
-using SharpCompress.Archives.Tar;
+﻿using SharpCompress.Archives.Tar;
 using SharpCompress.Common;
 using SharpCompress.Common.Tar.Headers;
 using SharpCompress.Readers;
@@ -36,6 +36,17 @@ public sealed class TarContainer : IContainer
         _entries = entries;
         Path = path;
     }
+
+    /// <summary>How <see cref="BookContainers"/> knows this container.</summary>
+    public static ContainerFormat Format { get; } = new()
+    {
+        Kind = ContainerKind.Tar,
+        Open = Open,
+        Signatures =
+        [
+            ContainerSignature.Text("ustar", "TAR archive", offset: 257),
+        ],
+    };
 
     /// <inheritdoc />
     public bool IsWritable => true;

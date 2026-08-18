@@ -1,4 +1,4 @@
-# EBookMeta.Core
+﻿# EBookMeta.Core
 
 All the logic: opening a book, reading its metadata, repairing what is provably
 broken, and writing it back without disturbing anything else. Zero UI dependencies
@@ -33,7 +33,9 @@ Never write before round-trip reading is proven.
 ## Adding a container
 
 The same shape: one file under `Containers/` plus one `BookContainers.Register`
-call, which carries the magic numbers `Sniff` answers to. A container that cannot
+call. The container exposes a `ContainerFormat` of its own — its `ContainerKind`, its
+opener and the magic numbers `Sniff` answers to — exactly as a format exposes its
+`Extensions`, so `BookContainers` knows no magic numbers. A container that cannot
 compress itself — RAR, 7z — supplies an `ExternalArchiver` with the name of a
 program to find, the registry keys that record where it installed, and its command
 line, and gets the staging, the list file and the one failure answer for free.

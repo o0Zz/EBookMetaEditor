@@ -1,4 +1,4 @@
-using SharpCompress.Archives.SevenZip;
+﻿using SharpCompress.Archives.SevenZip;
 using SharpCompress.Common;
 using SharpCompress.Readers;
 
@@ -63,6 +63,21 @@ public sealed class SevenZipContainer : IContainer
     /// refused must not depend on what the machine running them has installed.
     /// </summary>
     internal static Func<string?> Locator { get; set; } = Archiver.Search;
+
+    /// <summary>How <see cref="BookContainers"/> knows this container.</summary>
+    public static ContainerFormat Format { get; } = new()
+    {
+        Kind = ContainerKind.SevenZip,
+        Open = Open,
+        Signatures =
+        [
+            new ContainerSignature
+            {
+                Magic = [0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C],
+                Detail = "7z archive",
+            },
+        ],
+    };
 
     /// <inheritdoc />
     public bool IsWritable => Locator() is not null;

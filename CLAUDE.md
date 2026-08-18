@@ -1,4 +1,4 @@
-# CLAUDE.md
+﻿# CLAUDE.md
 
 Guidance for Claude Code working in this repository.
 
@@ -180,7 +180,8 @@ src/EBookMeta.Core/      net48 — all logic. ZERO UI dependencies.
                          PendingEntry, ZipCompressionMethods, SectionStream,
                          ReadAllBytes
   BookFormats.cs         registry of seam 1 and the open path
-  BookContainers.cs      registry of seam 2: Register / For / Open / Sniff
+  BookContainers.cs      registry of seam 2: Register / For / Open / Sniff. Holds no
+                         magic numbers — each container declares its own Format
   Book.cs                one open file: Load and Save
   BookExceptions.cs      BookFormatException, BookIoException, UnsupportedFormatException
   AtomicFileWriter.cs    the only sanctioned way a user's file is replaced
@@ -225,8 +226,10 @@ tests/EBookMeta.Core.Tests/  net48
 
 **Adding a format is one implementation plus one `BookFormats.Register` call.** It
 brings its own `Extensions` and its own `TryOpen`. **Adding a container is one file
-under `Containers/` plus one `BookContainers.Register` call**, which carries the
-magic numbers the sniff answers to.
+under `Containers/` plus one `BookContainers.Register` call**, which is passed the
+container's own `Format` — the same shape: a container states its `ContainerKind`,
+its opener and the magic numbers `Sniff` answers to, and `BookContainers` only says
+which containers are in the build.
 
 Everything downstream reads the two registries, so neither addition edits a third
 file. In particular: the Settings form's context-menu checkboxes and the file-dialog
@@ -371,8 +374,8 @@ By content, never by extension — in real collections a `.cbz` that is really R
 common. Two passes; a check belongs to the first when more than one format shares the
 answer.
 
-**`BookContainers.Sniff`, on the first 8 KB**, walking the registered
-`ContainerSignature`s rather than a `switch`: `PK\x03\x04` → ZIP; `Rar!\x1a\x07` →
+**`BookContainers.Sniff`, on the first 8 KB**, walking the `ContainerSignature`s each
+registered container declared, rather than a `switch`: `PK\x03\x04` → ZIP; `Rar!\x1a\x07` →
 RAR; `7z\xBC\xAF\x27\x1C` → 7z; `ustar` at offset 257 → TAR; `BOOKMOBI` or `TEXtREAd`
 at offset 60 → PalmDB; anything else → Raw. **Signatures must not overlap**: the first
 match wins, and nothing should depend on the order containers registered in.

@@ -1,4 +1,4 @@
-using SharpCompress.Common;
+﻿using SharpCompress.Common;
 using SharpCompress.Writers.Zip;
 using SharpCompress.Writers;
 using System.Buffers.Binary;
@@ -31,6 +31,19 @@ public sealed class ZipContainer : IContainer
         Path = path;
         ArchiveComment = archiveComment;
     }
+
+    /// <summary>How <see cref="BookContainers"/> knows this container.</summary>
+    public static ContainerFormat Format { get; } = new()
+    {
+        Kind = ContainerKind.Zip,
+        Open = Open,
+        Signatures =
+        [
+            ContainerSignature.Text("PK\u0003\u0004"),
+            ContainerSignature.Text("PK\u0005\u0006"),
+            ContainerSignature.Text("PK\u0007\u0008"),
+        ],
+    };
 
     /// <inheritdoc />
     public bool IsWritable => true;

@@ -1,4 +1,4 @@
-using System.Buffers.Binary;
+﻿using System.Buffers.Binary;
 using System.Text;
 
 namespace EBookMeta.Containers;
@@ -45,6 +45,18 @@ public sealed class PalmDbContainer : IContainer
         _records = records;
         Path = path;
     }
+
+    /// <summary>How <see cref="BookContainers"/> knows this container.</summary>
+    public static ContainerFormat Format { get; } = new()
+    {
+        Kind = ContainerKind.PalmDb,
+        Open = Open,
+        Signatures =
+        [
+            ContainerSignature.Text("BOOKMOBI", "PalmDB BOOKMOBI", offset: 60),
+            ContainerSignature.Text("TEXtREAd", "PalmDB TEXtREAd", offset: 60),
+        ],
+    };
 
     /// <inheritdoc />
     public bool IsWritable => true;

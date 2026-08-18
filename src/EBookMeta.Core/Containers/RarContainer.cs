@@ -1,4 +1,4 @@
-using SharpCompress.Archives.Rar;
+﻿using SharpCompress.Archives.Rar;
 using SharpCompress.Common;
 using SharpCompress.Readers;
 
@@ -56,6 +56,18 @@ public sealed class RarContainer : IContainer
     /// WinRAR, so they state what is installed instead of asking.
     /// </summary>
     internal static Func<string?> Locator { get; set; } = Archiver.Search;
+
+    /// <summary>How <see cref="BookContainers"/> knows this container.</summary>
+    public static ContainerFormat Format { get; } = new()
+    {
+        Kind = ContainerKind.Rar,
+        Open = Open,
+        Signatures =
+        [
+            ContainerSignature.Text("Rar!\u001A\u0007\u0001\u0000", "RAR 5 archive"),
+            ContainerSignature.Text("Rar!\u001A\u0007\u0000", "RAR 4 archive"),
+        ],
+    };
 
     /// <inheritdoc />
     public bool IsWritable => Locator() is not null;

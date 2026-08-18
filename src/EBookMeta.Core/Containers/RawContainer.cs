@@ -1,4 +1,4 @@
-namespace EBookMeta.Containers;
+﻿namespace EBookMeta.Containers;
 
 /// <summary>
 /// A file that is not an archive, presented as a container of exactly one entry.
@@ -17,6 +17,16 @@ public sealed class RawContainer : IContainer
         _entry = entry;
         Path = path;
     }
+
+    /// <summary>How <see cref="BookContainers"/> knows this container.</summary>
+    public static ContainerFormat Format { get; } = new()
+    {
+        Kind = ContainerKind.Raw,
+        Open = Open,
+
+        // No signature. A file carrying no marker at all is a raw one, which is what
+        // BookContainers.Sniff falls back to.
+    };
 
     /// <inheritdoc />
     public bool IsWritable => true;

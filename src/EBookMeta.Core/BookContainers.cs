@@ -1,4 +1,4 @@
-using EBookMeta.Containers;
+﻿using EBookMeta.Containers;
 
 namespace EBookMeta;
 
@@ -13,32 +13,14 @@ public static class BookContainers
 
     static BookContainers()
     {
-        // The whole inventory. A new container is one file under Containers/ and one
-        // line here; nothing above this reaches for an implementation by name.
-        Register(ContainerKind.Zip, ZipContainer.Open,
-            Magic("PK\x03\x04"), Magic("PK\x05\x06"), Magic("PK\x07\x08"));
-
-        Register(ContainerKind.Rar, RarContainer.Open,
-            Magic("Rar!\x1a\x07\x01\x00", "RAR 5 archive"),
-            Magic("Rar!\x1a\x07\x00", "RAR 4 archive"));
-
-        Register(ContainerKind.SevenZip, SevenZipContainer.Open,
-            new ContainerSignature
-            {
-                Magic = [0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C],
-                Detail = "7z archive",
-            });
-
-        // TAR's magic sits inside the first header block, not at offset zero, and
-        // PalmDB's type-and-creator pair sits at offset 60.
-        Register(ContainerKind.Tar, TarContainer.Open, Magic("ustar", "TAR archive", 257));
-
-        Register(ContainerKind.PalmDb, PalmDbContainer.Open,
-            Magic("BOOKMOBI", "PalmDB BOOKMOBI", 60),
-            Magic("TEXtREAd", "PalmDB TEXtREAd", 60));
-
-        // No signature: a file carrying no marker at all is a raw one.
-        Register(ContainerKind.Raw, RawContainer.Open);
+        // The whole inventory. Each container says what it is, what its bytes look
+        // like and how to open one; this list only says which are in the build.
+        Register(ZipContainer.Format);
+        Register(TarContainer.Format);
+        Register(RarContainer.Format);
+        Register(SevenZipContainer.Format);
+        Register(PalmDbContainer.Format);
+        Register(RawContainer.Format);
     }
 
     /// <summary>Every registered container.</summary>
@@ -59,20 +41,6 @@ public static class BookContainers
     /// </returns>
     public static ContainerFormat? For(ContainerKind kind) =>
         Registered.TryGetValue(kind, out ContainerFormat? registered) ? registered : null;
-
-    private static void Register(
-        ContainerKind kind, Func<string, IContainer> open, params ContainerSignature[] signatures) =>
-        Register(new ContainerFormat { Kind = kind, Open = open, Signatures = signatures });
-
-    private static ContainerSignature Magic(string magic, string? detail = null, int offset = 0) =>
-        new()
-        {
-            // Latin-1, so each character is the byte it looks like — every magic
-            // number here is ASCII or an escape below 0x100.
-            Magic = [.. magic.Select(c => (byte)c)],
-            Detail = detail,
-            Offset = offset,
-        };
 
     /// <summary>Opens the container a file turned out to be.</summary>
     /// <param name="path">The file to open.</param>
