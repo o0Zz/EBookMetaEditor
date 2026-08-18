@@ -232,16 +232,27 @@ its opener and the magic numbers `Sniff` answers to, and `BookContainers` only s
 which containers are in the build.
 
 Everything downstream reads the two registries, so neither addition edits a third
-file. In particular: the Settings form's context-menu checkboxes and the file-dialog
-filter are both built from `Extensions`, the log's name for a format comes from
-`FormatId.DisplayName`, and `BookFormats.FromExtension` and `BookContainers.Sniff`
-answer from what is registered rather than from a `switch`. **If a change of yours
-needs a list of formats or extensions written out a second time, that is the bug.**
+file. In particular: the Settings form's context-menu checkboxes, the file-dialog
+filter and the About box are all built from `Extensions`, the log's name for a format
+comes from `FormatId.DisplayName`, and `BookFormats.FromExtension` and
+`BookContainers.Sniff` answer from what is registered rather than from a `switch`.
+**If a change of yours needs a list of formats or extensions written out a second
+time, that is the bug.** Nothing outside `BookContainers`' six `Register` lines names
+a container type at all, and there is no `switch` on `ContainerKind` anywhere.
+
+`ExtensionPointTests` is that promise made executable: it adds a container and a
+format from the *test* assembly, registers them, and opens a file end to end through
+`Book.Load` — no Core file edited. It is what fails if the inventory gets hardcoded
+again.
 
 The exceptions, all deliberate:
 
-- **`FormatId` and `ContainerKind`** are enums, so a new one is a line in each plus a
-  line in `DisplayName`.
+- **`ContainerKind`** is an enum, so a new container is also a line there. That, the
+  file, and the `Register` call are the complete list for a container nothing needs
+  to *read as a book*.
+- **A container holds books only once a format claims it.** For a comic archive that
+  is one row in `CbzFormat.Flavours`, plus a `FormatId` and its `DisplayName` line;
+  for anything else, a new `IBookFormat`.
 - **`FormatCapabilities`** must be stated per format — see **Formats**.
 - **`.fb2.zip`** is the one compound extension. `Fb2Format` declares it, the file
   dialog offers it, and `ShellRegistration` drops it, because

@@ -20,7 +20,7 @@ There are already excellent ebook-management tools, but none quite matched the w
 
 * **Edit files directly from Explorer.** No library import or database required.
 * **Batch-edit an entire collection.** Select multiple files, open a folder, or paste values across dozens of books at once.
-* **Support the formats I actually use.** EPUB, CBZ, CBT, CBR, FB2, MOBI, AZW, and AZW3.
+* **Support the formats I actually use.** EPUB, CBZ, CBT, CBR, CB7, FB2, MOBI, AZW, and AZW3.
 * **Write metadata correctly.** The editor does not just insert values into an OPF or `ComicInfo.xml`; it validates and normalizes the surrounding metadata where possible.
 * **Avoid pretending formats support things they do not.** Fields that cannot be stored safely are disabled instead of being silently discarded or written into undocumented locations.
 
@@ -32,22 +32,22 @@ There are already excellent ebook-management tools, but none quite matched the w
 | CBZ        | ✅    | ✅     | ZIP       | `ComicInfo.xml`      |
 | CBT        | ✅    | ✅     | TAR       | `ComicInfo.xml`      |
 | CBR        | ✅    | ⚙️     | RAR       | `ComicInfo.xml`      |
+| CB7        | ✅    | ⚙️     | 7z        | `ComicInfo.xml`      |
 | FB2        | ✅    | ✅     | Plain XML | `<description>`      |
 | FB2.ZIP    | ✅    | ✅     | ZIP       | `<description>`      |
 | MOBI / PRC | ✅    | ✅     | PalmDB    | EXTH records         |
 | AZW / AZW3 | ✅    | ✅     | PalmDB    | EXTH records         |
 
-**⚙️ CBR reads on its own; saving one needs WinRAR installed.**.
-So EBookMetaEditor reads CBR files out of the box, and to save one it uses the `Rar.exe` that comes with WinRAR:
-it looks for your WinRAR installation in the registry, then for `rar.exe` on your `PATH`.
+**⚙️ CBR and CB7 read on their own; saving one needs the matching archiver installed.**
+EBookMetaEditor reads both out of the box. Writing them needs a compressor it is not allowed to ship, so to save a CBR it runs the `Rar.exe` that comes with WinRAR, and to save a CB7 the `7z.exe` that comes with 7-Zip. It looks for the installation in the registry, then for the program on your `PATH`. If neither turns up, the save is refused and your file is left exactly as it was — nothing is half-written, and no other format is affected.
 
-**Not supported:** CB7, PDF, KFX, AZW4, LIT, PDB, RB, DjVu, and audiobooks.
+**Not supported:** PDF, KFX, AZW4, LIT, PDB, RB, DjVu, and audiobooks.
 
 ## Editable metadata
 
 Not every format can store the same metadata. EBookMetaEditor disables fields that a particular file cannot preserve rather than accepting a value that would later be lost.
 
-| Field                    | EPUB         | CBZ / CBT / CBR | FB2       | MOBI / AZW3  |
+| Field                    | EPUB         | CBZ / CBT / CBR / CB7 | FB2       | MOBI / AZW3  |
 | ------------------------ | ------------ | ------------ | ------------ | ------------ |
 | Title                    | read + write | read + write | read + write | read + write |
 | Sort title               | read + write | —            | —            | —            |
@@ -59,7 +59,6 @@ Not every format can store the same metadata. EBookMetaEditor disables fields th
 | Description              | read + write | read + write | read + write | read + write |
 | Publisher                | read + write | read + write | read + write | read + write |
 | Publication date         | read + write | read + write | read + write | read + write |
-| Modification date        | read + write | —            | —            | —            |
 | Language                 | read + write | read + write | read + write | read + write |
 | Subjects / tags          | read + write | read + write | read + write | read + write |
 | Identifiers (ISBN, etc.) | read + write | —            | read         | read         |
@@ -107,9 +106,9 @@ Unmodified files are not rewritten — they are not even opened for writing. Eve
 
 Each row reports its own result, so one bad file does not stop the rest of the batch. For example:
 
-* A `.cbz` that is actually a 7z archive is reported as unsupported, by name.
-* A `.cbz` that is actually a RAR opens as a CBR, and the mismatch is still reported.
-* A CBR row reads and edits like any other; on save it either goes through the `Rar.exe` found on the machine or reports that the save failed.
+* A `.cbz` that is actually a RAR opens as a CBR, and one that is actually a 7z opens as a CB7. Either way the mismatch is still reported.
+* A `.cbz` that is actually a PDF is reported as unsupported, by name.
+* A CBR or CB7 row reads and edits like any other; on save it either goes through the archiver found on the machine or reports that the save failed.
 * A DRM-protected AZW is reported as non-editable.
 * A file that fails to save fails independently without aborting the remaining files.
 

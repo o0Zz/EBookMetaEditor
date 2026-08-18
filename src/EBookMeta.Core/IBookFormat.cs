@@ -1,4 +1,4 @@
-using EBookMeta.Model;
+﻿using EBookMeta.Model;
 
 namespace EBookMeta;
 
@@ -76,12 +76,15 @@ public enum FormatId
     Cbz,
 
     /// <summary>
-    /// Comic archive, RAR. <c>ComicInfo.xml</c>, read but never written — see
-    /// <c>RarContainer</c>.
+    /// Comic archive, RAR. <c>ComicInfo.xml</c>, written only where the machine has
+    /// an archiver — see <c>RarContainer</c>.
     /// </summary>
     Cbr,
 
-    /// <summary>Comic archive, 7z.</summary>
+    /// <summary>
+    /// Comic archive, 7z. <c>ComicInfo.xml</c>, written only where the machine has
+    /// an archiver — see <c>SevenZipContainer</c>.
+    /// </summary>
     Cb7,
 
     /// <summary>Comic archive, TAR.</summary>

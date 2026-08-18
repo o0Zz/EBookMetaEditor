@@ -63,10 +63,10 @@ public enum ContainerKind
     /// <summary>ZIP.</summary>
     Zip,
 
-    /// <summary>RAR, versions 4 and 5. Readable; never rebuilt.</summary>
+    /// <summary>RAR, versions 4 and 5. Rebuilt only through an archiver on the machine.</summary>
     Rar,
 
-    /// <summary>7z.</summary>
+    /// <summary>7z. Rebuilt only through an archiver on the machine.</summary>
     SevenZip,
 
     /// <summary>TAR.</summary>
@@ -212,7 +212,7 @@ public sealed record ContainerEntry
     /// <summary>
     /// Whether an entry name is absolute, or walks out of the archive with <c>..</c>.
     /// Hard invariant 4, and the one predicate for it, so the read path and
-    /// <c>RarContainer.Stage</c> cannot disagree about what "escapes" means.
+    /// <c>ExternalArchiver.Stage</c> cannot disagree about what "escapes" means.
     /// </summary>
     public static bool EscapesArchive(string? name)
     {
