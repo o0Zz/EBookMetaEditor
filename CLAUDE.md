@@ -204,8 +204,10 @@ src/EBookMeta.Core/      net48 — all logic. ZERO UI dependencies.
                          (which owns date parsing)
 src/EBookMeta.App/       net48 — WinForms, single instance, argv = paths
   Program, MainForm, BatchForm, SettingsForm, LogForm, AboutForm, Dialogs,
-  AppSettings, ShellRegistration, SingleInstance, AppIcon, Strings, KeyValueFile,
-  EmbeddedAssemblies
+  AppSettings, ShellRegistration, AppIcon, EmbeddedAssemblies
+  Utils/                 Strings, KeyValueFile, SingleInstance, ShellVerb — the
+                         plumbing any Windows desktop application would want, in
+                         namespace EBookMeta.App.Utils
   Languages/             one key = value file per interface language
 tests/EBookMeta.Core.Tests/  net48
   Builders/              synthetic file generators (see Test corpus)
@@ -223,6 +225,14 @@ tests/EBookMeta.Core.Tests/  net48
 4. **A file gets a folder only when several files share a subject.** One format calling
    it means it belongs inside that format, however general its name sounds; two or more
    means `Xml/`, `Model/` or the root.
+5. **`App/Utils/` is for what knows nothing about books.** The test is not "could this
+   be reused" but "would this compile in an application that had never heard of an
+   EPUB": `Strings`, `KeyValueFile`, `SingleInstance` and `ShellVerb` pass, and each
+   names itself after `$(AssemblyName)` rather than after this product. `AppSettings`
+   and `ShellRegistration` do not pass and stay out — the second is the policy over
+   `ShellVerb`, and it is the split that keeps the folder honest. A file that would
+   need one `using EBookMeta;` to build does not belong there, and **the folder is not
+   a home for anything merely small or hard to place.**
 
 **Adding a format is one implementation plus one `BookFormats.Register` call.** It
 brings its own `Extensions` and its own `TryOpen`. **Adding a container is one file
@@ -837,7 +847,9 @@ HKCU\Software\Classes\SystemFileAssociations\<.ext>\shell\EBookMetaEditorEdit
 - Registration is opt-in per format group (ebooks / comics).
   `ShellRegistration.SupportedExtensions` is built from the registered formats'
   `IBookFormat.Extensions`, and the Settings form builds its checkboxes from that, so
-  the list exists in no second place.
+  the list exists in no second place. `ShellRegistration` is that policy and nothing
+  else; the registry keys themselves are `Utils/ShellVerb`, which is handed a label
+  and an extension and has never heard of a book.
 - `.fb2.zip` is deliberately absent: `SystemFileAssociations` keys on a single
   extension, so registering it would mean registering `.zip` and putting this verb on
   every archive on the machine. `Fb2Format` still declares it, because the file dialog
