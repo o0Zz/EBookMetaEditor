@@ -18,6 +18,7 @@ menu.file.settings = &Configuración…
 menu.file.exit = &Salir
 menu.file.addFiles = Añadir &archivos…
 menu.file.addFolder = Añadir &carpeta…
+menu.file.refresh = &Actualizar
 menu.file.saveAll = &Guardar todo
 menu.file.close = C&errar
 menu.edit = &Edición
@@ -97,6 +98,7 @@ log.saveFailed = No se pudo guardar el registro: {0}
 
 batch.title = Edición por lotes — EBookMetaEditor
 batch.button.saveAll = &Guardar todo
+batch.button.refresh = &Actualizar
 
 column.save = Guardar
 column.status = Estado
@@ -120,6 +122,8 @@ batch.cancelled = {0} cancelada.
 batch.failed = {0} fallida: {1}
 
 batch.nothingToSave = Ningún archivo está marcado para guardar.
+batch.refresh.kept.one = Actualizado. Se conservó 1 archivo porque tiene cambios sin guardar.
+batch.refresh.kept.many = Actualizado. Se conservaron {0} archivos porque tienen cambios sin guardar.
 batch.saveReport.saved.one = 1 archivo guardado
 batch.saveReport.saved.many = {0} archivos guardados
 batch.saveReport.unchanged.one = 1 sin cambios

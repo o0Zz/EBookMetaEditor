@@ -18,6 +18,7 @@ menu.file.settings = Imposta&zioni…
 menu.file.exit = &Esci
 menu.file.addFiles = Aggiungi &file…
 menu.file.addFolder = Aggiungi &cartella…
+menu.file.refresh = &Aggiorna
 menu.file.saveAll = &Salva tutto
 menu.file.close = Chi&udi
 menu.edit = &Modifica
@@ -97,6 +98,7 @@ log.saveFailed = Impossibile salvare il registro: {0}
 
 batch.title = Modifica in blocco — EBookMetaEditor
 batch.button.saveAll = &Salva tutto
+batch.button.refresh = &Aggiorna
 
 column.save = Salva
 column.status = Stato
@@ -120,6 +122,8 @@ batch.cancelled = {0} annullata.
 batch.failed = {0} non riuscita: {1}
 
 batch.nothingToSave = Nessun file è spuntato per il salvataggio.
+batch.refresh.kept.one = Aggiornato. 1 file è stato mantenuto perché ha modifiche non salvate.
+batch.refresh.kept.many = Aggiornato. {0} file sono stati mantenuti perché hanno modifiche non salvate.
 batch.saveReport.saved.one = 1 file salvato
 batch.saveReport.saved.many = {0} file salvati
 batch.saveReport.unchanged.one = 1 non modificato

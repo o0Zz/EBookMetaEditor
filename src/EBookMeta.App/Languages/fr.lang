@@ -18,6 +18,7 @@ menu.file.settings = Para&mètres…
 menu.file.exit = &Quitter
 menu.file.addFiles = Ajouter des &fichiers…
 menu.file.addFolder = Ajouter un d&ossier…
+menu.file.refresh = &Actualiser
 menu.file.saveAll = &Enregistrer tout
 menu.file.close = Fe&rmer
 menu.edit = &Édition
@@ -97,6 +98,7 @@ log.saveFailed = Impossible d'enregistrer le journal : {0}
 
 batch.title = Édition par lot — EBookMetaEditor
 batch.button.saveAll = &Enregistrer tout
+batch.button.refresh = &Actualiser
 
 column.save = Enregistrer
 column.status = État
@@ -120,6 +122,8 @@ batch.cancelled = {0} annulée.
 batch.failed = {0} échouée : {1}
 
 batch.nothingToSave = Aucun fichier n'est coché pour être enregistré.
+batch.refresh.kept.one = Actualisé. 1 fichier a été conservé car il a des modifications non enregistrées.
+batch.refresh.kept.many = Actualisé. {0} fichiers ont été conservés car ils ont des modifications non enregistrées.
 batch.saveReport.saved.one = 1 fichier enregistré
 batch.saveReport.saved.many = {0} fichiers enregistrés
 batch.saveReport.unchanged.one = 1 inchangé

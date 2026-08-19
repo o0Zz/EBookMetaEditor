@@ -18,6 +18,7 @@ menu.file.settings = &Einstellungen…
 menu.file.exit = &Beenden
 menu.file.addFiles = Dateien &hinzufügen…
 menu.file.addFolder = &Ordner hinzufügen…
+menu.file.refresh = &Aktualisieren
 menu.file.saveAll = &Alle speichern
 menu.file.close = S&chließen
 menu.edit = &Bearbeiten
@@ -97,6 +98,7 @@ log.saveFailed = Das Protokoll konnte nicht gespeichert werden: {0}
 
 batch.title = Stapelverarbeitung — EBookMetaEditor
 batch.button.saveAll = &Alle speichern
+batch.button.refresh = &Aktualisieren
 
 column.save = Speichern
 column.status = Status
@@ -120,6 +122,8 @@ batch.cancelled = {0} abgebrochen.
 batch.failed = {0} fehlgeschlagen: {1}
 
 batch.nothingToSave = Keine Datei ist zum Speichern angehakt.
+batch.refresh.kept.one = Aktualisiert. 1 Datei wurde beibehalten, da sie nicht gespeicherte Änderungen hat.
+batch.refresh.kept.many = Aktualisiert. {0} Dateien wurden beibehalten, da sie nicht gespeicherte Änderungen haben.
 batch.saveReport.saved.one = 1 Datei gespeichert
 batch.saveReport.saved.many = {0} Dateien gespeichert
 batch.saveReport.unchanged.one = 1 unverändert

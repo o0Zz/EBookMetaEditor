@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using EBookMeta.Model;
@@ -149,6 +149,11 @@ public sealed class BatchEntry
 /// <param name="Total">Files in the operation.</param>
 /// <param name="Path">The file just finished.</param>
 public sealed record BatchProgress(int Completed, int Total, string Path);
+
+/// <summary>What a <see cref="BatchSession.Refresh"/> is about to do.</summary>
+/// <param name="Rereading">How many files will be read again.</param>
+/// <param name="Kept">How many were left alone because they carry unsaved edits.</param>
+public sealed record BatchRefreshReport(int Rereading, int Kept);
 
 /// <summary>What a batch save did.</summary>
 /// <param name="Saved">Files written.</param>
@@ -422,6 +427,44 @@ public sealed class BatchSession
             entry.Error = ex.Message;
             Log.Error($"Could not read '{entry.Path}'", ex);
         }
+    }
+
+    /// <summary>
+    /// Marks every file with no unsaved edits to be read again, so a following
+    /// <see cref="Load"/> picks up what changed on disk. <b>An edit is never dropped
+    /// to do it</b>: a file the user has typed into keeps what they typed and is
+    /// counted instead, which is what makes this a refresh rather than a reload.
+    /// </summary>
+    /// <returns>How many files will be read again, and how many were left alone.</returns>
+    public BatchRefreshReport Refresh()
+    {
+        int rereading = 0;
+        int kept = 0;
+
+        foreach (BatchEntry entry in _entries)
+        {
+            if (entry.IsDirty)
+            {
+                kept++;
+                continue;
+            }
+
+            // Back to Pending is the whole mechanism: Load reads exactly those, so a
+            // file that failed or was unsupported gets retried as well. The tick goes
+            // with it, because Snapshot spends one on every read — a decision made
+            // about the old contents should not carry over to new ones.
+            entry.Status = BatchEntryStatus.Pending;
+            entry.Book = null;
+            entry.Detected = null;
+            entry.Error = null;
+            rereading++;
+        }
+
+        Log.Info(
+            $"Batch refresh: {rereading} file(s) to read again, "
+            + $"{kept} kept for unsaved edits.");
+
+        return new BatchRefreshReport(rereading, kept);
     }
 
     /// <summary>Writes every file that has been edited or marked for saving.</summary>

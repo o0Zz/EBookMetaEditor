@@ -36,6 +36,12 @@ internal sealed class MainForm : Form, IPathReceiver
     private readonly ToolStripMenuItem _saveItem;
 
     /// <summary>
+    /// The visible way out. File ▸ Exit does the same thing; this is for the
+    /// right-click, fix, close workflow, which never opens the menu.
+    /// </summary>
+    private readonly Button _close = Dialogs.Action("button.close");
+
+    /// <summary>
     /// Paths that arrived from other launches, waiting to be dealt with together.
     /// </summary>
     private readonly List<string> _handoverPaths = [];
@@ -200,7 +206,14 @@ internal sealed class MainForm : Form, IPathReceiver
         body.Controls.Add(fields);
         body.Controls.Add(right);
 
+        // Close(), not Application.Exit(): OnFormClosing is what decides whether this
+        // window may go, and it says no while a batch grid is still open.
+        _close.Click += (_, _) => Close();
+
+        // Fill first: WinForms docks in reverse child order, so the body has to be
+        // added before the panels that box it in.
         Controls.Add(body);
+        Controls.Add(Dialogs.ButtonStrip(_close));
         Controls.Add(_status);
         Controls.Add(menu);
         MainMenuStrip = menu;

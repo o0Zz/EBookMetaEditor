@@ -25,6 +25,7 @@ menu.file.settings = Se&ttings…
 menu.file.exit = E&xit
 menu.file.addFiles = Add &files…
 menu.file.addFolder = Add f&older…
+menu.file.refresh = &Refresh
 menu.file.saveAll = &Save all
 menu.file.close = &Close
 menu.edit = &Edit
@@ -112,6 +113,7 @@ log.saveFailed = The log could not be saved: {0}
 
 batch.title = Batch edit — EBookMetaEditor
 batch.button.saveAll = &Save all
+batch.button.refresh = &Refresh
 
 column.save = Save
 column.status = Status
@@ -137,6 +139,8 @@ batch.cancelled = {0} cancelled.
 batch.failed = {0} failed: {1}
 
 batch.nothingToSave = No file is ticked to be saved.
+batch.refresh.kept.one = Refreshed. 1 file was kept because it has unsaved changes.
+batch.refresh.kept.many = Refreshed. {0} files were kept because they have unsaved changes.
 batch.saveReport.saved.one = 1 file saved
 batch.saveReport.saved.many = {0} files saved
 batch.saveReport.unchanged.one = 1 unchanged

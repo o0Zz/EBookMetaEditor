@@ -52,6 +52,7 @@ internal sealed class BatchForm : Form, IPathReceiver
     // AutoSize throughout rather than fixed widths: "Save all" is "Alle speichern"
     // in German, which does not fit in a width measured against English.
     private readonly Button _saveAll = Dialogs.Action("batch.button.saveAll", 96);
+    private readonly Button _refresh = Dialogs.Action("batch.button.refresh");
     private readonly Button _cancel = Dialogs.Action("button.cancel");
 
     private readonly StatusStrip _status = new();
@@ -111,6 +112,7 @@ internal sealed class BatchForm : Form, IPathReceiver
         _grid.ContextMenuStrip = BuildCellMenu();
 
         _saveAll.Click += (_, _) => SaveAll();
+        _refresh.Click += (_, _) => RefreshFromDisk();
         _cancel.Click += (_, _) => _work?.Cancel();
 
         DragEnter += OnDragEnter;
@@ -198,6 +200,11 @@ internal sealed class BatchForm : Form, IPathReceiver
         file.DropDownItems.Add(Item("menu.file.addFiles", AddFiles, Keys.Control | Keys.O));
         file.DropDownItems.Add(Item("menu.file.addFolder", AddFolder));
         file.DropDownItems.Add(new ToolStripSeparator());
+
+        // F5 lives on the menu item rather than in ProcessCmdKey: the base
+        // implementation dispatches menu shortcuts, and the grid does not want F5.
+        file.DropDownItems.Add(Item("menu.file.refresh", RefreshFromDisk, Keys.F5));
+        file.DropDownItems.Add(new ToolStripSeparator());
         file.DropDownItems.Add(Item("menu.file.saveAll", SaveAll, Keys.Control | Keys.S));
         file.DropDownItems.Add(new ToolStripSeparator());
         file.DropDownItems.Add(Item("menu.file.close", Close));
@@ -247,7 +254,7 @@ internal sealed class BatchForm : Form, IPathReceiver
 
     private void BuildLayout(MenuStrip menu)
     {
-        FlowLayoutPanel buttons = Dialogs.ButtonStrip(_saveAll, _cancel);
+        FlowLayoutPanel buttons = Dialogs.ButtonStrip(_saveAll, _refresh, _cancel);
 
         _status.Items.Add(_statusText);
         _status.Items.Add(_progress);
@@ -1010,7 +1017,12 @@ internal sealed class BatchForm : Form, IPathReceiver
         }
     }
 
-    private void StartLoad()
+    /// <summary>Reads every row not read yet, in the background.</summary>
+    /// <param name="completed">
+    /// What to leave in the status bar afterwards, for a caller with something to say
+    /// that the per-file progress would otherwise scroll away.
+    /// </param>
+    private void StartLoad(string? completed = null)
     {
         if (_busy || _session.Entries.All(e => e.Status != BatchEntryStatus.Pending))
         {
@@ -1023,8 +1035,40 @@ internal sealed class BatchForm : Form, IPathReceiver
             (progress, token) =>
             {
                 _session.Load(progress, token);
-                return null;
+                return completed;
             });
+    }
+
+    /// <summary>
+    /// Reads the files again so the grid shows what is on disk now — after something
+    /// else has edited them, or to retry the rows that failed.
+    /// </summary>
+    private void RefreshFromDisk()
+    {
+        if (_busy)
+        {
+            return;
+        }
+
+        BatchRefreshReport report = _session.Refresh();
+
+        // Cleared before the read starts, not after it finishes: a row showing a
+        // stale title beside one already re-read is worse than a blank one.
+        foreach (DataGridViewRow row in _grid.Rows)
+        {
+            RefreshRow(row);
+        }
+
+        if (report.Rereading == 0)
+        {
+            // Everything is edited, so there is nothing a refresh may touch.
+            SetStatus(Strings.Plural("batch.refresh.kept", report.Kept, report.Kept));
+            return;
+        }
+
+        StartLoad(report.Kept == 0
+            ? null
+            : Strings.Plural("batch.refresh.kept", report.Kept, report.Kept));
     }
 
     private void SaveAll()
@@ -1181,6 +1225,7 @@ internal sealed class BatchForm : Form, IPathReceiver
 
         _grid.Enabled = !busy;
         _saveAll.Enabled = !busy && _session.PendingSaveCount > 0;
+        _refresh.Enabled = !busy;
         _cancel.Visible = busy;
         _progress.Visible = busy;
 

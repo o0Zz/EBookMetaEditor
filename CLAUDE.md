@@ -478,7 +478,15 @@ batch write path. A row is a `Book`; `SaveOne` calls `Book.Save`.
   live on a book in the same column. `BatchEntry.Apply` refuses a field the format
   cannot store even if a caller asks, and every refusal is counted and reported.
 - `Load` reads only `Pending` entries, so adding files later is cheap and calling it
-  twice cannot discard unsaved edits. There is deliberately no reload.
+  twice cannot discard unsaved edits.
+- **`Refresh` is the only way back to `Pending`, and it will not touch an edited row.**
+  It exists because files change underneath an open grid and because a row that failed
+  deserves another go; it is reached by the button and by F5. A row with unsaved edits
+  is counted and left exactly as it is, so there is still no reload in the sense that
+  matters: **nothing in this class can drop an edit the user has not saved.** A *tick*
+  is not an edit and is spent by the re-read, because `Snapshot` spends one on every
+  read and a decision about a file's old contents should not carry over to its new
+  ones.
 
 **Both editors share `MetadataFields`** — authors split on semicolons, subjects on
 commas, a date kept as the characters the file used, a sort name carried forward only
