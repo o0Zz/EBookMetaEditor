@@ -1,13 +1,19 @@
 ﻿using System.Globalization;
 using System.Reflection;
 
-namespace EBookMeta.App;
+namespace EBookMeta.App.Utils;
 
 /// <summary>The interface language: every piece of text the windows show.</summary>
 internal static class Strings
 {
-    /// <summary>Matches the <c>LogicalName</c> the csproj target assigns.</summary>
-    private const string Prefix = "EBookMetaEditor.Languages.";
+    /// <summary>
+    /// Where the language files are, as embedded resources. Derived rather than
+    /// written down: the csproj assigns their <c>LogicalName</c> from
+    /// <c>$(AssemblyName)</c>, so the two cannot drift apart, and an application
+    /// that takes this file gets its own name without editing it.
+    /// </summary>
+    private static readonly string Prefix =
+        typeof(Strings).Assembly.GetName().Name + ".Languages.";
 
     private const string Suffix = ".lang";
 

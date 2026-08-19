@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -44,8 +44,10 @@
          satellite assemblies in subfolders — the opposite of the single file
          everything else here is arranged around. -->
     <EmbeddedResource Include="Languages\*.lang">
-      <!-- Must match Strings.Prefix. -->
-      <LogicalName>EBookMetaEditor.Languages.%(Filename)%(Extension)</LogicalName>
+      <!-- $(AssemblyName), not the name spelled out: Strings derives the same prefix
+           from the assembly at run time, so a rename cannot leave the two disagreeing
+           and the whole interface falling back to raw key names. -->
+      <LogicalName>$(AssemblyName).Languages.%(Filename)%(Extension)</LogicalName>
       <WithCulture>false</WithCulture>
     </EmbeddedResource>
   </ItemGroup>
@@ -62,6 +64,11 @@
          than at the top of every form. -->
     <Using Include="System.Windows.Forms" />
     <Using Include="System.Drawing" />
+
+    <!-- Utils/ is the plumbing any Windows desktop application would want and
+         nothing about books: a separate namespace so the boundary is visible, and
+         a global using so naming it costs no line anywhere else. -->
+    <Using Include="EBookMeta.App.Utils" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,9 +1,9 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.IO.Pipes;
 using System.Text;
 using System.Threading;
 
-namespace EBookMeta.App;
+namespace EBookMeta.App.Utils;
 
 /// <summary>A window that can be handed more files to work on.</summary>
 internal interface IPathReceiver
@@ -69,7 +69,7 @@ internal static class SingleInstance
                                       or ObjectDisposedException or InvalidOperationException)
         {
             Log.Warning(
-                $"Could not hand these files to the running EBookMetaEditor ({ex.Message}). "
+                $"Could not hand these files to the running instance ({ex.Message}). "
                 + "Opening a separate window instead.");
             return false;
         }
@@ -89,7 +89,7 @@ internal static class SingleInstance
         var thread = new Thread(() => ListenLoop(receiver))
         {
             IsBackground = true,
-            Name = "EBookMetaEditor path listener",
+            Name = $"{Application} path listener",
         };
 
         thread.Start();
@@ -159,13 +159,21 @@ internal static class SingleInstance
     /// The mutex name, in the session-local namespace so each signed-in user gets
     /// their own instance.
     /// </summary>
-    private static string MutexName => $"Local\\EBookMetaEditor.instance.{Identity}";
+    private static string MutexName => $"Local\\{Application}.instance.{Identity}";
 
     /// <summary>
     /// The pipe name. Pipe names are machine-wide whatever namespace they claim, so
     /// the user and session go in the name itself.
     /// </summary>
-    private static string PipeName => $"EBookMetaEditor.paths.{Identity}";
+    private static string PipeName => $"{Application}.paths.{Identity}";
+
+    /// <summary>
+    /// The application this is keeping one of, taken from the assembly rather than
+    /// written down, so two different programs carrying this file never collide on
+    /// one another's mutex.
+    /// </summary>
+    private static string Application { get; } =
+        typeof(SingleInstance).Assembly.GetName().Name ?? "Application";
 
     private static string Identity { get; } = BuildIdentity();
 

@@ -1,8 +1,9 @@
-namespace EBookMeta.App;
+﻿namespace EBookMeta.App.Utils;
 
 /// <summary>
-/// The <c>key = value</c> text format this app stores its settings and its
-/// interface languages in — one line each, readable by a translator with Notepad.
+/// The <c>key = value</c> text format — one pair per line, <c>#</c> for a comment,
+/// readable by a translator with Notepad. This app stores its settings and its
+/// interface languages in it.
 /// </summary>
 internal static class KeyValueFile
 {
