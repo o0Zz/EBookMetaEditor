@@ -26,28 +26,23 @@ There are already excellent ebook-management tools, but none quite matched the w
 
 ## Supported formats
 
-| Format     | Read | Write | Container | Metadata stored in   |
-| ---------- | ---- | ----- | --------- | -------------------- |
-| EPUB 2 / 3 | ✅    | ✅     | ZIP       | OPF package document |
-| CBZ        | ✅    | ✅     | ZIP       | `ComicInfo.xml`      |
-| CBT        | ✅    | ✅     | TAR       | `ComicInfo.xml`      |
-| CBR        | ✅    | ⚙️     | RAR       | `ComicInfo.xml`      |
-| CB7        | ✅    | ⚙️     | 7z        | `ComicInfo.xml`      |
-| FB2        | ✅    | ✅     | Plain XML | `<description>`      |
-| FB2.ZIP    | ✅    | ✅     | ZIP       | `<description>`      |
-| MOBI / PRC | ✅    | ✅     | PalmDB    | EXTH records         |
-| AZW / AZW3 | ✅    | ✅     | PalmDB    | EXTH records         |
-
-**⚙️ CBR and CB7 read on their own; saving one needs the matching archiver installed.**
-EBookMetaEditor reads both out of the box. Writing them needs a compressor it is not allowed to ship, so to save a CBR it runs the `Rar.exe` that comes with WinRAR, and to save a CB7 the `7z.exe` that comes with 7-Zip. It looks for the installation in the registry, then for the program on your `PATH`. If neither turns up, the save is refused and your file is left exactly as it was — nothing is half-written, and no other format is affected.
-
-**Not supported:** PDF, KFX, AZW4, LIT, PDB, RB, DjVu, and audiobooks.
+| Format     | Read  | Write           | Container | Metadata stored in   |
+| ---------- | ----- | --------------- | --------- | -------------------- |
+| EPUB 2 / 3 | ✅    | ✅              | ZIP       | OPF package document |
+| CBZ        | ✅    | ✅              | ZIP       | `ComicInfo.xml`      |
+| CBT        | ✅    | ✅              | TAR       | `ComicInfo.xml`      |
+| CBR        | ✅    | Requires WinRAR | RAR       | `ComicInfo.xml`      |
+| CB7        | ✅    | Requires 7-Zip  | 7z        | `ComicInfo.xml`      |
+| FB2        | ✅    | ✅              | Plain XML | `<description>`      |
+| FB2.ZIP    | ✅    | ✅              | ZIP       | `<description>`      |
+| MOBI / PRC | ✅    | ✅              | PalmDB    | EXTH records         |
+| AZW / AZW3 | ✅    | ✅              | PalmDB    | EXTH records         |
 
 ## Editable metadata
 
 Not every format can store the same metadata. EBookMetaEditor disables fields that a particular file cannot preserve rather than accepting a value that would later be lost.
 
-| Field                    | EPUB         | CBZ / CBT / CBR / CB7 | FB2       | MOBI / AZW3  |
+| Field                    | EPUB         | CBZ / CBT / CBR / CB7 | FB2 | MOBI / AZW3  |
 | ------------------------ | ------------ | ------------ | ------------ | ------------ |
 | Title                    | read + write | read + write | read + write | read + write |
 | Sort title               | read + write | —            | —            | —            |
